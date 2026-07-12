@@ -22,13 +22,16 @@ can help while an independent confirmation channel owns commitment.
 5. Hold one wrong candidate for 400 ms, then return center. Show that it speaks
    and cancels without execution.
 6. Cover or freeze the camera after arming, then try to confirm before the next
-   watchdog tick. Show the atomic stale-arm rejection, cleared arm, and required
-   center reacquisition.
+   watchdog tick. Even if browser frame counters keep advancing, show content
+   invalidation, atomic stale-arm rejection, and required center reacquisition.
 7. Stall FaceDetector while raw frames continue. Show processed-sample timeout,
    arm revocation, and automatic frame-motion fallback recalibration.
-8. During calibration, choose End Sensors. Show the calibration layer disappear
+8. Feed a static or uniformly dark test camera while presented-frame counters
+   advance. Show that it cannot produce gaze samples, arm, or confirm and enters
+   bounded sensor-loss recovery.
+9. During calibration, choose End Sensors. Show the calibration layer disappear
    and complete a parity choice with Center plus keyboard/touch/switch.
-9. Finish the route across the rebuilt controller, return center, and show all
+10. Finish the route across the rebuilt controller, return center, and show all
    seven confirmations in the aggregated privacy-safe metrics.
 
 ## Deterministic proof

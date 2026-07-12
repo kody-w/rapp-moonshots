@@ -199,6 +199,143 @@ test("frame freshness gate rejects frozen pixels and cannot arm from stale sampl
   assert.equal(currentTimeGate.observe({ currentTime: 1.04 }, 200).fresh, true);
 });
 
+test("advancing counters with identical content revoke an armed sensor candidate", () => {
+  const rawFrames = new Core.VideoFrameFreshnessGate({ timeoutMs: 900 });
+  const content = new Core.FrameContentFreshnessGate({ timeoutMs: 600 });
+  const controller = new Core.GazeIntentController({ dwellMs: 800 });
+  const texturedA = Uint8Array.from(
+    { length: 64 },
+    (_, index) => (index % 2 ? 200 : 40),
+  );
+  const texturedB = Uint8Array.from(
+    texturedA,
+    (value) => value + 2,
+  );
+  rawFrames.start(0);
+  content.start(0);
+  rawFrames.observe({ presentedFrames: 1 }, 0);
+  assert.equal(content.observe(texturedA, 0).usable, false);
+  rawFrames.observe({ presentedFrames: 2 }, 100);
+  assert.equal(content.observe(texturedB, 100).usable, true);
+
+  hold(
+    controller,
+    Core.DIRECTION_POINTS.east,
+    100,
+    900,
+    { source: "sensor" },
+  );
+  for (let now = 200, frame = 3; now <= 900; now += 100, frame += 1) {
+    rawFrames.observe({ presentedFrames: frame }, now);
+    const changingFrame = (now / 100) % 2 === 0 ? texturedA : texturedB;
+    assert.equal(content.observe(changingFrame, now).usable, true);
+  }
+  assert.equal(controller.snapshot().armed, true);
+
+  const nearIdentical = Uint8Array.from(
+    texturedB,
+    (value, index) => value + (index % 8 === 0 ? 1 : 0),
+  );
+  rawFrames.observe({ presentedFrames: 11 }, 1000);
+  let contentResult = content.observe(nearIdentical, 1000);
+  assert.equal(contentResult.reason, "unchanged-content");
+  assert.equal(contentResult.meanChange < 0.35, true);
+  assert.equal(contentResult.becameInvalid, true);
+  controller.update(
+    { ...Core.DIRECTION_POINTS.east, confidence: 0 },
+    1000,
+    { source: "sensor" },
+  );
+
+  for (let now = 1100, frame = 12; now <= 1600; now += 100, frame += 1) {
+    rawFrames.observe({ presentedFrames: frame }, now);
+    contentResult = content.observe(nearIdentical, now);
+  }
+
+  assert.equal(rawFrames.isFresh(1600), true);
+  assert.equal(contentResult.reason, "unchanged-content");
+  assert.equal(contentResult.timedOut, true);
+  assert.equal(content.isFresh(1600), false);
+  assert.equal(controller.snapshot().armed, false);
+  assert.equal(
+    controller.confirm("voice", 1600, {
+      sensorFresh:
+        rawFrames.isFresh(1600) &&
+        content.isFresh(1600) &&
+        Core.isTimestampFresh(900, 1600, 1100),
+    }),
+    false,
+  );
+});
+
+test("dark or occluded frames cannot arm despite advancing counters", () => {
+  const rawFrames = new Core.VideoFrameFreshnessGate({ timeoutMs: 900 });
+  const content = new Core.FrameContentFreshnessGate({ timeoutMs: 500 });
+  const controller = new Core.GazeIntentController({ dwellMs: 800 });
+  const coveredFrame = new Uint8Array(64);
+  rawFrames.start(0);
+  content.start(0);
+
+  let result;
+  for (let now = 0, frame = 1; now <= 700; now += 100, frame += 1) {
+    rawFrames.observe({ presentedFrames: frame }, now);
+    result = content.observe(coveredFrame, now);
+    if (result.usable) {
+      controller.update(
+        { ...Core.DIRECTION_POINTS.north, confidence: 0.95 },
+        now,
+        { source: "sensor" },
+      );
+    }
+  }
+
+  assert.equal(rawFrames.isFresh(700), true);
+  assert.equal(result.reason, "dark-or-covered");
+  assert.equal(result.timedOut, true);
+  assert.equal(content.isFresh(700), false);
+  assert.equal(controller.snapshot().armed, false);
+  assert.equal(controller.confirm("voice", 710, { sensorFresh: false }), false);
+  const recoveredFrame = Uint8Array.from(
+    { length: 64 },
+    (_, index) => (index % 2 ? 200 : 40),
+  );
+  const recovered = content.observe(recoveredFrame, 800);
+  assert.equal(recovered.usable, true);
+  assert.equal(recovered.recovered, true);
+
+  const occluded = new Core.FrameContentFreshnessGate({ timeoutMs: 500 });
+  occluded.start(0);
+  occluded.observe(new Uint8Array(64).fill(128), 0);
+  const flatResult = occluded.observe(new Uint8Array(64).fill(128), 500);
+  assert.equal(flatResult.reason, "low-detail-or-occluded");
+  assert.equal(flatResult.timedOut, true);
+
+  const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
+  assert.match(app, /new Core\.FrameContentFreshnessGate\(\{ timeoutMs: 900 \}\)/);
+  assert.match(app, /onContentInvalid: handleContentInvalid/);
+  assert.match(app, /onContentLost: handleContentLost/);
+  assert.match(
+    app,
+    /function handleContentInvalid[\s\S]*?armedSource === "sensor"[\s\S]*?updateControllerFromPoint\(pausedPoint, now, false, "sensor"\)/,
+  );
+  assert.match(
+    app,
+    /function handleContentLost[\s\S]*?controller\.markSensorLost\(now, `content-\$\{content\.reason\}`\)/,
+  );
+  assert.match(
+    app,
+    /if \(!content\.usable\) return;[\s\S]*?callbacks\.onSample\(fallbackSample/,
+  );
+  assert.match(
+    app,
+    /freshness\.frozen \|\|\s*!this\.contentGate\.isFresh\(performance\.now\(\)\)/,
+  );
+  assert.match(
+    app,
+    /\(rawFrameFresh && contentFrameFresh && processedGazeFresh\)/,
+  );
+});
+
 test("stale sensor-derived arms are atomically rejected before watchdog execution", () => {
   const executions = [];
   const staleController = new Core.GazeIntentController({
@@ -266,7 +403,7 @@ test("stale sensor-derived arms are atomically rejected before watchdog executio
   );
   assert.match(
     app,
-    /const sensorFresh =[\s\S]*?\(rawFrameFresh && processedGazeFresh\)/,
+    /const sensorFresh =[\s\S]*?\(rawFrameFresh && contentFrameFresh && processedGazeFresh\)/,
   );
 });
 
@@ -555,7 +692,7 @@ test("raw-frame watchdog ignores controller suppression and suspends for manual 
   );
   assert.match(
     app,
-    /state\.visionSensor\.isFresh\(now\) &&\s*processedGazeHasTimedOut\(now\)/,
+    /state\.visionSensor\.isFresh\(now\) &&\s*state\.visionSensor\.isContentFresh\(now\) &&\s*processedGazeHasTimedOut\(now\)/,
   );
 });
 

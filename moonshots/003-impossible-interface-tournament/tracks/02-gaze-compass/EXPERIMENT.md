@@ -31,6 +31,10 @@ as a click.
     samples time out.
 17. Rebuilding the controller mid-route preserves aggregate metrics and exactly
     seven confirmations.
+18. Advancing frame counters with identical or near-identical content revoke a
+    sensor arm and reach sensor loss within the content timeout.
+19. Dark, overexposed, or low-detail/occluded frames never produce a processed
+    gaze sample, arm, or executable confirmation.
 
 ## Method
 
@@ -43,6 +47,8 @@ a stale sensor-derived arm and recovers through center, then returns home.
 
 Unit tests separately perturb the calibration basis, probe radial/angular
 boundaries, and attempt confirmation after center cancellation and sensor loss.
+Content-gate regressions advance synthetic frame identities while holding
+textured pixels identical, then repeat with uniformly dark/occluded pixels.
 Static policy tests inspect application source for the complete Clawpilot theme,
 local-only assets, CSP, parity affordances, and prohibited networking,
 recording, or persistence APIs.

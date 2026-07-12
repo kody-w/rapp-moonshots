@@ -380,6 +380,115 @@
     }
   }
 
+  class FrameContentFreshnessGate {
+    constructor(options) {
+      const config = options || {};
+      this.timeoutMs = clamp(finiteNumber(config.timeoutMs, 900), 250, 5000);
+      this.minLuminance = clamp(finiteNumber(config.minLuminance, 8), 0, 100);
+      this.maxLuminance = clamp(finiteNumber(config.maxLuminance, 247), 155, 255);
+      this.minVariance = clamp(finiteNumber(config.minVariance, 20), 0, 5000);
+      this.minMeanChange = clamp(finiteNumber(config.minMeanChange, 0.35), 0.01, 20);
+      this.reset();
+    }
+
+    reset() {
+      this.startedAt = null;
+      this.lastUsableAt = null;
+      this.previous = null;
+      this.currentUsable = false;
+      this.invalid = false;
+      this.lost = false;
+      this.lastReason = "not-started";
+    }
+
+    start(now) {
+      this.reset();
+      this.startedAt = finiteNumber(now, 0);
+    }
+
+    analyze(luminance) {
+      if (!luminance || !Number.isFinite(luminance.length) || luminance.length === 0) {
+        return {
+          usable: false,
+          reason: "invalid-frame",
+          mean: 0,
+          variance: 0,
+          meanChange: null,
+        };
+      }
+      let sum = 0;
+      let sumSquares = 0;
+      let change = 0;
+      const comparable = this.previous && this.previous.length === luminance.length;
+      for (let index = 0; index < luminance.length; index += 1) {
+        const value = clamp(finiteNumber(luminance[index], 0), 0, 255);
+        sum += value;
+        sumSquares += value * value;
+        if (comparable) change += Math.abs(value - this.previous[index]);
+      }
+      const mean = sum / luminance.length;
+      const variance = Math.max(0, sumSquares / luminance.length - mean * mean);
+      const meanChange = comparable ? change / luminance.length : null;
+      let reason = "usable";
+      if (mean < this.minLuminance) reason = "dark-or-covered";
+      else if (mean > this.maxLuminance) reason = "overexposed-or-covered";
+      else if (variance < this.minVariance) reason = "low-detail-or-occluded";
+      else if (!comparable) reason = "warming-up";
+      else if (meanChange < this.minMeanChange) reason = "unchanged-content";
+      return {
+        usable: reason === "usable",
+        reason,
+        mean,
+        variance,
+        meanChange,
+      };
+    }
+
+    observe(luminance, now) {
+      const timestamp = finiteNumber(now, 0);
+      if (this.startedAt === null) this.startedAt = timestamp;
+      const previouslyUsable = this.currentUsable;
+      const previouslyInvalid = this.invalid;
+      const previouslyLost = this.lost;
+      const hadUsableFrame = this.lastUsableAt !== null;
+      const analysis = this.analyze(luminance);
+      this.previous = luminance ? Uint8Array.from(luminance) : null;
+      this.currentUsable = analysis.usable;
+      this.invalid = !analysis.usable;
+      this.lastReason = analysis.reason;
+
+      let recovered = false;
+      if (analysis.usable) {
+        recovered = previouslyInvalid || previouslyLost;
+        this.lastUsableAt = timestamp;
+        this.lost = false;
+      }
+      const reference = this.lastUsableAt === null ? this.startedAt : this.lastUsableAt;
+      const timedOut =
+        !analysis.usable &&
+        reference !== null &&
+        timestamp - reference >= this.timeoutMs;
+      const justTimedOut = timedOut && !this.lost;
+      if (timedOut) this.lost = true;
+      return {
+        ...analysis,
+        hadUsableFrame,
+        becameInvalid: previouslyUsable && !analysis.usable,
+        timedOut,
+        justTimedOut,
+        recovered,
+      };
+    }
+
+    isFresh(now) {
+      return (
+        this.currentUsable &&
+        this.lastUsableAt !== null &&
+        finiteNumber(now, this.lastUsableAt) - this.lastUsableAt < this.timeoutMs
+      );
+    }
+  }
+
   function angularDistance(a, b) {
     return Math.abs((((a - b) % 360) + 540) % 360 - 180);
   }
@@ -706,6 +815,7 @@
         progress: clamp(this.stableMs / this.config.dwellMs, 0, 1),
         candidateAnnounced: this.candidateAnnounced,
         armed: this.armed,
+        inputSource: this.currentInputSource,
         armedSource: this.armedSource,
         armedAt: this.armedAt,
         centerRequired: this.centerRequired,
@@ -1171,6 +1281,7 @@
     DEFAULT_CONFIG,
     DIRECTIONS,
     DIRECTION_POINTS,
+    FrameContentFreshnessGate,
     TASK_STEPS,
     GazeIntentController,
     NodDetector,

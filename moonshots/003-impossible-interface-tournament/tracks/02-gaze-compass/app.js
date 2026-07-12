@@ -125,30 +125,38 @@
     }
   }
 
+  function luminanceFromImageData(imageData) {
+    const pixels = imageData.data;
+    const luminance = new Uint8Array(imageData.width * imageData.height);
+    for (let index = 0, pixel = 0; index < luminance.length; index += 1, pixel += 4) {
+      luminance[index] = Math.round(
+        pixels[pixel] * 0.299 +
+          pixels[pixel + 1] * 0.587 +
+          pixels[pixel + 2] * 0.114,
+      );
+    }
+    return luminance;
+  }
+
   class FrameMotionEstimator {
     constructor(width, height) {
       this.width = width;
       this.height = height;
-      this.previous = null;
       this.pose = { x: 0.5, y: 0.5 };
     }
 
     clear() {
-      this.previous = null;
       this.pose = { x: 0.5, y: 0.5 };
     }
 
-    estimate(imageData) {
-      const pixels = imageData.data;
-      const gray = new Uint8Array(this.width * this.height);
-      for (let index = 0, pixel = 0; index < gray.length; index += 1, pixel += 4) {
-        gray[index] = Math.round(
-          pixels[pixel] * 0.299 + pixels[pixel + 1] * 0.587 + pixels[pixel + 2] * 0.114,
-        );
-      }
+    estimate(imageData, luminance, previousLuminance) {
+      const gray = luminance || luminanceFromImageData(imageData);
+      const previous =
+        previousLuminance && previousLuminance.length === gray.length
+          ? previousLuminance
+          : null;
 
-      if (!this.previous) {
-        this.previous = gray;
+      if (!previous) {
         return { ...this.pose, confidence: 0.5 };
       }
 
@@ -157,7 +165,7 @@
       for (let y = 8; y < this.height - 8; y += 3) {
         for (let x = 10; x < this.width - 10; x += 3) {
           const index = y * this.width + x;
-          frameChange += Math.abs(gray[index] - this.previous[index]);
+          frameChange += Math.abs(gray[index] - previous[index]);
           changeSamples += 1;
         }
       }
@@ -173,10 +181,10 @@
               const previousIndex = (y - dy) * this.width + (x - dx);
               const currentIndex = y * this.width + x;
               const gradient =
-                Math.abs(this.previous[previousIndex] - this.previous[previousIndex - 1]) +
-                Math.abs(this.previous[previousIndex] - this.previous[previousIndex - this.width]);
+                Math.abs(previous[previousIndex] - previous[previousIndex - 1]) +
+                Math.abs(previous[previousIndex] - previous[previousIndex - this.width]);
               if (gradient < 7) continue;
-              score += Math.abs(gray[currentIndex] - this.previous[previousIndex]);
+              score += Math.abs(gray[currentIndex] - previous[previousIndex]);
               samples += 1;
             }
           }
@@ -189,7 +197,6 @@
         this.pose.x = Math.min(0.86, Math.max(0.14, this.pose.x + (best.dx / this.width) * 2.7));
         this.pose.y = Math.min(0.86, Math.max(0.14, this.pose.y + (best.dy / this.height) * 2.7));
       }
-      this.previous = gray;
       return {
         ...this.pose,
         confidence: frameChange > 0.45 ? 0.6 : 0.54,
@@ -214,7 +221,10 @@
       this.lastProcessedAt = 0;
       this.usesVideoFrameCallback = false;
       this.frameGate = new Core.VideoFrameFreshnessGate({ timeoutMs: 1100 });
+      this.contentGate = new Core.FrameContentFreshnessGate({ timeoutMs: 900 });
       this.freezeReported = false;
+      this.contentInvalidReported = false;
+      this.contentLossReported = false;
       this.mode = "frame-motion head-pose fallback";
     }
 
@@ -229,7 +239,9 @@
       }
       this.callbacks.onMode(this.mode);
       this.running = true;
-      this.frameGate.start(performance.now());
+      const startedAt = performance.now();
+      this.frameGate.start(startedAt);
+      this.contentGate.start(startedAt);
       this.usesVideoFrameCallback =
         typeof this.video.requestVideoFrameCallback === "function";
       this.scheduleFrame();
@@ -311,6 +323,10 @@
       return this.frameGate.isFresh(now);
     }
 
+    isContentFresh(now) {
+      return this.contentGate.isFresh(now);
+    }
+
     considerFrame(now, metadata) {
       if (
         !this.running ||
@@ -330,8 +346,54 @@
     processFreshFrame(frameObservedAt) {
       this.context.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
       const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
-      const fallbackSample = this.motion.estimate(imageData);
+      const luminance = luminanceFromImageData(imageData);
+      const previousLuminance = this.contentGate.previous;
+      const content = this.contentGate.observe(luminance, frameObservedAt);
       this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      const shouldReport =
+        !this.callbacks.shouldReportFreshness ||
+        this.callbacks.shouldReportFreshness();
+      if (
+        shouldReport &&
+        !this.contentInvalidReported &&
+        (content.becameInvalid ||
+          (content.hadUsableFrame && !content.usable) ||
+          content.timedOut) &&
+        this.callbacks.onContentInvalid
+      ) {
+        this.contentInvalidReported = true;
+        this.callbacks.onContentInvalid(content, frameObservedAt);
+      }
+      if (
+        shouldReport &&
+        content.timedOut &&
+        !this.contentLossReported &&
+        this.callbacks.onContentLost
+      ) {
+        this.contentLossReported = true;
+        this.callbacks.onContentLost(content, frameObservedAt);
+      }
+      if (content.usable) {
+        const recoveryWasReported =
+          this.contentInvalidReported || this.contentLossReported;
+        this.contentInvalidReported = false;
+        this.contentLossReported = false;
+        if (
+          shouldReport &&
+          content.recovered &&
+          recoveryWasReported &&
+          this.callbacks.onContentRecovered
+        ) {
+          this.callbacks.onContentRecovered(content, frameObservedAt);
+        }
+      }
+      if (!content.usable) return;
+
+      const fallbackSample = this.motion.estimate(
+        imageData,
+        luminance,
+        content.recovered ? null : previousLuminance,
+      );
 
       if (!this.detector) {
         this.callbacks.onSample(fallbackSample, this.mode, frameObservedAt);
@@ -353,7 +415,12 @@
           }
           const freshness = this.frameGate.check(performance.now());
           this.handleFreshness(freshness);
-          if (freshness.frozen) return;
+          if (
+            freshness.frozen ||
+            !this.contentGate.isFresh(performance.now())
+          ) {
+            return;
+          }
           if (faces.length === 1) {
             this.faceMisses = 0;
             const box = faces[0].boundingBox;
@@ -401,7 +468,10 @@
       this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
       this.motion.clear();
       this.frameGate.reset();
+      this.contentGate.reset();
       this.freezeReported = false;
+      this.contentInvalidReported = false;
+      this.contentLossReported = false;
       this.estimatorGeneration += 1;
       this.detector = null;
     }
@@ -835,6 +905,7 @@
       state.visionSensor.checkFreshness(now);
       if (
         state.visionSensor.isFresh(now) &&
+        state.visionSensor.isContentFresh(now) &&
         processedGazeHasTimedOut(now)
       ) {
         handleProcessedGazeTimeout(now);
@@ -1028,6 +1099,50 @@
       return;
     }
     setStatus("Fresh video frames resumed. Return to center to recover.");
+  }
+
+  function handleContentInvalid(content, now) {
+    updateConfidence(0);
+    const controllerState = state.controller && state.controller.snapshot();
+    if (
+      controllerState &&
+      controllerState.sector &&
+      (controllerState.armedSource === "sensor" ||
+        controllerState.inputSource === "sensor")
+    ) {
+      const pausedPoint = {
+        ...state.lastMappedPoint,
+        confidence: 0,
+      };
+      updateControllerFromPoint(pausedPoint, now, false, "sensor");
+    }
+    setStatus(`Camera content invalid: ${content.reason}. Armed input revoked.`);
+  }
+
+  function handleContentLost(content, now) {
+    if (state.calibrationStatus === "running") {
+      cancelAnimationFrame(state.calibrationFrame);
+      finalizeCalibrationLifecycle("content-lost", now, null, false);
+      state.calibrationInterruptedByFreeze = true;
+      resetCalibrationOverlay();
+    }
+    if (state.controller) {
+      state.controller.markSensorLost(now, `content-${content.reason}`);
+      renderController(state.controller.snapshot());
+    }
+    elements.sensorOverlay.classList.remove("is-hidden");
+    elements.sensorOverlayCopy.textContent =
+      "Frames are advancing, but camera content is unchanged, dark, overexposed, or occluded. Input remains cleared until usable content and center return.";
+    setStatus(`Camera content lost: ${content.reason}.`, true);
+  }
+
+  function handleContentRecovered() {
+    if (state.calibrationInterruptedByFreeze && state.stream) {
+      state.calibrationAttempts = 0;
+      startCalibration("usable camera content resumed");
+      return;
+    }
+    setStatus("Usable camera content resumed. Return to center to recover.");
   }
 
   function activateApplication(mode) {
@@ -1253,6 +1368,9 @@
           onMode: onSensorMode,
           onFreeze: handleVideoFreeze,
           onResume: handleVideoResume,
+          onContentInvalid: handleContentInvalid,
+          onContentLost: handleContentLost,
+          onContentRecovered: handleContentRecovered,
           onFreshFrame(now) {
             state.lastRawFrameAt = now;
           },
@@ -1545,16 +1663,18 @@
       !state.sensorsStopped &&
       Boolean(state.visionSensor) &&
       state.visionSensor.isFresh(now);
+    const contentFrameFresh =
+      rawFrameFresh && state.visionSensor.isContentFresh(now);
     const processedGazeFresh = isProcessedGazeFresh(now);
     const sensorFresh =
       arm.armedSource !== "sensor" ||
-      (rawFrameFresh && processedGazeFresh);
+      (rawFrameFresh && contentFrameFresh && processedGazeFresh);
     state.nodDetector.endArm();
     const confirmed = state.controller.confirm(source, now, { sensorFresh });
     if (
       !confirmed &&
       arm.armedSource === "sensor" &&
-      rawFrameFresh &&
+      contentFrameFresh &&
       !processedGazeFresh
     ) {
       handleProcessedGazeTimeout(now);
@@ -1959,6 +2079,9 @@
           generation: state.sensorGeneration,
           stopped: state.sensorsStopped,
           lastRawFrameAt: state.lastRawFrameAt,
+          contentFresh:
+            Boolean(state.visionSensor) &&
+            state.visionSensor.isContentFresh(performance.now()),
           lastProcessedGazeAt: state.lastProcessedGazeAt,
           processedGazeFresh: isProcessedGazeFresh(performance.now()),
         },

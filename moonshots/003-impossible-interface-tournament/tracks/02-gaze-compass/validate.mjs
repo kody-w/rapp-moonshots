@@ -46,6 +46,29 @@ frameGate.start(0);
 assert.equal(frameGate.observe({ presentedFrames: 1 }, 0).fresh, true);
 assert.equal(frameGate.observe({ presentedFrames: 1 }, 500).frozen, true);
 assert.equal(frameGate.observe({ presentedFrames: 2 }, 600).resumed, true);
+const contentGate = new Core.FrameContentFreshnessGate({ timeoutMs: 500 });
+const textureA = Uint8Array.from({ length: 64 }, (_, index) =>
+  index % 2 ? 200 : 40,
+);
+const textureB = Uint8Array.from(textureA, (value) => value + 2);
+contentGate.start(0);
+assert.equal(contentGate.observe(textureA, 0).usable, false);
+assert.equal(contentGate.observe(textureB, 100).usable, true);
+const identicalContent = contentGate.observe(textureB, 600);
+assert.equal(identicalContent.reason, "unchanged-content");
+assert.equal(identicalContent.timedOut, true);
+const occludedGate = new Core.FrameContentFreshnessGate({ timeoutMs: 500 });
+occludedGate.start(0);
+occludedGate.observe(new Uint8Array(64), 0);
+const occludedContent = occludedGate.observe(new Uint8Array(64), 500);
+assert.equal(occludedContent.reason, "dark-or-covered");
+assert.equal(occludedContent.timedOut, true);
+const flatGate = new Core.FrameContentFreshnessGate({ timeoutMs: 500 });
+flatGate.start(0);
+flatGate.observe(new Uint8Array(64).fill(128), 0);
+const flatContent = flatGate.observe(new Uint8Array(64).fill(128), 500);
+assert.equal(flatContent.reason, "low-detail-or-occluded");
+assert.equal(flatContent.timedOut, true);
 assert.equal(Core.parseVoiceCommand("do not confirm", Core.TASK_STEPS[0]).type, "rejected-confirm");
 assert.equal(Core.closedIntervalDuration(1000, 900), 0);
 assert.equal(Core.closedIntervalDuration(1000, 1650), 650);
@@ -76,6 +99,14 @@ const report = {
       simulation.safety.blockedConfirmations >= 1,
     staleSensorArmRejected: simulation.safety.staleSensorConfirmations === 1,
     processedGazeFreshnessRequired: true,
+    identicalFrameContentRejected:
+      identicalContent.reason === "unchanged-content" &&
+      identicalContent.timedOut,
+    occludedFrameContentRejected:
+      occludedContent.reason === "dark-or-covered" &&
+      occludedContent.timedOut &&
+      flatContent.reason === "low-detail-or-occluded" &&
+      flatContent.timedOut,
     controllerEpochMetricsAggregated: true,
     armScopedNodGesture: true,
     lifecycleGenerationSafe: true,

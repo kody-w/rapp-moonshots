@@ -62,16 +62,18 @@ The exact tournament route is:
   required. A signal timeout clears the candidate and requires center
   reacquisition before recovery.
 - Video processing prefers `requestVideoFrameCallback` metadata and otherwise
-  gates on decoded-frame count or `currentTime`. Repeated frozen pixels never
-  refresh confidence or dwell, and the freshness watchdog declares sensor loss.
+  gates on decoded-frame count or `currentTime`. A separate luminance,
+  variance, and frame-change gate rejects unchanged/near-identical, dark,
+  overexposed, or low-detail content even when those counters advance.
 - The watchdog reads the raw-frame gate, not controller sample timestamps. It
   is suspended during manual override and after completion. Confirmation also
   checks that gate synchronously, so a stale sensor arm is rejected even before
   a watchdog tick.
-- Raw video freshness and processed gaze freshness are independent gates. If
-  frames advance while FaceDetector stalls, the old arm is revoked and the
-  estimator switches to frame-motion fallback with timed recalibration. A
-  sensor-derived confirm requires both timestamps to be fresh.
+- Raw video, valid changing frame content, and processed gaze are independent
+  gates. If FaceDetector stalls, or advancing metadata carries covered/static
+  content, the old arm is revoked and bounded sensor-loss recovery begins.
+  Detector stalls switch to frame-motion fallback with timed recalibration. A
+  sensor-derived confirm synchronously requires all three signals to be fresh.
 - Nod recognition starts a new gesture epoch when an arm begins and ends it on
   every confirm, cancel, center, confidence pause, or sensor loss. Both nod
   phases must occur after the current arm.
@@ -89,15 +91,16 @@ remain usable.
 
 No model claims to infer precise eye position. Lighting, camera placement,
 glasses, involuntary motion, browser support, and motor range can all reduce
-quality.
+quality. Covered, static, nearly unchanged, uniformly dark/bright, and
+low-detail frames never reach either estimator.
 
 ## Privacy
 
 - A visible indicator shows camera, microphone, and pause state.
 - Video is sampled into a 64×48 in-memory canvas. The raw `ImageData` is scoped
   to one processing turn and the canvas is immediately cleared.
-- The fallback retains only one derived grayscale comparison buffer while the
-  session is active; stopping sensors clears it.
+- One derived grayscale content-comparison buffer is retained and shared with
+  the fallback while sensors are active; stopping sensors clears it.
 - If any startup step fails after permission, the application cancels frame,
   calibration, and recognition loops, stops every acquired track, clears the
   preview, then enters parity-only mode.
