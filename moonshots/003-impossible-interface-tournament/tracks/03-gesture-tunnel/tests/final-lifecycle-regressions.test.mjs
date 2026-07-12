@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  CameraVisibilityGuard,
   LifecycleGate,
   shouldReloadAfterPageShow,
 } from "../src/core.mjs";
@@ -64,4 +65,38 @@ test("persisted bfcache restore reloads every application mode", () => {
   assert.match(pageshowSource, /shouldReloadAfterPageShow\(event\)/);
   assert.match(pageshowSource, /window\.location\.reload\(\)/);
   assert.doesNotMatch(pageshowSource, /accessibleMode|simulationMode/);
+});
+
+test("foreground watchdog grants grace after lastFrameAt ages while hidden", () => {
+  const guard = new CameraVisibilityGuard({ foregroundGraceMs: 2500 });
+  guard.resume(0);
+  guard.noteFreshFrame();
+  const lastFrameAt = 100;
+
+  guard.suspend();
+  assert.equal(guard.shouldDeclareStale(lastFrameAt, 100000), false);
+
+  guard.resume(100000);
+  let sensorsStopped = false;
+  if (guard.shouldDeclareStale(lastFrameAt, 100001)) sensorsStopped = true;
+  assert.equal(sensorsStopped, false);
+  assert.equal(guard.shouldDeclareStale(lastFrameAt, 102500), false);
+  assert.equal(guard.shouldDeclareStale(lastFrameAt, 102501), true);
+
+  guard.resume(200000);
+  assert.equal(guard.shouldDeclareStale(lastFrameAt, 200001), false);
+  const freshForegroundFrameAt = 200020;
+  guard.noteFreshFrame();
+  assert.equal(guard.shouldDeclareStale(freshForegroundFrameAt, 200021), false);
+
+  const visibilityStart = appSource.indexOf('document.addEventListener("visibilitychange"');
+  const visibilitySource = appSource.slice(
+    visibilityStart,
+    appSource.indexOf("frameWatchdog = window.setInterval", visibilityStart),
+  );
+  assert.match(visibilitySource, /tracker\?\.suspendForVisibility\(\)/);
+  assert.match(visibilitySource, /tracker\?\.resumeFromVisibility\(foregroundAt\)/);
+  assert.match(visibilitySource, /cancelPendingForVisibility\("visibility-hidden"\)/);
+  assert.match(visibilitySource, /cancelPendingForVisibility\("visibility-foreground"\)/);
+  assert.match(appSource, /tracker\.shouldDeclareCameraLoss\(performance\.now\(\)\)/);
 });

@@ -219,6 +219,43 @@ export function isCameraFrameStale(lastFreshFrameAt, now, thresholdMs = 2500) {
   );
 }
 
+export class CameraVisibilityGuard {
+  constructor({ foregroundGraceMs = 2500 } = {}) {
+    this.foregroundGraceMs = foregroundGraceMs;
+    this.suspended = true;
+    this.foregroundAt = null;
+    this.freshFrameSinceForeground = false;
+  }
+
+  suspend() {
+    this.suspended = true;
+    this.foregroundAt = null;
+    this.freshFrameSinceForeground = false;
+  }
+
+  resume(now) {
+    this.suspended = false;
+    this.foregroundAt = Number.isFinite(now) ? now : 0;
+    this.freshFrameSinceForeground = false;
+  }
+
+  noteFreshFrame() {
+    if (!this.suspended) this.freshFrameSinceForeground = true;
+  }
+
+  shouldDeclareStale(lastFreshFrameAt, now) {
+    if (this.suspended) return false;
+    if (
+      !this.freshFrameSinceForeground &&
+      Number.isFinite(now) &&
+      now - this.foregroundAt <= this.foregroundGraceMs
+    ) {
+      return false;
+    }
+    return isCameraFrameStale(lastFreshFrameAt, now);
+  }
+}
+
 export function shouldReloadAfterPageShow(event) {
   return event?.persisted === true;
 }

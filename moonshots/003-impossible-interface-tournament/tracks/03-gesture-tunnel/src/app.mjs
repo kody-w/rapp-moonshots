@@ -1,4 +1,5 @@
 import {
+  CameraVisibilityGuard,
   DETERMINISTIC_ACTIONS,
   LifecycleGate,
   MediaFrameGate,
@@ -10,7 +11,6 @@ import {
   coarseSector,
   completionAnnouncement,
   evidencePresentation,
-  isCameraFrameStale,
   isTerminalSpeechRecognitionError,
   motionCentroid,
   normalizeSpeech,
@@ -283,6 +283,7 @@ class LocalMotionTracker {
     this.usesVideoFrameCallback =
       typeof this.video.requestVideoFrameCallback === "function";
     this.frameGate = new MediaFrameGate();
+    this.visibilityGuard = new CameraVisibilityGuard();
     this.lifecycle = new LifecycleGate();
     this.neutralSince = performance.now();
     this.neutralReady = false;
@@ -303,14 +304,19 @@ class LocalMotionTracker {
   }
 
   start() {
-    this.lifecycle.start();
     this.running = true;
+    if (document.visibilityState === "hidden") {
+      this.suspendForVisibility();
+    } else {
+      this.resumeFromVisibility(performance.now());
+    }
     this.scheduleFrame();
   }
 
   stop() {
     this.running = false;
     this.lifecycle.stop();
+    this.visibilityGuard.suspend();
     this.faceDetectionPending = false;
     if (
       this.usesVideoFrameCallback &&
@@ -327,6 +333,33 @@ class LocalMotionTracker {
     this.frameRequest = this.usesVideoFrameCallback
       ? this.video.requestVideoFrameCallback(this.onVideoFrame)
       : window.requestAnimationFrame(this.onAnimationFrame);
+  }
+
+  resetMotionState(now = 0) {
+    this.previous = null;
+    this.gestureWindow = null;
+    this.neutralReady = false;
+    this.neutralSince = now;
+    this.centerRestSent = false;
+  }
+
+  suspendForVisibility() {
+    this.visibilityGuard.suspend();
+    this.lifecycle.stop();
+    this.faceDetectionPending = false;
+    this.resetMotionState();
+  }
+
+  resumeFromVisibility(now) {
+    this.visibilityGuard.resume(now);
+    this.lifecycle.start();
+    this.faceDetectionPending = false;
+    this.lastFaceAt = now;
+    this.resetMotionState(now);
+  }
+
+  shouldDeclareCameraLoss(now) {
+    return this.visibilityGuard.shouldDeclareStale(this.lastFrameAt, now);
   }
 
   onVideoFrame = (now, metadata) => {
@@ -356,6 +389,7 @@ class LocalMotionTracker {
 
   processFrame(now, metadata = {}) {
     if (!this.running) return;
+    if (this.visibilityGuard.suspended) return;
     if (this.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
     const fresh = this.frameGate.accept({
       presentedFrames: metadata.presentedFrames,
@@ -385,6 +419,7 @@ class LocalMotionTracker {
     }
     this.previous = grayscale;
     this.lastFrameAt = now;
+    this.visibilityGuard.noteFreshFrame();
     if (this.faceDetector && now - this.lastFaceAt > 620) this.detectFace(now);
   }
 
@@ -529,6 +564,14 @@ function onCenterRest(source) {
     setCaption("Center rest canceled the coarse camera preview");
     render();
   }
+}
+
+function cancelPendingForVisibility(source) {
+  if (!engine) return false;
+  const snapshot = engine.snapshot();
+  if (!snapshot.preview && !snapshot.armed) return false;
+  engine.cancel({ source, at: elapsed() });
+  return true;
 }
 
 function stopMedia({ preserveVoiceRecovery = false } = {}) {
@@ -1080,15 +1123,27 @@ if (navigator.mediaDevices?.addEventListener) {
 }
 
 document.addEventListener("visibilitychange", () => {
-  if (
-    document.visibilityState === "visible" &&
-    launched &&
-    engine?.state.frozen &&
-    !accessibleMode &&
-    !simulationMode
-  ) {
-    recoverSensors({ explicit: false });
+  const liveSensorMode = launched && !accessibleMode && !simulationMode;
+  if (document.visibilityState === "hidden") {
+    if (!liveSensorMode) return;
+    tracker?.suspendForVisibility();
+    cancelPendingForVisibility("visibility-hidden");
+    setSensor(elements.neutralStatus, "camera · suspended", "warn");
+    setCaption("Camera liveness suspended while the document is hidden");
+    render();
+    return;
   }
+  if (!liveSensorMode) return;
+  const foregroundAt = performance.now();
+  tracker?.resumeFromVisibility(foregroundAt);
+  cancelPendingForVisibility("visibility-foreground");
+  setSensor(elements.neutralStatus, "camera · awaiting fresh frame", "warn");
+  if (engine?.state.frozen) {
+    recoverSensors({ explicit: false });
+  } else {
+    setCaption("Foreground restored; waiting for a fresh camera frame");
+  }
+  render();
 });
 
 frameWatchdog = window.setInterval(() => {
@@ -1096,7 +1151,7 @@ frameWatchdog = window.setInterval(() => {
     launched &&
     tracker?.running &&
     document.visibilityState === "visible" &&
-    isCameraFrameStale(tracker.lastFrameAt, performance.now())
+    tracker.shouldDeclareCameraLoss(performance.now())
   ) {
     handleSensorLoss("camera");
   }

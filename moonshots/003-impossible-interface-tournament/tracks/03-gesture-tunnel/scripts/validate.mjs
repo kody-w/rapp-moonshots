@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  CameraVisibilityGuard,
   DETERMINISTIC_ACTIONS,
   LifecycleGate,
   MediaFrameGate,
@@ -205,6 +206,22 @@ gate("final lifecycle invariants", () => {
   assert.match(app, /!this\.lifecycle\.isCurrent\(detectionGeneration\)/);
   assert.match(app, /window\.addEventListener\("pageshow"/);
   assert.match(app, /if \(shouldReloadAfterPageShow\(event\)\) window\.location\.reload\(\)/);
+});
+
+gate("visibility release invariant", () => {
+  const visibilityGuard = new CameraVisibilityGuard({ foregroundGraceMs: 2500 });
+  visibilityGuard.resume(0);
+  visibilityGuard.noteFreshFrame();
+  visibilityGuard.suspend();
+  assert.equal(visibilityGuard.shouldDeclareStale(100, 100000), false);
+  visibilityGuard.resume(100000);
+  assert.equal(visibilityGuard.shouldDeclareStale(100, 100001), false);
+  visibilityGuard.noteFreshFrame();
+  assert.equal(visibilityGuard.shouldDeclareStale(100020, 100021), false);
+  assert.match(app, /suspendForVisibility\(\)/);
+  assert.match(app, /resumeFromVisibility\(foregroundAt\)/);
+  assert.match(app, /cancelPendingForVisibility\("visibility-foreground"\)/);
+  assert.match(app, /tracker\.shouldDeclareCameraLoss\(performance\.now\(\)\)/);
 });
 
 gate("evidence and rollback docs", () => {

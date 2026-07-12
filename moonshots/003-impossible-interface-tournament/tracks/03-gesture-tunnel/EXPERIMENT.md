@@ -109,6 +109,9 @@ The follow-up experiment also holds these independent invariants:
   restore a stale preview; and
 - persisted back/forward-cache restoration reloads the same mode with a fresh
   launch and resource lifecycle.
+- camera liveness is suspended while hidden; an aged pre-background
+  `lastFrameAt` cannot stop healthy sensors on the first foreground watchdog,
+  and pending camera input is canceled before fresh-frame gating resumes.
 
 `npm run experiment` performs two identical simulations, compares both with the
 checked-in metrics and replay, and writes `evidence/experiment-summary.json`.

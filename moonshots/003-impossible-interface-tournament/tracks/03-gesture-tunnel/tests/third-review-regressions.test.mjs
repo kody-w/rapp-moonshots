@@ -86,7 +86,7 @@ test("duplicate display frames do not refresh camera liveness", () => {
   assert.match(trackerSource, /playbackQuality\.totalVideoFrames/);
   assert.match(trackerSource, /mediaTime: this\.video\.currentTime/);
   assert.ok(trackerSource.indexOf("if (!fresh) return") < trackerSource.indexOf("this.lastFrameAt = now"));
-  assert.match(appSource, /isCameraFrameStale\(tracker\.lastFrameAt, performance\.now\(\)\)/);
+  assert.match(appSource, /tracker\.shouldDeclareCameraLoss\(performance\.now\(\)\)/);
 });
 
 test("camera loss preserves a recover-only voice listener", () => {
