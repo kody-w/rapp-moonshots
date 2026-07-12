@@ -37,9 +37,10 @@ loopback. Stop it with `Ctrl+C`. On Windows, run `launch.bat`.
 The fixture and logical input stay fixed. Each candidate is derived from the
 captured baseline and an engine invariant rejects anything that changes more
 than one allowlisted variable. Every observation runs three times in a new,
-track-local workspace. The first unanimous opposite outcome is reported as a
-**bounded causal flip**; the receipt explicitly avoids claims about untested
-variables.
+track-local workspace. A receipt requires a 3/3 FAIL baseline, every rejected
+control to remain FAIL in 3/3 reruns, and the declared causal intervention to
+PASS in 3/3 reruns. A passing or mixed baseline, flaky control, unexpected
+control pass, or non-unanimous causal result aborts instead of explaining.
 
 Each trial records:
 
@@ -81,9 +82,9 @@ Exported recipes automatically use `python3` with `./launch.sh` on POSIX and
 `python` with `launch.bat` on Windows.
 
 The committed experiment ran 36 isolated trials: **3/3 causes identified,
-9/9 baseline failures reproduced, 9/9 counterfactual passes repeated, six
-controls rejected, 3/3 fixture sources verified before receipt, and zero
-residual workspaces**. Median scenario time was 574.04 ms. See
+9/9 baseline failures, 18/18 control failures, and 9/9 causal passes reproduced;
+six controls rejected; 3/3 fixture sources verified before receipt; and zero
+residual workspaces**. Median scenario time was 586.03 ms. See
 [`EXPERIMENT.md`](EXPERIMENT.md) and the machine-readable
 [`evidence/experiment-results.json`](evidence/experiment-results.json).
 

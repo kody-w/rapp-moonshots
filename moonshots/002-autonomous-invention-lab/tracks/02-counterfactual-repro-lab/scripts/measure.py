@@ -61,6 +61,16 @@ def measure() -> dict:
         for scenario_id in SCENARIOS:
             result = runner.run(scenario_id)
             flip = result["first_repeatable_flip"]
+            controls = [
+                intervention
+                for intervention in result["interventions"]
+                if not intervention["flipped"]
+            ]
+            control_trials = [
+                trial
+                for intervention in controls
+                for trial in intervention["trials"]
+            ]
             runs.append(
                 {
                     "scenario": scenario_id,
@@ -80,7 +90,13 @@ def measure() -> dict:
                     ),
                     "flip_repeats": flip["repeat_count"],
                     "flip_passes": flip["pass_count"],
-                    "controls_rejected": len(result["interventions"]) - 1,
+                    "control_repeats": len(control_trials),
+                    "control_failures": sum(
+                        1 for trial in control_trials if not trial["passed"]
+                    ),
+                    "controls_rejected": result["confidence"][
+                        "earlier_controls_rejected"
+                    ],
                     "trials": result["metrics"]["trials_run"],
                     "workspaces_cleaned": result["metrics"]["workspaces_cleaned"],
                     "duration_ms": result["metrics"]["duration_ms"],
@@ -106,6 +122,7 @@ def measure() -> dict:
         "pass_gates": {
             "cause_accuracy": "3/3",
             "baseline_reproducibility": "9/9 failures",
+            "control_reproducibility": "18/18 failures",
             "counterfactual_reproducibility": "9/9 passes",
             "fixture_source_integrity": "3/3 verified before receipt",
             "variables_changed_per_trial": 1,
@@ -123,6 +140,8 @@ def measure() -> dict:
             "baseline_repeats": sum(run["baseline_repeats"] for run in runs),
             "counterfactual_passes": sum(run["flip_passes"] for run in runs),
             "counterfactual_repeats": sum(run["flip_repeats"] for run in runs),
+            "control_failures": sum(run["control_failures"] for run in runs),
+            "control_repeats": sum(run["control_repeats"] for run in runs),
             "controls_rejected": sum(run["controls_rejected"] for run in runs),
             "fixture_sources_verified": sum(
                 run["fixture_source_verified_at_release"] for run in runs
@@ -140,6 +159,7 @@ def measure() -> dict:
     report["passed"] = (
         summary["scenarios_correct"] == summary["scenarios_total"]
         and summary["baseline_failures"] == summary["baseline_repeats"]
+        and summary["control_failures"] == summary["control_repeats"]
         and summary["counterfactual_passes"] == summary["counterfactual_repeats"]
         and summary["fixture_sources_verified"] == summary["scenarios_total"]
         and all(len(run["fixture_snapshot_sha256"]) == 64 for run in runs)

@@ -15,6 +15,7 @@ from typing import Optional
 from urllib.parse import urlsplit
 
 from counterfactual_lab import (
+    CausalEvidenceError,
     ExperimentCancelled,
     ExperimentRunner,
     FixtureDriftError,
@@ -170,6 +171,15 @@ class RunRegistry:
                 run["error"] = (
                     "Fixture source changed during the experiment; "
                     "the evidence receipt was withheld."
+                )
+                run["cleanup_verified"] = True
+        except CausalEvidenceError:
+            with self._lock:
+                run = self._runs[run_id]
+                run["status"] = "failed"
+                run["error"] = (
+                    "Outcomes were not unanimous FAIL controls followed by "
+                    "a unanimous PASS cause; the evidence receipt was withheld."
                 )
                 run["cleanup_verified"] = True
         except WorkspaceCleanupError:

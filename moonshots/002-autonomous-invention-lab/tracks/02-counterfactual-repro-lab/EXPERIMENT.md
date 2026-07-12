@@ -6,12 +6,13 @@ Given three seeded failures whose causes are known but hidden among two
 plausible environmental controls, Counterfactual Repro Lab will:
 
 1. reproduce every failing baseline in 3/3 isolated reruns;
-2. identify the known causal variable in 3/3 scenarios;
-3. reproduce every counterfactual pass in 3/3 reruns;
-4. change exactly one bounded variable in every intervention;
-5. verify the pre-baseline fixture snapshot still matches source before receipt;
-6. leave zero trial workspaces behind; and
-7. finish a median scenario in under 3,000 ms.
+2. reject every plausible control with unanimous 3/3 failures;
+3. identify the known causal variable in 3/3 scenarios;
+4. reproduce every causal pass in 3/3 reruns;
+5. change exactly one bounded variable in every intervention;
+6. verify the pre-baseline fixture snapshot still matches source before receipt;
+7. leave zero trial workspaces behind; and
+8. finish a median scenario in under 3,000 ms.
 
 Any missed cause, unstable outcome, multi-variable intervention, unreported
 fixture drift, residue, or median above the threshold falsifies this
@@ -25,8 +26,8 @@ For each scenario, the runner:
 
 1. snapshots and hashes fixture bytes, then executes the failing baseline three times;
 2. tests locale and validation controls independently;
-3. tests the seeded causal variable;
-4. stops at the first unanimous opposite result; and
+3. aborts on any passing/flaky baseline, mixed control, or unexpected control pass;
+4. accepts only the declared causal variable with a unanimous 3/3 pass; and
 5. verifies every workspace cleanup and rechecks the source fixture hash before
    releasing the receipt.
 
@@ -45,13 +46,14 @@ Measurement captured in
 |---|---:|---:|
 | Cause-isolation accuracy | 3/3 | **3/3 (100%)** |
 | Baseline reproducibility | 9/9 fail | **9/9 fail** |
+| Control reproducibility | 18/18 fail | **18/18 fail** |
 | Counterfactual reproducibility | 9/9 pass | **9/9 pass** |
 | Fixture source integrity | 3/3 verified | **3/3 verified** |
 | Plausible controls rejected | 6 | **6** |
 | Variables changed per trial | 1 | **1** |
 | Trial workspaces cleaned | 36/36 | **36/36** |
 | Residual workspaces | 0 | **0** |
-| Median scenario duration | <3,000 ms | **574.04 ms** |
+| Median scenario duration | <3,000 ms | **586.03 ms** |
 
 **Result: PASS.**
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from counterfactual_lab import (
+    CausalEvidenceError,
     ExperimentCancelled,
     ExperimentRunner,
     FixtureDriftError,
@@ -30,6 +31,17 @@ class ExperimentRunnerTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(TRACK_ROOT / ".test-runtime", ignore_errors=True)
+
+    @staticmethod
+    def scripted_trials(outcomes):
+        return [
+            {
+                "passed": passed,
+                "status": "PASS" if passed else "FAIL",
+                "workspace_cleanup_verified": True,
+            }
+            for passed in outcomes
+        ]
 
     def test_all_seeded_scenarios_find_expected_repeatable_flip(self):
         expected = {
@@ -62,6 +74,21 @@ class ExperimentRunnerTests(unittest.TestCase):
                 self.assertEqual(flip["pass_count"], 3)
                 self.assertEqual(result["metrics"]["trials_run"], 12)
                 self.assertEqual(result["metrics"]["workspaces_cleaned"], 12)
+                self.assertEqual(
+                    result["confidence"]["earlier_controls_rejected"], 2
+                )
+                self.assertTrue(
+                    all(
+                        intervention["repeatable"]
+                        and intervention["pass_count"] == 0
+                        and not intervention["flipped"]
+                        for intervention in result["interventions"][:-1]
+                    )
+                )
+                self.assertEqual(
+                    result["interventions"][-1]["pass_count"], 3
+                )
+                self.assertTrue(result["interventions"][-1]["flipped"])
                 snapshot_hash = result["baseline_capture"][
                     "fixture_snapshot_sha256"
                 ]
@@ -276,6 +303,67 @@ class ExperimentRunnerTests(unittest.TestCase):
             self.assertEqual(list((drift_root / "workspaces").iterdir()), [])
         finally:
             shutil.rmtree(drift_root, ignore_errors=True)
+
+    def test_mixed_control_outcomes_withhold_receipt(self):
+        outcomes = [False, False, False, False, True, False]
+        with patch.object(
+            self.runner,
+            "_run_trial",
+            side_effect=self.scripted_trials(outcomes),
+        ) as run_trial:
+            with self.assertRaisesRegex(
+                CausalEvidenceError,
+                "Control process.locale produced mixed/flaky outcomes",
+            ):
+                self.runner.run("line-endings")
+        self.assertEqual(run_trial.call_count, 6)
+
+    def test_unanimous_passing_baseline_withholds_receipt(self):
+        outcomes = [True, True, True]
+        with patch.object(
+            self.runner,
+            "_run_trial",
+            side_effect=self.scripted_trials(outcomes),
+        ) as run_trial:
+            with self.assertRaisesRegex(
+                CausalEvidenceError,
+                "Baseline was unanimous PASS",
+            ):
+                self.runner.run("line-endings")
+        self.assertEqual(run_trial.call_count, 3)
+
+    def test_flaky_baseline_withholds_receipt(self):
+        outcomes = [False, True, False]
+        with patch.object(
+            self.runner,
+            "_run_trial",
+            side_effect=self.scripted_trials(outcomes),
+        ) as run_trial:
+            with self.assertRaisesRegex(
+                CausalEvidenceError,
+                "Baseline produced mixed/flaky outcomes",
+            ):
+                self.runner.run("line-endings")
+        self.assertEqual(run_trial.call_count, 3)
+
+    def test_non_unanimous_causal_intervention_withholds_receipt(self):
+        outcomes = (
+            [False, False, False]
+            + [False, False, False]
+            + [False, False, False]
+            + [True, False, True]
+        )
+        with patch.object(
+            self.runner,
+            "_run_trial",
+            side_effect=self.scripted_trials(outcomes),
+        ) as run_trial:
+            with self.assertRaisesRegex(
+                CausalEvidenceError,
+                "Causal intervention checkout.lineEnding produced mixed/flaky outcomes",
+            ):
+                self.runner.run("line-endings")
+        self.assertEqual(run_trial.call_count, 12)
 
 
 if __name__ == "__main__":

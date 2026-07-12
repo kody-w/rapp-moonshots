@@ -26,6 +26,10 @@ class FixtureExecutionError(RuntimeError):
     """Raised when the fixed fixture does not return valid evidence."""
 
 
+class CausalEvidenceError(FixtureExecutionError):
+    """Raised when outcomes cannot support a bounded causal receipt."""
+
+
 class FixtureDriftError(RuntimeError):
     """Raised when fixture source changes after its experiment snapshot."""
 
@@ -106,12 +110,18 @@ class ExperimentRunner:
             )
 
         baseline_statuses = [trial["passed"] for trial in baseline_trials]
-        if len(set(baseline_statuses)) != 1:
-            raise FixtureExecutionError("Seeded baseline was not repeatable")
-        baseline_passed = baseline_statuses[0]
+        if all(baseline_statuses):
+            raise CausalEvidenceError(
+                "Baseline was unanimous PASS; a causal receipt requires unanimous FAIL"
+            )
+        if not all(status is False for status in baseline_statuses):
+            raise CausalEvidenceError(
+                "Baseline produced mixed/flaky outcomes; evidence receipt withheld"
+            )
 
         interventions: List[dict] = []
         first_flip: Optional[dict] = None
+        valid_rejected_controls = 0
         for index, mutation in enumerate(scenario.interventions, start=1):
             self._raise_if_cancelled(cancel_event)
             candidate = self._single_variable_candidate(
@@ -158,7 +168,31 @@ class ExperimentRunner:
 
             statuses = [trial["passed"] for trial in trials]
             repeatable = len(set(statuses)) == 1
-            flipped = repeatable and statuses[0] != baseline_passed
+            is_declared_cause = (
+                mutation.variable == scenario.causal_variable
+                and mutation.to_value == scenario.causal_value
+            )
+            role = "causal intervention" if is_declared_cause else "control"
+            if not repeatable:
+                raise CausalEvidenceError(
+                    "{0} {1} produced mixed/flaky outcomes; "
+                    "evidence receipt withheld".format(role.capitalize(), mutation.variable)
+                )
+
+            unanimously_passed = statuses[0] is True
+            if unanimously_passed and not is_declared_cause:
+                raise CausalEvidenceError(
+                    "Control {0} unexpectedly passed unanimously; "
+                    "evidence receipt withheld".format(mutation.variable)
+                )
+            if not unanimously_passed and is_declared_cause:
+                raise CausalEvidenceError(
+                    "Causal intervention {0} did not pass unanimously; "
+                    "evidence receipt withheld".format(mutation.variable)
+                )
+            flipped = unanimously_passed
+            if not flipped:
+                valid_rejected_controls += 1
             result = {
                 "order": index,
                 "variable": mutation.variable,
@@ -177,12 +211,14 @@ class ExperimentRunner:
                 break
 
         if first_flip is None:
-            raise FixtureExecutionError("No repeatable pass/fail flip was found")
+            raise CausalEvidenceError("No unanimous FAIL-to-PASS flip was found")
         if (
             first_flip["variable"] != scenario.causal_variable
             or first_flip["to"] != scenario.causal_value
         ):
-            raise FixtureExecutionError("Seeded causal control produced an unexpected result")
+            raise CausalEvidenceError(
+                "A non-causal intervention cannot support a causal receipt"
+            )
         self._raise_if_cancelled(cancel_event)
 
         executed_trials = list(baseline_trials)
@@ -200,15 +236,16 @@ class ExperimentRunner:
         self._verify_fixture_source(fixture_snapshot_sha256)
 
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
-        baseline_label = "PASS" if baseline_passed else "FAIL"
-        flipped_label = "FAIL" if baseline_passed else "PASS"
-        prior_controls = len(interventions) - 1
+        baseline_label = "FAIL"
+        flipped_label = "PASS"
+        prior_controls = valid_rejected_controls
         causal_claim = (
             "Changing {variable} from {old} to {new} was the first intervention to flip "
             "the fixed fixture from {before} to {after} in {repeats}/{repeats} isolated "
-            "reruns. {controls} earlier one-variable controls did not flip it. Fixture, "
-            "logical input, repetition count, and every other controlled variable remained "
-            "fixed; this is bounded causal evidence, not a claim about untested variables."
+            "reruns. {controls} earlier one-variable controls remained FAIL in "
+            "{repeats}/{repeats} reruns. Fixture, logical input, repetition count, and "
+            "every other controlled variable remained fixed; this is bounded causal "
+            "evidence, not a claim about untested variables."
         ).format(
             variable=first_flip["variable"],
             old=first_flip["from"],
