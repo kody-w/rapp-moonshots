@@ -1,0 +1,2343 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Ghost Ops — a deterministic, local incident response simulator.">
+  <title>Ghost Ops · Local Incident Simulator</title>
+  <script>
+    (() => {
+      const param = new URLSearchParams(window.location.search).get("scoutTheme");
+      const theme =
+        param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --cp-bg: #f7f4ef;
+      --cp-bg-elevated: #fcfbf8;
+      --cp-surface: #ffffff;
+      --cp-surface-soft: #f5f5f5;
+      --cp-border: #dedede;
+      --cp-border-strong: #919191;
+      --cp-text: #242424;
+      --cp-text-muted: #5c5c5c;
+      --cp-text-soft: #6f6f6f;
+      --cp-accent: #b11f4b;
+      --cp-accent-hover: #9a1a41;
+      --cp-accent-soft: rgba(177, 31, 75, 0.08);
+      --cp-accent-fg: #ffffff;
+      --cp-success: #16a34a;
+      --cp-danger: #dc2626;
+      --cp-warning: #f59e0b;
+      --cp-link: #0078d4;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+      --cp-overlay: rgba(255, 255, 255, 0.8);
+      --cp-panel: rgba(255, 255, 255, 0.86);
+      --cp-panel-strong: rgba(255, 255, 255, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.55);
+      --cp-highlight: rgba(177, 31, 75, 0.12);
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --cp-bg: #3d3b3a;
+      --cp-bg-elevated: #343231;
+      --cp-surface: #292929;
+      --cp-surface-soft: #2e2e2e;
+      --cp-border: #474747;
+      --cp-border-strong: #5f5f5f;
+      --cp-text: #dedede;
+      --cp-text-muted: #919191;
+      --cp-text-soft: #b0b0b0;
+      --cp-accent: #fd8ea1;
+      --cp-accent-hover: #fb7b91;
+      --cp-accent-soft: rgba(253, 142, 161, 0.14);
+      --cp-accent-fg: #1a1a1a;
+      --cp-success: #4ade80;
+      --cp-danger: #f87171;
+      --cp-warning: #fbbf24;
+      --cp-link: #4da6ff;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+      --cp-overlay: rgba(41, 41, 41, 0.88);
+      --cp-panel: rgba(41, 41, 41, 0.72);
+      --cp-panel-strong: rgba(41, 41, 41, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.04);
+      --cp-highlight: rgba(253, 142, 161, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--cp-bg);
+      color: var(--cp-text);
+      font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.5;
+    }
+    button, input, textarea, select { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+      outline: 3px solid var(--cp-accent);
+      outline-offset: 3px;
+    }
+    [hidden] { display: none !important; }
+    .mono { font-family: Consolas, "Courier New", Courier, monospace; }
+    .muted { color: var(--cp-text-muted); }
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--cp-accent);
+      font-family: Consolas, "Courier New", Courier, monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .shell { width: min(1480px, calc(100% - 32px)); margin: 0 auto; }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid var(--cp-border);
+      background: var(--cp-panel-strong);
+    }
+    .topbar-inner {
+      min-height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--cp-text);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .brand-mark {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--cp-accent);
+      border-radius: 0.625rem;
+      color: var(--cp-accent);
+      font-family: Consolas, "Courier New", Courier, monospace;
+      font-size: 0.72rem;
+    }
+    .brand-slash { color: var(--cp-accent); }
+    .header-actions { display: flex; align-items: center; gap: 8px; }
+    .fixture-badge, .status-pill, .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--cp-border);
+      border-radius: 999px;
+      background: var(--cp-surface);
+      color: var(--cp-text-muted);
+      font-size: 0.74rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 6px 10px;
+      text-transform: uppercase;
+    }
+    .fixture-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--cp-success);
+    }
+    .icon-button, .secondary-button, .ghost-button, .primary-button {
+      min-height: 40px;
+      border-radius: 0.625rem;
+      padding: 9px 14px;
+      font-weight: 700;
+      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+    }
+    .icon-button:hover, .secondary-button:hover, .ghost-button:hover, .primary-button:hover {
+      transform: translateY(-1px);
+    }
+    .icon-button, .secondary-button {
+      border: 1px solid var(--cp-border);
+      background: var(--cp-surface);
+      color: var(--cp-text);
+    }
+    .icon-button { width: 42px; padding: 8px; }
+    .ghost-button {
+      border: 1px solid var(--cp-border);
+      background: var(--cp-surface-soft);
+      color: var(--cp-text);
+    }
+    .primary-button {
+      border: 1px solid var(--cp-accent);
+      background: var(--cp-accent);
+      color: var(--cp-accent-fg);
+    }
+    .primary-button:hover { background: var(--cp-accent-hover); }
+    .primary-button:disabled, .secondary-button:disabled, .action-card:disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+      transform: none;
+    }
+
+    .landing {
+      padding: 56px 0 80px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+      gap: 24px;
+      align-items: stretch;
+      margin-bottom: 28px;
+    }
+    .hero-copy, .briefing-card, .panel, .scenario-card, .machine-card, .metric-card,
+    .council-card, .final-card, .experiment-strip {
+      border: 1px solid var(--cp-border);
+      background: var(--cp-surface);
+      box-shadow: 0 1px 2px var(--cp-border);
+    }
+    .hero-copy {
+      min-height: 340px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      border-radius: 16px;
+      padding: clamp(28px, 5vw, 64px);
+    }
+    h1, h2, h3, p { overflow-wrap: anywhere; }
+    h1 {
+      max-width: 840px;
+      margin: 0;
+      font-size: clamp(2.7rem, 7vw, 6.4rem);
+      line-height: 0.92;
+      letter-spacing: -0.065em;
+    }
+    h1 span { color: var(--cp-accent); }
+    .hero-copy > p:not(.eyebrow) {
+      max-width: 700px;
+      margin: 24px 0 0;
+      color: var(--cp-text-muted);
+      font-size: clamp(1rem, 2vw, 1.24rem);
+    }
+    .briefing-card {
+      border-radius: 16px;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 28px;
+    }
+    .briefing-list { display: grid; gap: 16px; }
+    .briefing-item {
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+    .briefing-number {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border-radius: 0.625rem;
+      background: var(--cp-accent-soft);
+      color: var(--cp-accent);
+      font: 700 0.78rem Consolas, "Courier New", Courier, monospace;
+    }
+    .briefing-item strong { display: block; margin-bottom: 2px; }
+    .briefing-item span { color: var(--cp-text-muted); font-size: 0.88rem; }
+    .privacy-note {
+      border-left: 3px solid var(--cp-success);
+      padding-left: 12px;
+      color: var(--cp-text-muted);
+      font-size: 0.82rem;
+    }
+    .section-heading {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 20px;
+      margin: 36px 0 16px;
+    }
+    .section-heading h2 { margin: 0; font-size: clamp(1.5rem, 3vw, 2.2rem); letter-spacing: -0.035em; }
+    .section-heading p { max-width: 600px; margin: 0; color: var(--cp-text-muted); }
+    .scenario-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .scenario-card {
+      position: relative;
+      min-height: 240px;
+      border-radius: 16px;
+      padding: 24px;
+      text-align: left;
+      color: var(--cp-text);
+      transition: transform 160ms ease, border-color 160ms ease;
+    }
+    .scenario-card:hover { transform: translateY(-2px); border-color: var(--cp-border-strong); }
+    .scenario-card.selected {
+      border: 2px solid var(--cp-accent);
+      padding: 23px;
+      background: var(--cp-accent-soft);
+    }
+    .scenario-index {
+      color: var(--cp-accent);
+      font: 700 0.75rem Consolas, "Courier New", Courier, monospace;
+      letter-spacing: 0.1em;
+    }
+    .scenario-card h3 { margin: 28px 0 6px; font-size: 1.45rem; letter-spacing: -0.025em; }
+    .scenario-card p { margin: 0 0 20px; color: var(--cp-text-muted); }
+    .scenario-meta { display: flex; flex-wrap: wrap; gap: 8px; }
+    .scenario-card .check {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      border: 1px solid var(--cp-border);
+      background: var(--cp-surface);
+      color: var(--cp-text-muted);
+    }
+    .scenario-card.selected .check {
+      border-color: var(--cp-accent);
+      background: var(--cp-accent);
+      color: var(--cp-accent-fg);
+    }
+    .launch-panel {
+      display: grid;
+      grid-template-columns: minmax(220px, 0.4fr) minmax(0, 1fr);
+      gap: 16px;
+      margin-top: 16px;
+      border: 1px solid var(--cp-border);
+      border-radius: 16px;
+      background: var(--cp-bg-elevated);
+      padding: 20px;
+    }
+    .field label { display: block; margin-bottom: 7px; font-size: 0.8rem; font-weight: 700; }
+    .field input, .field textarea {
+      width: 100%;
+      border: 1px solid var(--cp-border);
+      border-radius: 0.625rem;
+      background: var(--cp-surface);
+      color: var(--cp-text);
+      padding: 11px 12px;
+    }
+    .field small { display: block; margin-top: 6px; color: var(--cp-text-muted); }
+    .launch-actions {
+      display: flex;
+      align-items: end;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .launch-actions .primary-button { min-width: 190px; }
+    .experiment-strip {
+      margin-top: 20px;
+      border-radius: 16px;
+      padding: 20px 24px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 16px;
+    }
+    .experiment-value {
+      color: var(--cp-accent);
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+    }
+    .experiment-strip strong { display: block; }
+    .experiment-strip span { color: var(--cp-text-muted); font-size: 0.85rem; }
+
+    .simulator { padding: 20px 0 60px; }
+    .mission-bar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 16px;
+      border: 1px solid var(--cp-border);
+      border-radius: 16px;
+      background: var(--cp-surface);
+      padding: 16px 20px;
+    }
+    .mission-title { display: flex; align-items: center; gap: 12px; }
+    .mission-title h2 { margin: 0; font-size: 1.15rem; }
+    .mission-title p { margin: 2px 0 0; color: var(--cp-text-muted); font-size: 0.82rem; }
+    .tick-rail { display: flex; align-items: center; gap: 5px; }
+    .tick {
+      width: 24px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--cp-border);
+    }
+    .tick.past { background: var(--cp-accent); }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .metric-card { border-radius: 16px; padding: 16px 18px; }
+    .metric-label {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--cp-text-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .metric-value {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-top: 7px;
+      font-size: 1.7rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+    }
+    .delta { font-size: 0.75rem; letter-spacing: 0; }
+    .delta.positive { color: var(--cp-success); }
+    .delta.negative { color: var(--cp-danger); }
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(330px, 0.65fr);
+      gap: 12px;
+      align-items: start;
+    }
+    .left-stack, .right-stack { display: grid; gap: 12px; min-width: 0; }
+    .panel { border-radius: 16px; min-width: 0; overflow: hidden; }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--cp-border);
+      padding: 15px 18px;
+    }
+    .panel-header h3 { margin: 0; font-size: 0.95rem; }
+    .panel-header p { margin: 2px 0 0; color: var(--cp-text-muted); font-size: 0.74rem; }
+    .machine-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      padding: 12px;
+    }
+    .machine-card {
+      position: relative;
+      border-radius: 16px;
+      padding: 15px;
+      color: var(--cp-text);
+      text-align: left;
+      transition: border-color 160ms ease, transform 160ms ease;
+    }
+    .machine-card:hover { transform: translateY(-1px); border-color: var(--cp-border-strong); }
+    .machine-card.selected {
+      border: 2px solid var(--cp-accent);
+      padding: 14px;
+      background: var(--cp-accent-soft);
+    }
+    .machine-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .machine-avatar, .avatar {
+      width: 36px;
+      height: 36px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      border-radius: 0.625rem;
+      border: 1px solid var(--cp-border);
+      background: var(--cp-surface-soft);
+      color: var(--cp-accent);
+      font: 800 0.76rem Consolas, "Courier New", Courier, monospace;
+    }
+    .machine-state {
+      color: var(--cp-text-muted);
+      font: 700 0.68rem Consolas, "Courier New", Courier, monospace;
+      text-transform: uppercase;
+    }
+    .machine-card h4 { margin: 12px 0 0; font-size: 0.95rem; }
+    .handle { color: var(--cp-text-muted); font-size: 0.72rem; }
+    .meter {
+      height: 7px;
+      margin: 13px 0 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--cp-border);
+    }
+    .meter > span {
+      display: block;
+      width: var(--value);
+      height: 100%;
+      border-radius: inherit;
+      background: var(--cp-accent);
+      transition: width 300ms ease;
+    }
+    .machine-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      color: var(--cp-text-muted);
+      font: 0.68rem Consolas, "Courier New", Courier, monospace;
+    }
+    .control-flags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 11px; min-height: 23px; }
+    .control-flag {
+      border: 1px solid var(--cp-border);
+      border-radius: 999px;
+      color: var(--cp-text-muted);
+      font-size: 0.62rem;
+      padding: 3px 7px;
+      text-transform: uppercase;
+    }
+    .feed-tabs { display: flex; gap: 5px; }
+    .feed-tab {
+      border: 1px solid var(--cp-border);
+      border-radius: 999px;
+      background: var(--cp-surface);
+      color: var(--cp-text-muted);
+      padding: 5px 9px;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+    .feed-tab.active { border-color: var(--cp-accent); color: var(--cp-accent); background: var(--cp-accent-soft); }
+    .feed {
+      max-height: 610px;
+      overflow: auto;
+      scroll-behavior: smooth;
+    }
+    .feed-empty { padding: 32px; text-align: center; color: var(--cp-text-muted); }
+    .post {
+      display: grid;
+      grid-template-columns: 38px minmax(0, 1fr);
+      gap: 11px;
+      border-bottom: 1px solid var(--cp-border);
+      padding: 15px 18px;
+      animation: post-in 260ms ease both;
+    }
+    .post:last-child { border-bottom: 0; }
+    .post.agent { background: var(--cp-accent-soft); }
+    .post.operator { background: var(--cp-surface-soft); }
+    .post-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+    .post-head strong { font-size: 0.84rem; }
+    .post-role, .post-time { color: var(--cp-text-muted); font-size: 0.69rem; }
+    .post-time { margin-left: auto; font-family: Consolas, "Courier New", Courier, monospace; }
+    .post-body { margin-top: 5px; color: var(--cp-text); font-size: 0.87rem; }
+    .debate-line {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 9px;
+      color: var(--cp-accent);
+      font-size: 0.69rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .council-list { display: grid; }
+    .council-card {
+      border-width: 0 0 1px;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 15px 18px;
+    }
+    .council-card:last-child { border-bottom: 0; }
+    .council-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .council-head strong { font-size: 0.82rem; }
+    .confidence { color: var(--cp-text-muted); font: 0.68rem Consolas, "Courier New", Courier, monospace; }
+    .recommendation { margin: 7px 0 3px; color: var(--cp-accent); font-size: 0.78rem; font-weight: 800; }
+    .council-card p { margin: 0; color: var(--cp-text-muted); font-size: 0.77rem; }
+    .disagreement {
+      margin-top: 8px;
+      border-left: 2px solid var(--cp-warning);
+      padding-left: 8px;
+      color: var(--cp-text-muted);
+      font-size: 0.68rem;
+    }
+    .target-row {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 12px 12px 0;
+    }
+    .target-button {
+      flex: 1 0 auto;
+      border: 1px solid var(--cp-border);
+      border-radius: 0.625rem;
+      background: var(--cp-surface);
+      color: var(--cp-text-muted);
+      padding: 8px 9px;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+    .target-button.active { border-color: var(--cp-accent); background: var(--cp-accent-soft); color: var(--cp-accent); }
+    .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; }
+    .action-card {
+      min-height: 130px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      border: 1px solid var(--cp-border);
+      border-radius: 0.625rem;
+      background: var(--cp-surface);
+      color: var(--cp-text);
+      padding: 12px;
+      text-align: left;
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
+    .action-card:hover:not(:disabled) {
+      transform: translateY(-1px);
+      border-color: var(--cp-accent);
+      background: var(--cp-accent-soft);
+    }
+    .action-top { width: 100%; display: flex; justify-content: space-between; gap: 6px; }
+    .action-key {
+      color: var(--cp-accent);
+      font: 700 0.64rem Consolas, "Courier New", Courier, monospace;
+    }
+    .action-count { color: var(--cp-text-muted); font-size: 0.62rem; }
+    .action-card strong { margin: 8px 0 4px; font-size: 0.78rem; }
+    .action-card small { color: var(--cp-text-muted); font-size: 0.67rem; line-height: 1.35; }
+    .command-note {
+      margin: 0 12px 12px;
+      border: 1px solid var(--cp-border);
+      border-radius: 0.625rem;
+      background: var(--cp-surface-soft);
+      color: var(--cp-text-muted);
+      padding: 9px 10px;
+      font-size: 0.7rem;
+    }
+    .toast {
+      position: fixed;
+      z-index: 50;
+      right: 20px;
+      bottom: 20px;
+      max-width: min(380px, calc(100% - 40px));
+      border: 1px solid var(--cp-border);
+      border-left: 4px solid var(--cp-accent);
+      border-radius: 0.625rem;
+      background: var(--cp-panel-strong);
+      color: var(--cp-text);
+      box-shadow: var(--cp-shadow);
+      padding: 13px 15px;
+      animation: toast-in 220ms ease both;
+    }
+
+    .finale { padding: 44px 0 80px; }
+    .final-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .final-card { border-radius: 16px; padding: clamp(24px, 4vw, 42px); }
+    .final-score {
+      margin: 8px 0 0;
+      color: var(--cp-accent);
+      font-size: clamp(4rem, 10vw, 8rem);
+      font-weight: 900;
+      line-height: 0.9;
+      letter-spacing: -0.08em;
+    }
+    .grade { color: var(--cp-text-muted); font-size: 1rem; }
+    .final-card h1 { font-size: clamp(2.1rem, 5vw, 4rem); }
+    .final-card > p { color: var(--cp-text-muted); }
+    .final-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 24px; }
+    .final-stat {
+      border: 1px solid var(--cp-border);
+      border-radius: 0.625rem;
+      background: var(--cp-surface-soft);
+      padding: 12px;
+    }
+    .final-stat span { color: var(--cp-text-muted); font-size: 0.7rem; text-transform: uppercase; }
+    .final-stat strong { display: block; margin-top: 3px; font-size: 1.2rem; }
+    .export-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+      gap: 16px;
+    }
+    .export-actions { display: grid; gap: 9px; }
+    .export-actions button { width: 100%; text-align: left; }
+    .digest-box {
+      margin-top: 14px;
+      border: 1px dashed var(--cp-border-strong);
+      border-radius: 0.625rem;
+      padding: 12px;
+      color: var(--cp-text-muted);
+      font-size: 0.74rem;
+    }
+    .playbook-preview {
+      max-height: 520px;
+      overflow: auto;
+      margin: 0;
+      border-radius: 0.625rem;
+      background: var(--cp-bg-elevated);
+      color: var(--cp-text);
+      padding: 18px;
+      white-space: pre-wrap;
+      font: 0.74rem/1.55 Consolas, "Courier New", Courier, monospace;
+    }
+    dialog {
+      width: min(620px, calc(100% - 32px));
+      border: 1px solid var(--cp-border);
+      border-radius: 16px;
+      background: var(--cp-surface);
+      color: var(--cp-text);
+      box-shadow: var(--cp-shadow);
+      padding: 0;
+    }
+    dialog::backdrop { background: var(--cp-overlay); }
+    .dialog-head { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--cp-border); padding: 18px 20px; }
+    .dialog-head h2 { margin: 0; font-size: 1rem; }
+    .dialog-body { padding: 20px; }
+    .dialog-body textarea { min-height: 220px; font-family: Consolas, "Courier New", Courier, monospace; font-size: 0.75rem; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+    @keyframes post-in {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 1050px) {
+      .workspace, .final-hero, .export-layout { grid-template-columns: 1fr; }
+      .right-stack { grid-template-columns: 1fr 1fr; }
+      .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 760px) {
+      .shell { width: min(100% - 20px, 1480px); }
+      .fixture-badge span:last-child { display: none; }
+      .hero, .scenario-grid, .launch-panel, .right-stack { grid-template-columns: 1fr; }
+      .hero-copy { min-height: 290px; padding: 28px; }
+      .launch-actions { justify-content: stretch; }
+      .launch-actions button { flex: 1; }
+      .experiment-strip { grid-template-columns: auto 1fr; }
+      .experiment-strip > .chip { grid-column: 1 / -1; justify-self: start; }
+      .mission-bar { grid-template-columns: 1fr; }
+      .machine-grid { grid-template-columns: 1fr; }
+      .machine-card { min-height: 150px; }
+      .action-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 500px) {
+      .metrics-grid, .final-stats { grid-template-columns: 1fr 1fr; }
+      .metric-card { padding: 13px; }
+      .metric-value { font-size: 1.35rem; }
+      .section-heading { align-items: start; flex-direction: column; }
+      .header-actions .secondary-button { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <div class="brand" aria-label="Ghost Ops">
+        <span class="brand-mark" aria-hidden="true">GO</span>
+        <span>GHOST <span class="brand-slash">/</span> OPS</span>
+      </div>
+      <div class="header-actions">
+        <span class="fixture-badge" title="No network requests. Synthetic telemetry only.">
+          <span class="fixture-dot" aria-hidden="true"></span>
+          <span>Safe fixture · offline</span>
+        </span>
+        <button class="secondary-button" id="header-replay" type="button">Import replay</button>
+        <button class="icon-button" id="theme-toggle" type="button" aria-label="Toggle color theme" title="Toggle color theme">◐</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="landing" id="landing">
+    <div class="shell">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">Incident rehearsal · no blast radius</p>
+          <h1 id="hero-title">Your machines are <span>talking.</span></h1>
+          <p>Three machine personas report symptoms in real time. Specialist responders disagree. You have seven bounded moves before the incident writes its own ending.</p>
+        </div>
+        <aside class="briefing-card" aria-label="How the exercise works">
+          <div>
+            <p class="eyebrow">Operator briefing</p>
+            <div class="briefing-list">
+              <div class="briefing-item">
+                <span class="briefing-number">01</span>
+                <div><strong>Listen</strong><span>Read the machines' first-person symptom feed.</span></div>
+              </div>
+              <div class="briefing-item">
+                <span class="briefing-number">02</span>
+                <div><strong>Choose</strong><span>Weigh containment, uptime, and evidence.</span></div>
+              </div>
+              <div class="briefing-item">
+                <span class="briefing-number">03</span>
+                <div><strong>Remember</strong><span>Export the run as an Obsidian recovery playbook.</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="privacy-note"><strong>Simulation boundary:</strong> all hosts, logs, identities, and telemetry are deterministic fixtures. Ghost Ops performs zero network calls.</div>
+        </aside>
+      </section>
+
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Choose a disturbance</p>
+          <h2>Two incidents. No perfect answer.</h2>
+        </div>
+        <p>Every action spends finite inventory and advances the simulation clock. The same scenario and seed always produce the same outcome.</p>
+      </div>
+      <section class="scenario-grid" id="scenario-grid" aria-label="Scenario selection"></section>
+
+      <section class="launch-panel" aria-label="Launch controls">
+        <div class="field">
+          <label for="seed-input">Deterministic seed</label>
+          <input class="mono" id="seed-input" type="number" min="1" max="999999999" step="1" value="30317" inputmode="numeric">
+          <small>Share this seed to reproduce fixture noise and spread.</small>
+        </div>
+        <div class="launch-actions">
+          <button class="secondary-button" id="sample-replay" type="button">Watch a gold replay</button>
+          <button class="primary-button" id="launch-button" type="button">Enter incident room →</button>
+        </div>
+      </section>
+
+      <aside class="experiment-strip" aria-label="Experiment result">
+        <div class="experiment-value" id="experiment-delta">+0</div>
+        <div>
+          <strong>Containment-first policy advantage</strong>
+          <span id="experiment-copy">Measured over a deterministic 100-seed fixture cohort. Run <span class="mono">experiment.mjs</span> to reproduce.</span>
+        </div>
+        <span class="chip">Falsifiable · local · replayable</span>
+      </aside>
+    </div>
+  </main>
+
+  <main class="simulator" id="simulator" hidden>
+    <div class="shell">
+      <section class="mission-bar" aria-label="Mission status">
+        <div class="mission-title">
+          <span class="status-pill" id="mission-status">LIVE FIXTURE</span>
+          <div>
+            <h2 id="mission-name">Scenario</h2>
+            <p><span id="mission-time">T+00m</span> · seed <span class="mono" id="mission-seed"></span> · one action advances five minutes</p>
+          </div>
+        </div>
+        <div class="tick-rail" id="tick-rail" aria-label="Exercise progress"></div>
+      </section>
+
+      <section class="metrics-grid" aria-label="Incident metrics">
+        <article class="metric-card">
+          <div class="metric-label"><span>Containment</span><span>/ 100</span></div>
+          <div class="metric-value"><span id="score-value">0</span><span class="delta" id="score-delta"></span></div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-label"><span>Uncontrolled</span><span>nodes</span></div>
+          <div class="metric-value" id="uncontrolled-value">0</div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-label"><span>Evidence</span><span>fidelity</span></div>
+          <div class="metric-value"><span id="evidence-value">0</span><span class="muted">%</span></div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-label"><span>Service impact</span><span>budget</span></div>
+          <div class="metric-value"><span id="impact-value">0</span><span class="muted">%</span></div>
+        </article>
+      </section>
+
+      <div class="workspace">
+        <div class="left-stack">
+          <section class="panel" aria-labelledby="fleet-title">
+            <div class="panel-header">
+              <div><h3 id="fleet-title">Machine voices</h3><p>Select the machine your next action will touch.</p></div>
+              <span class="chip" id="fleet-summary">3 online</span>
+            </div>
+            <div class="machine-grid" id="machine-grid"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="feed-title">
+            <div class="panel-header">
+              <div><h3 id="feed-title">Incident social feed</h3><p>Machines, specialists, and operator decisions.</p></div>
+              <div class="feed-tabs" role="tablist" aria-label="Filter incident feed">
+                <button class="feed-tab active" type="button" data-feed-filter="all" role="tab" aria-selected="true">All</button>
+                <button class="feed-tab" type="button" data-feed-filter="machine" role="tab" aria-selected="false">Machines</button>
+                <button class="feed-tab" type="button" data-feed-filter="agent" role="tab" aria-selected="false">Responders</button>
+              </div>
+            </div>
+            <div class="feed" id="feed" aria-live="polite"></div>
+          </section>
+        </div>
+
+        <aside class="right-stack">
+          <section class="panel" aria-labelledby="council-title">
+            <div class="panel-header">
+              <div><h3 id="council-title">Responder council</h3><p>Advice is opinionated—not authoritative.</p></div>
+              <span class="chip">3 agents</span>
+            </div>
+            <div class="council-list" id="council-list"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="command-title">
+            <div class="panel-header">
+              <div><h3 id="command-title">Bounded command deck</h3><p>Choose one action. The clock will advance.</p></div>
+              <span class="chip" id="moves-left">7 moves</span>
+            </div>
+            <div class="target-row" id="target-row" aria-label="Action target"></div>
+            <div class="action-grid" id="action-grid"></div>
+            <p class="command-note">Actions are fixture-only state transitions. No shell, cloud, host, or network command is executed.</p>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <main class="finale" id="finale" hidden>
+    <div class="shell">
+      <section class="final-hero">
+        <article class="final-card">
+          <p class="eyebrow">Exercise complete</p>
+          <h1 id="final-headline">Incident contained.</h1>
+          <p id="final-summary"></p>
+          <div class="final-stats" id="final-stats"></div>
+        </article>
+        <article class="final-card" aria-label="Final containment score">
+          <p class="eyebrow">Containment score</p>
+          <div class="final-score" id="final-score">0</div>
+          <div class="grade" id="final-grade"></div>
+        </article>
+      </section>
+
+      <section class="export-layout">
+        <article class="final-card">
+          <p class="eyebrow">The incident remembers</p>
+          <h2>Export recovery evidence</h2>
+          <p>Both artifacts are generated entirely in your browser from the deterministic event stream.</p>
+          <div class="export-actions">
+            <button class="primary-button" id="download-playbook" type="button">↓ Recovery playbook · Markdown</button>
+            <button class="secondary-button" id="download-log" type="button">↓ Full event log · JSON</button>
+            <button class="secondary-button" id="download-replay" type="button">↓ Deterministic replay · JSON</button>
+            <button class="ghost-button" id="copy-playbook" type="button">Copy playbook to clipboard</button>
+            <button class="ghost-button" id="restart-button" type="button">Run another incident</button>
+          </div>
+          <div class="digest-box">Event digest<br><strong class="mono" id="event-digest"></strong></div>
+        </article>
+        <article class="final-card">
+          <p class="eyebrow">Obsidian-compatible preview</p>
+          <pre class="playbook-preview" id="playbook-preview"></pre>
+        </article>
+      </section>
+    </div>
+  </main>
+
+  <dialog id="replay-dialog" aria-labelledby="replay-title">
+    <div class="dialog-head">
+      <h2 id="replay-title">Import deterministic replay</h2>
+      <button class="icon-button" id="close-replay" type="button" aria-label="Close replay dialog">×</button>
+    </div>
+    <div class="dialog-body">
+      <div class="field">
+        <label for="replay-input">Ghost Ops replay JSON</label>
+        <textarea id="replay-input" spellcheck="false" placeholder='{"schema":"ghost-ops/replay/v1", ...}'></textarea>
+        <small>Only scenario IDs, numeric seeds, bounded action IDs, and fixture machine IDs are accepted.</small>
+      </div>
+      <div class="dialog-actions">
+        <button class="secondary-button" id="cancel-replay" type="button">Cancel</button>
+        <button class="primary-button" id="run-replay" type="button">Run replay</button>
+      </div>
+    </div>
+  </dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script id="ghost-engine">
+    (() => {
+      "use strict";
+
+      const VERSION = "1.0.1";
+      const MAX_TICKS = 7;
+      const SCENARIOS = [
+        {
+          id: "midnight-canary",
+          title: "Midnight Canary",
+          subtitle: "A signed release is behaving like an intruder.",
+          vector: "release",
+          difficulty: "Elevated",
+          aggression: 4,
+          spread: 0.42,
+          startTime: "2026-07-11T01:30:00.000Z",
+          objective: "Contain the canary without erasing release evidence.",
+          links: [["edge-03", "auth-01"], ["auth-01", "cache-07"], ["edge-03", "cache-07"]],
+          machines: [
+            {
+              id: "edge-03", name: "Edda", handle: "@edge-03", role: "Canary gateway",
+              voice: "blunt", version: "gateway/8.4.1-canary", compromise: 63, health: 66,
+              load: 84, latency: 188, symptom: "My new worker keeps reopening a socket nobody requested."
+            },
+            {
+              id: "auth-01", name: "Ari", handle: "@auth-01", role: "Identity broker",
+              voice: "precise", version: "identity/5.12.0", compromise: 14, health: 90,
+              load: 61, latency: 82, symptom: "I am validating familiar tokens from an unfamiliar call path."
+            },
+            {
+              id: "cache-07", name: "Cato", handle: "@cache-07", role: "Session cache",
+              voice: "anxious", version: "cache/3.9.2", compromise: 7, health: 94,
+              load: 72, latency: 19, symptom: "Evictions are normal. The repeating key prefix is not."
+            }
+          ]
+        },
+        {
+          id: "phantom-credential",
+          title: "Phantom Credential",
+          subtitle: "A retired deploy token has returned to work.",
+          vector: "credential",
+          difficulty: "Severe",
+          aggression: 5,
+          spread: 0.48,
+          startTime: "2026-07-11T04:05:00.000Z",
+          objective: "Break credential reuse while preserving a forensic trail.",
+          links: [["api-12", "queue-02"], ["queue-02", "worker-09"], ["api-12", "worker-09"]],
+          machines: [
+            {
+              id: "api-12", name: "Atlas", handle: "@api-12", role: "Public API",
+              voice: "measured", version: "api/12.6.0", compromise: 49, health: 74,
+              load: 79, latency: 143, symptom: "A retired deploy identity just asked me for a production manifest."
+            },
+            {
+              id: "queue-02", name: "Quinn", handle: "@queue-02", role: "Job queue",
+              voice: "rapid", version: "queue/6.2.4", compromise: 25, health: 82,
+              load: 88, latency: 67, symptom: "I have eleven priority jobs with valid signatures and impossible ancestry."
+            },
+            {
+              id: "worker-09", name: "Wren", handle: "@worker-09", role: "Build worker",
+              voice: "dry", version: "runner/9.1.7", compromise: 11, health: 91,
+              load: 58, latency: 34, symptom: "Nothing is running, if we agree not to count the hidden child process."
+            }
+          ]
+        }
+      ];
+
+      const ACTIONS = [
+        {
+          id: "isolate", label: "Isolate node", key: "CONTAIN", budget: 2,
+          tradeoff: "Stops lateral spread; raises service impact."
+        },
+        {
+          id: "block-egress", label: "Block egress", key: "CONTROL", budget: 2,
+          tradeoff: "Cuts outbound pressure; leaves local process alive."
+        },
+        {
+          id: "capture-snapshot", label: "Capture snapshot", key: "EVIDENCE", budget: 2,
+          tradeoff: "Preserves evidence; gives the incident another tick."
+        },
+        {
+          id: "rollback-release", label: "Rollback release", key: "RESTORE", budget: 1,
+          tradeoff: "Strong for release vectors; weaker against credentials."
+        },
+        {
+          id: "rotate-credential", label: "Rotate credential", key: "IDENTITY", budget: 1,
+          tradeoff: "Breaks credential reuse; briefly increases auth errors."
+        },
+        {
+          id: "restart-service", label: "Restart service", key: "RISK", budget: 1,
+          tradeoff: "Restores health if clean; regenerates a hot compromise."
+        }
+      ];
+
+      const AGENTS = {
+        sentinel: { id: "sentinel", name: "Sentinel", role: "Containment specialist", initials: "SE" },
+        vale: { id: "vale", name: "Vale", role: "Availability SRE", initials: "VA" },
+        quill: { id: "quill", name: "Quill", role: "Forensic responder", initials: "QU" }
+      };
+
+      function clone(value) {
+        return JSON.parse(JSON.stringify(value));
+      }
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function hashString(value) {
+        let hash = 2166136261;
+        const text = String(value);
+        for (let index = 0; index < text.length; index += 1) {
+          hash ^= text.charCodeAt(index);
+          hash = Math.imul(hash, 16777619);
+        }
+        return hash >>> 0;
+      }
+
+      function sample(seed, ...parts) {
+        return hashString([seed, ...parts].join("|")) / 4294967295;
+      }
+
+      function normalizeSeed(seed) {
+        const parsed = Number.parseInt(seed, 10);
+        if (!Number.isFinite(parsed)) return 30317;
+        return clamp(Math.abs(parsed), 1, 999999999);
+      }
+
+      function scenarioById(id) {
+        const scenario = SCENARIOS.find((candidate) => candidate.id === id);
+        if (!scenario) throw new Error(`Unknown fixture scenario: ${String(id)}`);
+        return scenario;
+      }
+
+      function actionById(id) {
+        const action = ACTIONS.find((candidate) => candidate.id === id);
+        if (!action) throw new Error(`Unknown bounded action: ${String(id)}`);
+        return action;
+      }
+
+      function virtualTime(state, tick = state.tick) {
+        const scenario = scenarioById(state.scenarioId);
+        return new Date(Date.parse(scenario.startTime) + tick * 5 * 60000).toISOString();
+      }
+
+      function nextEventTime(state) {
+        const tickFloor = Date.parse(virtualTime(state));
+        const previous = state.events.length ? Date.parse(state.events[state.events.length - 1].at) : tickFloor - 1000;
+        return new Date(Math.max(tickFloor, previous + 1000)).toISOString();
+      }
+
+      function recordEvent(state, type, detail, at = nextEventTime(state)) {
+        const event = {
+          id: `evt-${String(state.events.length + 1).padStart(3, "0")}`,
+          tick: state.tick,
+          at,
+          type,
+          detail: clone(detail)
+        };
+        state.events.push(event);
+        return event;
+      }
+
+      function addPost(state, actorType, actor, message, meta = {}) {
+        const at = nextEventTime(state);
+        const post = {
+          id: `post-${String(state.feed.length + 1).padStart(3, "0")}`,
+          tick: state.tick,
+          at,
+          actorType,
+          actorId: actor.id,
+          actorName: actor.name,
+          actorRole: actor.role,
+          initials: actor.initials || actor.name.slice(0, 2).toUpperCase(),
+          message,
+          meta: clone(meta)
+        };
+        state.feed.push(post);
+        recordEvent(state, "feed.posted", {
+          postId: post.id,
+          actorType,
+          actorId: actor.id,
+          message,
+          meta
+        }, at);
+        return post;
+      }
+
+      function condition(machine) {
+        if (machine.isolated) return "isolated";
+        if (machine.compromise >= 70) return "critical";
+        if (machine.compromise >= 40) return "degraded";
+        if (machine.compromise >= 18) return "suspect";
+        return "stable";
+      }
+
+      function machineMessage(machine, tick) {
+        if (machine.isolated) {
+          return tick % 2 === 0
+            ? `Isolation is holding. I can still see ${machine.compromise}% residue, but no new peers.`
+            : `The room is quiet now. My local indicators remain at ${machine.compromise}% suspicion.`;
+        }
+        if (machine.egressBlocked && machine.compromise >= 35) {
+          return `Outbound paths are closed. The process is still knocking from inside at ${machine.load}% load.`;
+        }
+        if (machine.compromise >= 72) {
+          return `I am losing the thread: ${machine.latency}ms latency, ${machine.load}% load, and commands I did not originate.`;
+        }
+        if (machine.compromise >= 42) {
+          return `Something is borrowing my identity. Suspicion is now ${machine.compromise}% and climbing.`;
+        }
+        if (machine.compromise >= 18) {
+          return `I am functional, not clean. A ${machine.latency}ms pulse repeats every five minutes.`;
+        }
+        return `My vitals are settling: ${machine.health}% health and no new unexplained children.`;
+      }
+
+      function recommendations(state) {
+        if (state.status !== "active") return [];
+        const scenario = scenarioById(state.scenarioId);
+        const valeAction = scenario.vector === "release" ? "rollback-release" : "rotate-credential";
+        const alternateVectorAction = scenario.vector === "release" ? "rotate-credential" : "rollback-release";
+        const riskOrder = [...state.machines].sort((left, right) => {
+          const leftRisk = left.compromise - (left.isolated ? 25 : 0) - (left.egressBlocked ? 10 : 0);
+          const rightRisk = right.compromise - (right.isolated ? 25 : 0) - (right.egressBlocked ? 10 : 0);
+          return rightRisk - leftRisk || left.id.localeCompare(right.id);
+        });
+        const evidenceOrder = [...state.machines].sort((left, right) =>
+          Number(left.snapshot) - Number(right.snapshot)
+          || right.compromise - left.compromise
+          || left.id.localeCompare(right.id)
+        );
+
+        function firstValidPair(actionIds, machines) {
+          for (const actionId of actionIds) {
+            for (const machine of machines) {
+              if (!invalidReason(state, actionId, machine.id)) return { actionId, targetId: machine.id };
+            }
+          }
+          return null;
+        }
+
+        const sentinelChoice = firstValidPair(
+          ["isolate", "block-egress", valeAction, "capture-snapshot", alternateVectorAction, "restart-service"],
+          riskOrder
+        );
+        const valeChoice = firstValidPair(
+          [valeAction, "restart-service", "block-egress", alternateVectorAction, "isolate", "capture-snapshot"],
+          riskOrder
+        );
+        const quillChoice = firstValidPair(
+          ["capture-snapshot", "block-egress", valeAction, "isolate", alternateVectorAction, "restart-service"],
+          evidenceOrder
+        );
+
+        return [
+          sentinelChoice && {
+            ...AGENTS.sentinel,
+            ...sentinelChoice,
+            confidence: clamp(91 - state.tick * 2, 65, 91),
+            rationale: `Use ${actionById(sentinelChoice.actionId).label.toLowerCase()} on ${state.machines.find((machine) => machine.id === sentinelChoice.targetId).name} before the next spread roll. Uptime is already a sunk cost.`,
+            disagreesWith: "Vale",
+            disagreement: "Vale is optimizing recovery before the blast radius is known."
+          },
+          valeChoice && {
+            ...AGENTS.vale,
+            ...valeChoice,
+            confidence: clamp(78 + (state.machines.find((machine) => machine.id === valeChoice.targetId).health < 55 ? 8 : 0), 60, 91),
+            rationale: `Use ${actionById(valeChoice.actionId).label.toLowerCase()} on ${state.machines.find((machine) => machine.id === valeChoice.targetId).name}; broad isolation punishes clean traffic.`,
+            disagreesWith: "Sentinel",
+            disagreement: "Sentinel's isolation plan protects certainty, not availability."
+          },
+          quillChoice && {
+            ...AGENTS.quill,
+            ...quillChoice,
+            confidence: clamp(84 - state.evidence / 6, 58, 84),
+            rationale: `Use ${actionById(quillChoice.actionId).label.toLowerCase()} on ${state.machines.find((machine) => machine.id === quillChoice.targetId).name} without spending an action the fixture can no longer honor.`,
+            disagreesWith: "Both",
+            disagreement: "Both proposals can destroy the causal evidence this drill should teach from."
+          }
+        ].filter(Boolean);
+      }
+
+      function postCouncil(state) {
+        recommendations(state).forEach((recommendation) => {
+          const action = actionById(recommendation.actionId);
+          const target = state.machines.find((machine) => machine.id === recommendation.targetId);
+          addPost(
+            state,
+            "agent",
+            recommendation,
+            `${recommendation.rationale} I recommend “${action.label}” on ${target.name}.`,
+            {
+              actionId: action.id,
+              targetId: target.id,
+              confidence: recommendation.confidence,
+              disagreesWith: recommendation.disagreesWith
+            }
+          );
+        });
+      }
+
+      function uncontrolledCount(state) {
+        return state.machines.filter((machine) =>
+          machine.compromise >= 25 && !machine.isolated && !machine.egressBlocked
+        ).length;
+      }
+
+      function calculateScore(state) {
+        const totalCompromise = state.machines.reduce((sum, machine) => sum + machine.compromise, 0);
+        const uncontrolled = uncontrolledCount(state);
+        const hot = state.machines.filter((machine) => machine.compromise >= 40).length;
+        const controls = state.machines.reduce(
+          (sum, machine) => sum + Number(machine.isolated) + Number(machine.egressBlocked),
+          0
+        );
+        const raw = 100
+          - totalCompromise * 0.38
+          - uncontrolled * 11
+          - hot * 4
+          - state.serviceImpact * 0.42
+          + state.evidence * 0.16
+          + controls * 5;
+        return clamp(Math.round(raw), 0, 100);
+      }
+
+      function createScenario(scenarioId = SCENARIOS[0].id, seed = 30317) {
+        const scenario = scenarioById(scenarioId);
+        const state = {
+          schema: "ghost-ops/state/v1",
+          engineVersion: VERSION,
+          scenarioId: scenario.id,
+          scenarioTitle: scenario.title,
+          seed: normalizeSeed(seed),
+          tick: 0,
+          maxTicks: MAX_TICKS,
+          status: "active",
+          evidence: 0,
+          serviceImpact: 0,
+          score: 0,
+          lastDelta: 0,
+          inventory: Object.fromEntries(ACTIONS.map((action) => [action.id, action.budget])),
+          machines: scenario.machines.map((machine) => ({
+            ...clone(machine),
+            isolated: false,
+            egressBlocked: false,
+            snapshot: false,
+            credentialEpoch: 0
+          })),
+          feed: [],
+          events: [],
+          actionHistory: [],
+          spreadEvents: 0
+        };
+
+        recordEvent(state, "drill.started", {
+          scenarioId: scenario.id,
+          scenarioTitle: scenario.title,
+          seed: state.seed,
+          fixtureOnly: true,
+          networkCalls: 0,
+          objective: scenario.objective
+        });
+        state.machines.forEach((machine) => {
+          addPost(state, "machine", machine, machine.symptom, {
+            condition: condition(machine),
+            compromise: machine.compromise
+          });
+        });
+        postCouncil(state);
+        state.score = calculateScore(state);
+        recordEvent(state, "score.calculated", { score: state.score, delta: 0 });
+        return state;
+      }
+
+      function invalidReason(state, actionId, targetId) {
+        if (state.status !== "active") return "The exercise is already complete.";
+        const action = ACTIONS.find((candidate) => candidate.id === actionId);
+        if (!action) return "Action is not in the bounded command deck.";
+        const target = state.machines.find((machine) => machine.id === targetId);
+        if (!target) return "Target is not a fixture machine in this scenario.";
+        if (state.inventory[actionId] <= 0) return `${action.label} has no uses remaining.`;
+        if (actionId === "isolate" && target.isolated) return `${target.name} is already isolated.`;
+        if (actionId === "block-egress" && target.egressBlocked) return `${target.name}'s egress is already blocked.`;
+        if (actionId === "capture-snapshot" && target.snapshot) return `${target.name} already has a preserved snapshot.`;
+        return "";
+      }
+
+      function applyImmediateEffect(state, action, target) {
+        const scenario = scenarioById(state.scenarioId);
+        const before = clone(target);
+        let note = "";
+
+        if (action.id === "isolate") {
+          target.isolated = true;
+          target.compromise = clamp(target.compromise - 12, 0, 100);
+          target.health = clamp(target.health - 7, 0, 100);
+          state.serviceImpact = clamp(state.serviceImpact + 15, 0, 100);
+          note = "Both lateral paths closed; service capacity reduced.";
+        } else if (action.id === "block-egress") {
+          target.egressBlocked = true;
+          target.compromise = clamp(target.compromise - 5, 0, 100);
+          state.serviceImpact = clamp(state.serviceImpact + 5, 0, 100);
+          note = "Outbound spread pressure reduced while the process remains observable.";
+        } else if (action.id === "capture-snapshot") {
+          target.snapshot = true;
+          target.compromise = clamp(target.compromise + 2, 0, 100);
+          state.evidence = clamp(state.evidence + 28, 0, 100);
+          note = "Volatile state preserved; containment was deliberately delayed.";
+        } else if (action.id === "rollback-release") {
+          const reduction = scenario.vector === "release" ? 34 : 11;
+          target.compromise = clamp(target.compromise - reduction, 0, 100);
+          target.version = `${target.version.split("/")[0]}/previous-fixture`;
+          target.health = clamp(target.health + 12, 0, 100);
+          state.serviceImpact = clamp(state.serviceImpact + 8, 0, 100);
+          note = scenario.vector === "release"
+            ? "Suspect release removed with a preserved version boundary."
+            : "Release changed, but the credential vector remains viable.";
+        } else if (action.id === "rotate-credential") {
+          const reduction = scenario.vector === "credential" ? 29 : 14;
+          target.compromise = clamp(target.compromise - reduction, 0, 100);
+          target.credentialEpoch += 1;
+          state.machines
+            .filter((machine) => machine.id !== target.id)
+            .forEach((machine) => {
+              machine.compromise = clamp(machine.compromise - Math.round(reduction * 0.22), 0, 100);
+              machine.credentialEpoch += 1;
+            });
+          state.serviceImpact = clamp(state.serviceImpact + 10, 0, 100);
+          note = scenario.vector === "credential"
+            ? "Retired identity invalidated across the fixture trust boundary."
+            : "Identity changed, but the signed release remains installed.";
+        } else if (action.id === "restart-service") {
+          if (before.compromise < 30) {
+            target.compromise = clamp(target.compromise - 15, 0, 100);
+            target.health = clamp(target.health + 24, 0, 100);
+            note = "Low-residue restart restored healthy service.";
+          } else {
+            target.compromise = clamp(target.compromise + 17, 0, 100);
+            target.health = clamp(target.health + 8, 0, 100);
+            note = "Hot restart regenerated the unexplained process tree.";
+          }
+          state.serviceImpact = clamp(state.serviceImpact + 4, 0, 100);
+        }
+        return { before, after: clone(target), note };
+      }
+
+      function runDynamics(state) {
+        const scenario = scenarioById(state.scenarioId);
+        const before = clone(state.machines);
+
+        scenario.links.forEach(([sourceId, targetId], edgeIndex) => {
+          const sourceBefore = before.find((machine) => machine.id === sourceId);
+          const targetBefore = before.find((machine) => machine.id === targetId);
+          const source = state.machines.find((machine) => machine.id === sourceId);
+          const target = state.machines.find((machine) => machine.id === targetId);
+          if (!sourceBefore || !targetBefore || sourceBefore.compromise < 24) return;
+          if (source.isolated || target.isolated) return;
+          const controlFactor = source.egressBlocked ? 0.18 : 1;
+          const pressure = scenario.spread * (sourceBefore.compromise / 100) * controlFactor;
+          const roll = sample(state.seed, state.tick, "edge", edgeIndex, sourceId, targetId);
+          if (roll < pressure) {
+            const increase = 7 + Math.floor(sample(state.seed, state.tick, "spread", edgeIndex) * 9);
+            target.compromise = clamp(target.compromise + increase, 0, 100);
+            state.spreadEvents += 1;
+            recordEvent(state, "spread.detected", {
+              sourceId,
+              targetId,
+              increase,
+              roll: Number(roll.toFixed(6)),
+              threshold: Number(pressure.toFixed(6))
+            });
+          }
+        });
+
+        state.machines.forEach((machine, index) => {
+          const noise = Math.floor(sample(state.seed, state.tick, "progress", machine.id) * 5);
+          let progression = scenario.aggression + noise;
+          if (machine.isolated) progression -= 7;
+          if (machine.egressBlocked) progression -= 3;
+          if (machine.snapshot) progression -= 1;
+          machine.compromise = clamp(machine.compromise + progression, 0, 100);
+          machine.health = clamp(
+            Math.round(100 - machine.compromise * 0.52 - (machine.isolated ? 8 : 0)),
+            8,
+            100
+          );
+          machine.load = clamp(
+            Math.round(38 + machine.compromise * 0.62 + sample(state.seed, state.tick, "load", index) * 13),
+            3,
+            100
+          );
+          machine.latency = clamp(
+            Math.round(18 + machine.compromise * 2.2 + sample(state.seed, state.tick, "latency", index) * 24),
+            5,
+            999
+          );
+        });
+      }
+
+      function outcome(state) {
+        if (state.score >= 78) return { grade: "A · contained with memory", headline: "You made the outage teach.", tone: "success" };
+        if (state.score >= 58) return { grade: "B · bounded recovery", headline: "The fleet is bruised, not blind.", tone: "success" };
+        if (state.score >= 38) return { grade: "C · partial containment", headline: "The incident stopped. The ambiguity did not.", tone: "warning" };
+        return { grade: "D · uncontrolled residue", headline: "The exercise found a recovery gap.", tone: "danger" };
+      }
+
+      function applyAction(inputState, actionId, targetId) {
+        const reason = invalidReason(inputState, actionId, targetId);
+        if (reason) throw new Error(reason);
+        const state = clone(inputState);
+        const action = actionById(actionId);
+        const target = state.machines.find((machine) => machine.id === targetId);
+        const previousScore = state.score;
+        state.inventory[actionId] -= 1;
+
+        const effect = applyImmediateEffect(state, action, target);
+        addPost(state, "operator", {
+          id: "operator", name: "Operator", role: "Incident commander", initials: "OP"
+        }, `${action.label} → ${target.name}. ${effect.note}`, {
+          actionId,
+          targetId,
+          boundedUseRemaining: state.inventory[actionId]
+        });
+        recordEvent(state, "operator.action", {
+          actionId,
+          actionLabel: action.label,
+          targetId,
+          targetName: target.name,
+          before: effect.before,
+          afterImmediateEffect: effect.after,
+          note: effect.note,
+          remaining: state.inventory[actionId]
+        });
+
+        state.tick += 1;
+        runDynamics(state);
+        state.serviceImpact = clamp(state.serviceImpact - 1, 0, 100);
+        state.score = calculateScore(state);
+        state.lastDelta = state.score - previousScore;
+        state.actionHistory.push({
+          tick: state.tick,
+          at: virtualTime(state),
+          actionId,
+          actionLabel: action.label,
+          targetId,
+          targetName: target.name,
+          note: effect.note,
+          scoreBefore: previousScore,
+          scoreAfter: state.score,
+          scoreDelta: state.lastDelta
+        });
+        recordEvent(state, "tick.completed", {
+          tick: state.tick,
+          score: state.score,
+          scoreDelta: state.lastDelta,
+          uncontrolled: uncontrolledCount(state),
+          evidence: state.evidence,
+          serviceImpact: state.serviceImpact,
+          machines: state.machines.map((machine) => ({
+            id: machine.id,
+            condition: condition(machine),
+            compromise: machine.compromise,
+            health: machine.health,
+            isolated: machine.isolated,
+            egressBlocked: machine.egressBlocked
+          }))
+        });
+
+        state.machines.forEach((machine) => {
+          addPost(state, "machine", machine, machineMessage(machine, state.tick), {
+            condition: condition(machine),
+            compromise: machine.compromise
+          });
+        });
+
+        if (state.tick >= state.maxTicks) {
+          state.status = "resolved";
+          const result = outcome(state);
+          recordEvent(state, "drill.completed", {
+            score: state.score,
+            grade: result.grade,
+            spreadEvents: state.spreadEvents,
+            actionCount: state.actionHistory.length
+          });
+        } else {
+          postCouncil(state);
+          recordEvent(state, "score.calculated", { score: state.score, delta: state.lastDelta });
+        }
+        return state;
+      }
+
+      function stableSnapshot(state) {
+        return {
+          schema: state.schema,
+          engineVersion: state.engineVersion,
+          scenarioId: state.scenarioId,
+          seed: state.seed,
+          tick: state.tick,
+          status: state.status,
+          score: state.score,
+          evidence: state.evidence,
+          serviceImpact: state.serviceImpact,
+          spreadEvents: state.spreadEvents,
+          inventory: state.inventory,
+          machines: state.machines.map((machine) => ({
+            id: machine.id,
+            version: machine.version,
+            compromise: machine.compromise,
+            health: machine.health,
+            load: machine.load,
+            latency: machine.latency,
+            isolated: machine.isolated,
+            egressBlocked: machine.egressBlocked,
+            snapshot: machine.snapshot,
+            credentialEpoch: machine.credentialEpoch
+          })),
+          actions: state.actionHistory.map(({ actionId, targetId }) => ({ actionId, targetId })),
+          events: state.events
+        };
+      }
+
+      function digest(state) {
+        return hashString(JSON.stringify(stableSnapshot(state))).toString(16).padStart(8, "0");
+      }
+
+      function serializeReplay(state) {
+        return {
+          schema: "ghost-ops/replay/v1",
+          engineVersion: VERSION,
+          scenarioId: state.scenarioId,
+          seed: state.seed,
+          actions: state.actionHistory.map(({ actionId, targetId }) => ({ actionId, targetId })),
+          expectedDigest: digest(state)
+        };
+      }
+
+      function validateReplay(value) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Replay must be a JSON object.");
+        const allowedKeys = new Set(["schema", "engineVersion", "scenarioId", "seed", "actions", "expectedDigest"]);
+        if (Object.keys(value).some((key) => !allowedKeys.has(key))) {
+          throw new Error("Replay contains an unsupported top-level field.");
+        }
+        if (value.schema !== "ghost-ops/replay/v1") throw new Error("Unsupported replay schema.");
+        const scenario = scenarioById(value.scenarioId);
+        if (typeof value.seed !== "number" || !Number.isInteger(value.seed)) {
+          throw new Error("Replay seed must be an integer.");
+        }
+        if (!Array.isArray(value.actions) || value.actions.length > MAX_TICKS) {
+          throw new Error(`Replay must contain at most ${MAX_TICKS} actions.`);
+        }
+        const machineIds = new Set(scenario.machines.map((machine) => machine.id));
+        value.actions.forEach((step, index) => {
+          if (!step || typeof step !== "object") throw new Error(`Replay action ${index + 1} is malformed.`);
+          actionById(step.actionId);
+          if (!machineIds.has(step.targetId)) throw new Error(`Replay target ${index + 1} is outside the fixture.`);
+          const keys = Object.keys(step);
+          if (keys.some((key) => !["actionId", "targetId"].includes(key))) {
+            throw new Error(`Replay action ${index + 1} contains an unsupported field.`);
+          }
+        });
+        const clean = {
+          schema: value.schema,
+          scenarioId: scenario.id,
+          seed: normalizeSeed(value.seed),
+          actions: value.actions.map(({ actionId, targetId }) => ({ actionId, targetId })),
+          expectedDigest: typeof value.expectedDigest === "string" ? value.expectedDigest : ""
+        };
+        let preflightState = createScenario(clean.scenarioId, clean.seed);
+        clean.actions.forEach((step, index) => {
+          const reason = invalidReason(preflightState, step.actionId, step.targetId);
+          if (reason) throw new Error(`Replay action ${index + 1} is invalid: ${reason}`);
+          preflightState = applyAction(preflightState, step.actionId, step.targetId);
+        });
+        return clean;
+      }
+
+      function replay(value) {
+        const replayData = validateReplay(value);
+        let state = createScenario(replayData.scenarioId, replayData.seed);
+        replayData.actions.forEach((step) => {
+          state = applyAction(state, step.actionId, step.targetId);
+        });
+        return state;
+      }
+
+      function createReplayTimerRunner(options) {
+        const {
+          schedule,
+          cancelScheduled,
+          execute,
+          restore,
+          complete,
+          fail,
+          delay = (index) => index
+        } = options;
+        let timers = [];
+        let active = false;
+
+        function clearScheduled() {
+          const scheduled = timers;
+          timers = [];
+          scheduled.forEach((timer) => cancelScheduled(timer));
+        }
+
+        function abort(error) {
+          clearScheduled();
+          active = false;
+          try {
+            restore();
+          } finally {
+            fail(error);
+          }
+        }
+
+        function finish() {
+          clearScheduled();
+          active = false;
+          try {
+            restore();
+            complete();
+          } catch (error) {
+            fail(error);
+          }
+        }
+
+        function cancel() {
+          clearScheduled();
+          active = false;
+          restore();
+        }
+
+        function start(steps) {
+          if (!Array.isArray(steps)) throw new Error("Replay timer steps must be an array.");
+          if (active) cancel();
+          else clearScheduled();
+          active = true;
+          if (!steps.length) {
+            finish();
+            return;
+          }
+          try {
+            steps.forEach((step, index) => {
+              const timer = schedule(() => {
+                if (!active) return;
+                try {
+                  execute(step, index);
+                } catch (error) {
+                  abort(error);
+                  return;
+                }
+                if (index === steps.length - 1) finish();
+              }, delay(index));
+              timers.push(timer);
+            });
+          } catch (error) {
+            abort(error);
+          }
+        }
+
+        return Object.freeze({
+          start,
+          cancel,
+          isActive: () => active,
+          pendingCount: () => timers.length
+        });
+      }
+
+      function makeEventLog(state) {
+        return {
+          schema: "ghost-ops/event-log/v1",
+          generatedFrom: "safe deterministic fixture",
+          fixtureOnly: true,
+          networkCalls: 0,
+          scenario: {
+            id: state.scenarioId,
+            title: state.scenarioTitle,
+            seed: state.seed
+          },
+          result: {
+            score: state.score,
+            grade: outcome(state).grade,
+            digest: digest(state),
+            tick: state.tick,
+            spreadEvents: state.spreadEvents,
+            evidence: state.evidence,
+            serviceImpact: state.serviceImpact
+          },
+          replay: serializeReplay(state),
+          events: clone(state.events)
+        };
+      }
+
+      function makePlaybook(state) {
+        const scenario = scenarioById(state.scenarioId);
+        const result = outcome(state);
+        const replayData = serializeReplay(state);
+        const controls = state.machines.map((machine) => {
+          const active = [
+            machine.isolated ? "isolated" : "",
+            machine.egressBlocked ? "egress blocked" : "",
+            machine.snapshot ? "snapshot preserved" : ""
+          ].filter(Boolean);
+          return `- [ ] **${machine.name}** (\`${machine.id}\`) — ${condition(machine)}, ${machine.compromise}% residue${active.length ? `; ${active.join(", ")}` : ""}`;
+        }).join("\n");
+        const timeline = state.actionHistory.map((entry) =>
+          `- **T+${String(entry.tick * 5).padStart(2, "0")}m** — ${entry.actionLabel} on **${entry.targetName}** · score ${entry.scoreBefore} → ${entry.scoreAfter} (${entry.scoreDelta >= 0 ? "+" : ""}${entry.scoreDelta})\n  - ${entry.note}`
+        ).join("\n");
+        const debates = state.feed
+          .filter((post) => post.actorType === "agent" && post.meta.disagreesWith)
+          .slice(0, 3)
+          .map((post) => `- **${post.actorName}** disagreed with **${post.meta.disagreesWith}**: ${post.message}`)
+          .join("\n");
+
+        return `---
+title: "Ghost Ops Recovery — ${scenario.title}"
+aliases:
+  - "${scenario.title} recovery drill"
+tags:
+  - ghost-ops
+  - incident-recovery
+  - deterministic-drill
+scenario: "${scenario.id}"
+seed: ${state.seed}
+containment_score: ${state.score}
+event_digest: "${digest(state)}"
+fixture_only: true
+network_calls: 0
+---
+
+# Ghost Ops Recovery — ${scenario.title}
+
+> [!abstract] Deterministic drill
+> ${scenario.objective} This playbook was generated from safe fixture telemetry only. Replay seed: \`${state.seed}\`.
+
+> [!${result.tone}] Outcome · ${result.grade}
+> Final containment score **${state.score}/100** after ${state.tick} decisions. ${state.spreadEvents} simulated lateral spread event(s); ${state.evidence}% evidence fidelity retained.
+
+## Recovery checklist
+
+${controls}
+- [ ] Verify service-level indicators after controls are removed.
+- [ ] Preserve \`ghost-ops-${digest(state)}.json\` beside this note.
+- [ ] Rehearse the same seed after changing the response policy.
+
+## Decision timeline
+
+${timeline || "- No operator actions recorded."}
+
+## Productive disagreement
+
+${debates || "- No responder debate was recorded."}
+
+## What to institutionalize
+
+- **Trigger:** ${scenario.subtitle}
+- **First reversible control:** ${state.actionHistory[0] ? `${state.actionHistory[0].actionLabel} on ${state.actionHistory[0].targetName}` : "Not exercised"}
+- **Evidence before destruction:** ${state.evidence >= 28 ? "Yes — at least one fixture snapshot was preserved." : "No — add snapshot capture to the next rehearsal."}
+- **Residual risk:** ${uncontrolledCount(state)} uncontrolled node(s), ${state.serviceImpact}% service impact.
+
+## Deterministic replay
+
+\`\`\`json
+${JSON.stringify(replayData, null, 2)}
+\`\`\`
+
+## Linked notes
+
+- [[Incident rehearsals]]
+- [[Recovery playbooks]]
+- [[${scenario.title}]]
+
+---
+Generated by Ghost Ops ${VERSION} · event digest \`${digest(state)}\` · no network calls
+`;
+      }
+
+      const api = Object.freeze({
+        version: VERSION,
+        maxTicks: MAX_TICKS,
+        scenarios: clone(SCENARIOS),
+        actions: clone(ACTIONS),
+        createScenario,
+        applyAction,
+        invalidReason,
+        recommendations,
+        uncontrolledCount,
+        calculateScore,
+        outcome,
+        digest,
+        serializeReplay,
+        validateReplay,
+        replay,
+        createReplayTimerRunner,
+        makeEventLog,
+        makePlaybook,
+        stableSnapshot
+      });
+      globalThis.GhostOpsEngine = api;
+    })();
+  </script>
+
+  <script id="ghost-app">
+    (() => {
+      "use strict";
+      const Engine = globalThis.GhostOpsEngine;
+      const byId = (id) => document.getElementById(id);
+      const app = {
+        selectedScenarioId: Engine.scenarios[0].id,
+        selectedTargetId: Engine.scenarios[0].machines[0].id,
+        state: null,
+        feedFilter: "all",
+        replaying: false,
+        replayRunner: null,
+        activeReplay: null
+      };
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function showToast(message) {
+        const toast = byId("toast");
+        toast.textContent = message;
+        toast.hidden = false;
+        window.clearTimeout(showToast.timer);
+        showToast.timer = window.setTimeout(() => { toast.hidden = true; }, 2800);
+      }
+
+      function scenario() {
+        return Engine.scenarios.find((candidate) => candidate.id === app.selectedScenarioId);
+      }
+
+      function renderScenarioGrid() {
+        byId("scenario-grid").innerHTML = Engine.scenarios.map((item, index) => `
+          <button class="scenario-card ${item.id === app.selectedScenarioId ? "selected" : ""}" type="button"
+            data-scenario="${escapeHtml(item.id)}" aria-pressed="${item.id === app.selectedScenarioId}">
+            <span class="scenario-index">SCENARIO ${String(index + 1).padStart(2, "0")}</span>
+            <span class="check" aria-hidden="true">${item.id === app.selectedScenarioId ? "✓" : "·"}</span>
+            <h3>${escapeHtml(item.title)}</h3>
+            <p>${escapeHtml(item.subtitle)}</p>
+            <span class="scenario-meta">
+              <span class="chip">${escapeHtml(item.difficulty)}</span>
+              <span class="chip">${escapeHtml(item.vector)} vector</span>
+              <span class="chip">3 voices</span>
+            </span>
+          </button>
+        `).join("");
+        document.querySelectorAll("[data-scenario]").forEach((button) => {
+          button.addEventListener("click", () => {
+            app.selectedScenarioId = button.dataset.scenario;
+            app.selectedTargetId = scenario().machines[0].id;
+            renderScenarioGrid();
+          });
+        });
+      }
+
+      function showScreen(name) {
+        ["landing", "simulator", "finale"].forEach((id) => {
+          byId(id).hidden = id !== name;
+        });
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
+      function launch() {
+        const seed = byId("seed-input").value;
+        app.state = Engine.createScenario(app.selectedScenarioId, seed);
+        app.selectedTargetId = app.state.machines[0].id;
+        app.feedFilter = "all";
+        showScreen("simulator");
+        renderSimulator();
+        showToast("Fixture incident launched. Choose one bounded action.");
+      }
+
+      function conditionLabel(machine) {
+        if (machine.isolated) return "isolated";
+        if (machine.compromise >= 70) return "critical";
+        if (machine.compromise >= 40) return "degraded";
+        if (machine.compromise >= 18) return "suspect";
+        return "stable";
+      }
+
+      function renderMission() {
+        const state = app.state;
+        byId("mission-name").textContent = state.scenarioTitle;
+        byId("mission-seed").textContent = state.seed;
+        byId("mission-time").textContent = `T+${String(state.tick * 5).padStart(2, "0")}m`;
+        byId("mission-status").textContent = app.replaying ? "DETERMINISTIC REPLAY" : "LIVE FIXTURE";
+        byId("tick-rail").innerHTML = Array.from({ length: state.maxTicks }, (_, index) =>
+          `<span class="tick ${index < state.tick ? "past" : ""}" title="Tick ${index + 1}"></span>`
+        ).join("");
+      }
+
+      function renderMetrics() {
+        const state = app.state;
+        byId("score-value").textContent = state.score;
+        const delta = byId("score-delta");
+        delta.textContent = state.tick ? `${state.lastDelta >= 0 ? "+" : ""}${state.lastDelta}` : "baseline";
+        delta.className = `delta ${state.lastDelta >= 0 ? "positive" : "negative"}`;
+        byId("uncontrolled-value").textContent = Engine.uncontrolledCount(state);
+        byId("evidence-value").textContent = state.evidence;
+        byId("impact-value").textContent = state.serviceImpact;
+        byId("moves-left").textContent = `${state.maxTicks - state.tick} move${state.maxTicks - state.tick === 1 ? "" : "s"}`;
+      }
+
+      function renderMachines() {
+        const state = app.state;
+        if (!state.machines.some((machine) => machine.id === app.selectedTargetId)) {
+          app.selectedTargetId = state.machines[0].id;
+        }
+        byId("machine-grid").innerHTML = state.machines.map((machine) => {
+          const flags = [
+            machine.isolated ? "isolated" : "",
+            machine.egressBlocked ? "egress blocked" : "",
+            machine.snapshot ? "snapshot saved" : ""
+          ].filter(Boolean);
+          return `
+            <button class="machine-card ${machine.id === app.selectedTargetId ? "selected" : ""}" type="button"
+              data-machine="${escapeHtml(machine.id)}" aria-pressed="${machine.id === app.selectedTargetId}">
+              <span class="machine-top">
+                <span class="machine-avatar">${escapeHtml(machine.name.slice(0, 2).toUpperCase())}</span>
+                <span class="machine-state">${escapeHtml(conditionLabel(machine))}</span>
+              </span>
+              <h4>${escapeHtml(machine.name)} <span class="handle">${escapeHtml(machine.handle)}</span></h4>
+              <span class="handle">${escapeHtml(machine.role)}</span>
+              <span class="meter" aria-label="${machine.compromise}% compromise"><span style="--value:${machine.compromise}%"></span></span>
+              <span class="machine-stats"><span>${machine.health}% health</span><span>${machine.latency}ms</span></span>
+              <span class="control-flags">${flags.length ? flags.map((flag) => `<span class="control-flag">${escapeHtml(flag)}</span>`).join("") : `<span class="control-flag">no controls</span>`}</span>
+            </button>
+          `;
+        }).join("");
+        byId("fleet-summary").textContent = `${state.machines.filter((machine) => machine.health > 20).length} responsive`;
+        document.querySelectorAll("[data-machine]").forEach((button) => {
+          button.addEventListener("click", () => {
+            app.selectedTargetId = button.dataset.machine;
+            renderMachines();
+            renderCommands();
+          });
+        });
+      }
+
+      function formatPostTime(post) {
+        return `T+${String(post.tick * 5).padStart(2, "0")}m`;
+      }
+
+      function renderFeed() {
+        const state = app.state;
+        const visible = state.feed.filter((post) => app.feedFilter === "all" || post.actorType === app.feedFilter);
+        byId("feed").innerHTML = visible.length ? visible.slice().reverse().map((post) => `
+          <article class="post ${escapeHtml(post.actorType)}">
+            <div class="avatar">${escapeHtml(post.initials)}</div>
+            <div>
+              <div class="post-head">
+                <strong>${escapeHtml(post.actorName)}</strong>
+                <span class="post-role">${escapeHtml(post.actorRole)}</span>
+                <span class="post-time">${formatPostTime(post)}</span>
+              </div>
+              <div class="post-body">${escapeHtml(post.message)}</div>
+              ${post.meta.disagreesWith ? `<div class="debate-line">↯ disagrees with ${escapeHtml(post.meta.disagreesWith)} · ${escapeHtml(post.meta.confidence)}% confidence</div>` : ""}
+            </div>
+          </article>
+        `).join("") : `<div class="feed-empty">No posts in this filter yet.</div>`;
+        document.querySelectorAll("[data-feed-filter]").forEach((button) => {
+          const active = button.dataset.feedFilter === app.feedFilter;
+          button.classList.toggle("active", active);
+          button.setAttribute("aria-selected", String(active));
+        });
+      }
+
+      function renderCouncil() {
+        const items = Engine.recommendations(app.state);
+        byId("council-list").innerHTML = items.length ? items.map((item) => {
+          const action = Engine.actions.find((candidate) => candidate.id === item.actionId);
+          const target = app.state.machines.find((machine) => machine.id === item.targetId);
+          return `
+            <article class="council-card">
+              <div class="council-head"><strong>${escapeHtml(item.name)} · ${escapeHtml(item.role)}</strong><span class="confidence">${item.confidence}%</span></div>
+              <div class="recommendation">${escapeHtml(action.label)} → ${escapeHtml(target.name)}</div>
+              <p>${escapeHtml(item.rationale)}</p>
+              <div class="disagreement">Disagrees with ${escapeHtml(item.disagreesWith)}: ${escapeHtml(item.disagreement)}</div>
+            </article>
+          `;
+        }).join("") : `<div class="feed-empty">No legal recommendations remain.</div>`;
+      }
+
+      function renderCommands() {
+        const state = app.state;
+        byId("target-row").innerHTML = state.machines.map((machine) => `
+          <button class="target-button ${machine.id === app.selectedTargetId ? "active" : ""}" type="button"
+            data-target="${escapeHtml(machine.id)}">${escapeHtml(machine.name)}</button>
+        `).join("");
+        byId("action-grid").innerHTML = Engine.actions.map((action) => {
+          const reason = Engine.invalidReason(state, action.id, app.selectedTargetId);
+          const disabled = Boolean(reason) || app.replaying;
+          return `
+            <button class="action-card" type="button" data-action="${escapeHtml(action.id)}"
+              ${disabled ? "disabled" : ""} title="${escapeHtml(reason || action.tradeoff)}">
+              <span class="action-top"><span class="action-key">${escapeHtml(action.key)}</span><span class="action-count">${state.inventory[action.id]} left</span></span>
+              <strong>${escapeHtml(action.label)}</strong>
+              <small>${escapeHtml(reason || action.tradeoff)}</small>
+            </button>
+          `;
+        }).join("");
+        document.querySelectorAll("[data-target]").forEach((button) => {
+          button.addEventListener("click", () => {
+            app.selectedTargetId = button.dataset.target;
+            renderMachines();
+            renderCommands();
+          });
+        });
+        document.querySelectorAll("[data-action]").forEach((button) => {
+          button.addEventListener("click", () => takeAction(button.dataset.action));
+        });
+      }
+
+      function renderSimulator() {
+        renderMission();
+        renderMetrics();
+        renderMachines();
+        renderFeed();
+        renderCouncil();
+        renderCommands();
+      }
+
+      function takeAction(actionId) {
+        try {
+          app.state = Engine.applyAction(app.state, actionId, app.selectedTargetId);
+          if (app.state.status === "resolved") {
+            renderFinale();
+            showScreen("finale");
+          } else {
+            renderSimulator();
+            const delta = app.state.lastDelta;
+            showToast(`Clock advanced. Containment ${delta >= 0 ? "improved" : "fell"} ${Math.abs(delta)} point${Math.abs(delta) === 1 ? "" : "s"}.`);
+          }
+        } catch (error) {
+          showToast(error.message);
+        }
+      }
+
+      function download(name, body, type) {
+        const blob = new Blob([body], { type });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = name;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      async function copyText(text) {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          const textarea = document.createElement("textarea");
+          textarea.value = text;
+          textarea.setAttribute("readonly", "");
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          textarea.remove();
+        }
+      }
+
+      function renderFinale() {
+        const state = app.state;
+        const result = Engine.outcome(state);
+        const playbook = Engine.makePlaybook(state);
+        byId("final-headline").textContent = result.headline;
+        byId("final-summary").textContent = `${state.scenarioTitle} ended after ${state.tick} operator decisions. Your action chain is now a portable recovery artifact—not a memory trapped in chat.`;
+        byId("final-score").textContent = state.score;
+        byId("final-grade").textContent = result.grade;
+        byId("event-digest").textContent = Engine.digest(state);
+        byId("playbook-preview").textContent = playbook;
+        byId("final-stats").innerHTML = `
+          <div class="final-stat"><span>Evidence</span><strong>${state.evidence}%</strong></div>
+          <div class="final-stat"><span>Spread events</span><strong>${state.spreadEvents}</strong></div>
+          <div class="final-stat"><span>Service impact</span><strong>${state.serviceImpact}%</strong></div>
+          <div class="final-stat"><span>Replay seed</span><strong class="mono">${state.seed}</strong></div>
+        `;
+      }
+
+      function goldActions(scenarioId) {
+        if (scenarioId === "midnight-canary") {
+          return [
+            { actionId: "block-egress", targetId: "edge-03" },
+            { actionId: "capture-snapshot", targetId: "edge-03" },
+            { actionId: "rollback-release", targetId: "edge-03" },
+            { actionId: "isolate", targetId: "auth-01" },
+            { actionId: "block-egress", targetId: "cache-07" },
+            { actionId: "capture-snapshot", targetId: "auth-01" },
+            { actionId: "restart-service", targetId: "edge-03" }
+          ];
+        }
+        return [
+          { actionId: "block-egress", targetId: "api-12" },
+          { actionId: "capture-snapshot", targetId: "api-12" },
+          { actionId: "rotate-credential", targetId: "api-12" },
+          { actionId: "isolate", targetId: "queue-02" },
+          { actionId: "block-egress", targetId: "worker-09" },
+          { actionId: "capture-snapshot", targetId: "queue-02" },
+          { actionId: "restart-service", targetId: "api-12" }
+        ];
+      }
+
+      function replayRunner() {
+        if (app.replayRunner) return app.replayRunner;
+        app.replayRunner = Engine.createReplayTimerRunner({
+          schedule: (callback, delay) => window.setTimeout(callback, delay),
+          cancelScheduled: (timer) => window.clearTimeout(timer),
+          execute: (step) => {
+            app.selectedTargetId = step.targetId;
+            app.state = Engine.applyAction(app.state, step.actionId, step.targetId);
+            renderSimulator();
+          },
+          restore: () => {
+            app.replaying = false;
+            if (app.state && !byId("simulator").hidden) renderSimulator();
+          },
+          complete: () => {
+            const replayData = app.activeReplay;
+            const actualDigest = Engine.digest(app.state);
+            if (replayData.expectedDigest && replayData.expectedDigest !== actualDigest) {
+              showToast(`Replay divergence: expected ${replayData.expectedDigest}, got ${actualDigest}.`);
+            } else if (!replayData.actions.length) {
+              showToast("Empty replay loaded. The fixture is ready for a new decision.");
+            } else {
+              showToast(`Replay verified · ${actualDigest}`);
+            }
+            app.activeReplay = null;
+            if (app.state.status === "resolved") {
+              renderFinale();
+              showScreen("finale");
+            }
+          },
+          fail: (error) => {
+            app.activeReplay = null;
+            showToast(`Replay stopped: ${error.message}`);
+          },
+          delay: (index) => 500 + index * 650
+        });
+        return app.replayRunner;
+      }
+
+      function cancelReplay() {
+        if (app.replayRunner) app.replayRunner.cancel();
+        else {
+          app.replaying = false;
+          if (app.state && !byId("simulator").hidden) renderSimulator();
+        }
+        app.activeReplay = null;
+      }
+
+      function animateReplay(replayData) {
+        cancelReplay();
+        let clean;
+        try {
+          clean = Engine.validateReplay(replayData);
+        } catch (error) {
+          showToast(`Replay rejected: ${error.message}`);
+          return false;
+        }
+        app.replaying = true;
+        app.activeReplay = clean;
+        app.selectedScenarioId = clean.scenarioId;
+        app.state = Engine.createScenario(clean.scenarioId, clean.seed);
+        app.selectedTargetId = app.state.machines[0].id;
+        showScreen("simulator");
+        renderSimulator();
+        replayRunner().start(clean.actions);
+        return true;
+      }
+
+      function openReplay() {
+        byId("replay-dialog").showModal();
+        byId("replay-input").focus();
+      }
+
+      function closeReplay() {
+        byId("replay-dialog").close();
+      }
+
+      function initExperimentBadge() {
+        let containTotal = 0;
+        let restoreTotal = 0;
+        const scenarioId = "midnight-canary";
+        for (let seed = 1; seed <= 100; seed += 1) {
+          let contain = Engine.createScenario(scenarioId, seed);
+          const containPlan = goldActions(scenarioId);
+          containPlan.forEach((step) => { contain = Engine.applyAction(contain, step.actionId, step.targetId); });
+          containTotal += contain.score;
+
+          let restore = Engine.createScenario(scenarioId, seed);
+          const restorePlan = [
+            { actionId: "restart-service", targetId: "edge-03" },
+            { actionId: "rollback-release", targetId: "auth-01" },
+            { actionId: "capture-snapshot", targetId: "cache-07" },
+            { actionId: "rotate-credential", targetId: "auth-01" },
+            { actionId: "capture-snapshot", targetId: "auth-01" },
+            { actionId: "isolate", targetId: "cache-07" },
+            { actionId: "block-egress", targetId: "auth-01" }
+          ];
+          restorePlan.forEach((step) => { restore = Engine.applyAction(restore, step.actionId, step.targetId); });
+          restoreTotal += restore.score;
+        }
+        const delta = Math.round((containTotal - restoreTotal) / 100);
+        byId("experiment-delta").textContent = `${delta >= 0 ? "+" : ""}${delta}`;
+        byId("experiment-copy").firstChild.textContent = `Average score points across a deterministic 100-seed fixture cohort. `;
+      }
+
+      byId("launch-button").addEventListener("click", launch);
+      byId("sample-replay").addEventListener("click", () => {
+        animateReplay({
+          schema: "ghost-ops/replay/v1",
+          scenarioId: app.selectedScenarioId,
+          seed: Number(byId("seed-input").value),
+          actions: goldActions(app.selectedScenarioId)
+        });
+      });
+      byId("header-replay").addEventListener("click", openReplay);
+      byId("close-replay").addEventListener("click", closeReplay);
+      byId("cancel-replay").addEventListener("click", closeReplay);
+      byId("run-replay").addEventListener("click", () => {
+        try {
+          const rawReplay = byId("replay-input").value;
+          if (rawReplay.length > 65536) throw new Error("Replay exceeds the 64 KiB local safety limit.");
+          const replayData = JSON.parse(rawReplay);
+          closeReplay();
+          animateReplay(replayData);
+        } catch (error) {
+          cancelReplay();
+          showToast(`Replay rejected: ${error.message}`);
+        }
+      });
+      byId("replay-dialog").addEventListener("click", (event) => {
+        if (event.target === byId("replay-dialog")) closeReplay();
+      });
+      byId("theme-toggle").addEventListener("click", () => {
+        const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        document.documentElement.dataset.theme = next;
+        showToast(`${next[0].toUpperCase()}${next.slice(1)} theme enabled.`);
+      });
+      document.querySelectorAll("[data-feed-filter]").forEach((button) => {
+        button.addEventListener("click", () => {
+          app.feedFilter = button.dataset.feedFilter;
+          renderFeed();
+        });
+      });
+      byId("download-playbook").addEventListener("click", () => {
+        download(`ghost-ops-${app.state.scenarioId}-${Engine.digest(app.state)}.md`, Engine.makePlaybook(app.state), "text/markdown");
+      });
+      byId("download-log").addEventListener("click", () => {
+        download(`ghost-ops-${app.state.scenarioId}-${Engine.digest(app.state)}.json`, JSON.stringify(Engine.makeEventLog(app.state), null, 2), "application/json");
+      });
+      byId("download-replay").addEventListener("click", () => {
+        download(`ghost-ops-replay-${Engine.digest(app.state)}.json`, JSON.stringify(Engine.serializeReplay(app.state), null, 2), "application/json");
+      });
+      byId("copy-playbook").addEventListener("click", async () => {
+        await copyText(Engine.makePlaybook(app.state));
+        showToast("Playbook copied.");
+      });
+      byId("restart-button").addEventListener("click", () => {
+        cancelReplay();
+        app.state = null;
+        renderScenarioGrid();
+        showScreen("landing");
+      });
+
+      renderScenarioGrid();
+      initExperimentBadge();
+    })();
+  </script>
+</body>
+</html>
