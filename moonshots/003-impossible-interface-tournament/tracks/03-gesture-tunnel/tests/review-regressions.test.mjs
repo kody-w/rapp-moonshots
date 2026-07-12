@@ -125,7 +125,7 @@ test("media release stops every track and always detaches the video element", ()
     appSource.indexOf("function handleSensorLoss"),
     appSource.indexOf("async function startSensors"),
   );
-  assert.match(lossHandler, /stopMedia\(\)/);
+  assert.match(lossHandler, /stopMedia\(\{ preserveVoiceRecovery \}\)/);
   const sensorCatch = appSource.slice(
     appSource.indexOf("} catch (error) {", appSource.indexOf("async function startSensors")),
     appSource.indexOf("async function recoverSensors"),

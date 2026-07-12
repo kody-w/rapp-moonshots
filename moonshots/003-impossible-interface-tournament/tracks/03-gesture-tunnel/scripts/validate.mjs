@@ -5,14 +5,19 @@ import { fileURLToPath } from "node:url";
 
 import {
   DETERMINISTIC_ACTIONS,
+  MediaFrameGate,
   OPTION_COUNT,
   TASK_LAYERS,
   TunnelEngine,
   allowsMediaCapture,
   completionAnnouncement,
   evidencePresentation,
+  isCameraFrameStale,
+  isTerminalSpeechRecognitionError,
   matchVoiceOption,
   normalizeSpeechConfidence,
+  preservesVoiceRecoveryOnSensorLoss,
+  recognitionBackoffMs,
   runDeterministicSimulation,
   shouldRestartRecognition,
   shouldHandleTunnelShortcut,
@@ -166,6 +171,24 @@ gate("second review invariants", () => {
   );
   assert.match(app, /if \(sensorsReady\) announce\("Gesture Tunnel ready\. Say route\."\)/);
   assert.match(app, /recognitionRecoveryRequired && !explicit/);
+});
+
+gate("live sensor invariants", () => {
+  const frameGate = new MediaFrameGate();
+  assert.equal(frameGate.accept({ presentedFrames: 1, mediaTime: 0 }), true);
+  assert.equal(frameGate.accept({ presentedFrames: 1, mediaTime: 0 }), false);
+  assert.equal(frameGate.accept({ presentedFrames: 2, mediaTime: 1 / 30 }), true);
+  assert.equal(isCameraFrameStale(100, 2601), true);
+  assert.equal(preservesVoiceRecoveryOnSensorLoss("camera"), true);
+  assert.equal(preservesVoiceRecoveryOnSensorLoss("microphone"), false);
+  assert.equal(isTerminalSpeechRecognitionError("service-not-allowed"), true);
+  assert.equal(isTerminalSpeechRecognitionError("language-not-supported"), true);
+  assert.equal(isTerminalSpeechRecognitionError("network"), false);
+  assert.equal(recognitionBackoffMs(20), 4000);
+  assert.match(app, /requestVideoFrameCallback/);
+  assert.match(app, /if \(!fresh\) return/);
+  assert.match(app, /recognitionRecoveryOnly/);
+  assert.match(app, /const delay = recognitionBackoffMs\(recognitionTransientFailures\)/);
 });
 
 gate("evidence and rollback docs", () => {

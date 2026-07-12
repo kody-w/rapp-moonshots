@@ -1,5 +1,6 @@
 import {
   DETERMINISTIC_ACTIONS,
+  MediaFrameGate,
   TASK_LAYERS,
   TunnelEngine,
   allowsMediaCapture,
@@ -8,8 +9,12 @@ import {
   coarseSector,
   completionAnnouncement,
   evidencePresentation,
+  isCameraFrameStale,
+  isTerminalSpeechRecognitionError,
   motionCentroid,
   normalizeSpeech,
+  preservesVoiceRecoveryOnSensorLoss,
+  recognitionBackoffMs,
   releaseMediaResources,
   shouldRestartRecognition,
   shouldHandleTunnelShortcut,
@@ -59,6 +64,10 @@ let recognition = null;
 let recognitionActive = false;
 let recognitionRestartAllowed = false;
 let recognitionRecoveryRequired = false;
+let recognitionRecoveryOnly = false;
+let recognitionTerminalFailure = false;
+let recognitionTransientFailures = 0;
+let recognitionRestartTimer = 0;
 let speechPaused = false;
 let launched = false;
 let tearingDown = false;
@@ -69,6 +78,11 @@ const evidenceUrls = [];
 
 const elapsed = () => Math.round(performance.now() - launchEpoch);
 const wait = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+
+function clearRecognitionRestartTimer() {
+  if (recognitionRestartTimer) window.clearTimeout(recognitionRestartTimer);
+  recognitionRestartTimer = 0;
+}
 
 function configureGateway() {
   if (simulationMode) {
@@ -226,7 +240,9 @@ function render() {
         ? "State held · say “recover,” then “resume”"
         : userStopped
           ? "Say “resume” to clear the user stop"
-          : "State held · say “recover” or press R";
+          : recognitionRecoveryOnly
+            ? "Voice recovery only · say “recover” or press R"
+            : "Voice unavailable · press R to recover";
   } else {
     elements.orbDepth.textContent = `Depth ${snapshot.depth} / ${TASK_LAYERS.length}`;
     elements.orbTitle.textContent = snapshot.preview
@@ -261,7 +277,10 @@ class LocalMotionTracker {
     this.callbacks = callbacks;
     this.previous = null;
     this.running = false;
-    this.animationFrame = 0;
+    this.frameRequest = 0;
+    this.usesVideoFrameCallback =
+      typeof this.video.requestVideoFrameCallback === "function";
+    this.frameGate = new MediaFrameGate();
     this.neutralSince = performance.now();
     this.neutralReady = false;
     this.gestureWindow = null;
@@ -282,37 +301,86 @@ class LocalMotionTracker {
 
   start() {
     this.running = true;
-    this.loop();
+    this.scheduleFrame();
   }
 
   stop() {
     this.running = false;
-    window.cancelAnimationFrame(this.animationFrame);
+    if (
+      this.usesVideoFrameCallback &&
+      typeof this.video.cancelVideoFrameCallback === "function"
+    ) {
+      this.video.cancelVideoFrameCallback(this.frameRequest);
+    } else {
+      window.cancelAnimationFrame(this.frameRequest);
+    }
   }
 
-  loop = () => {
+  scheduleFrame() {
     if (!this.running) return;
-    const now = performance.now();
-    if (this.video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-      this.context.save();
-      this.context.translate(frameWidth, 0);
-      this.context.scale(-1, 1);
-      this.context.drawImage(this.video, 0, 0, frameWidth, frameHeight);
-      this.context.restore();
-      const rgba = this.context.getImageData(0, 0, frameWidth, frameHeight).data;
-      const grayscale = new Uint8Array(frameWidth * frameHeight);
-      for (let pixel = 0, offset = 0; pixel < grayscale.length; pixel += 1, offset += 4) {
-        grayscale[pixel] = Math.round(
-          rgba[offset] * 0.299 + rgba[offset + 1] * 0.587 + rgba[offset + 2] * 0.114,
-        );
-      }
-      if (this.previous) this.consumeFrame(motionCentroid(this.previous, grayscale, frameWidth, frameHeight), now);
-      this.previous = grayscale;
-      this.lastFrameAt = now;
-      if (this.faceDetector && now - this.lastFaceAt > 620) this.detectFace(now);
+    this.frameRequest = this.usesVideoFrameCallback
+      ? this.video.requestVideoFrameCallback(this.onVideoFrame)
+      : window.requestAnimationFrame(this.onAnimationFrame);
+  }
+
+  onVideoFrame = (now, metadata) => {
+    if (!this.running) return;
+    try {
+      this.processFrame(now, metadata);
+    } finally {
+      this.scheduleFrame();
     }
-    this.animationFrame = window.requestAnimationFrame(this.loop);
   };
+
+  onAnimationFrame = (now) => {
+    if (!this.running) return;
+    try {
+      const playbackQuality = this.video.getVideoPlaybackQuality?.();
+      const presentedFrames = Number.isFinite(playbackQuality?.totalVideoFrames)
+        ? playbackQuality.totalVideoFrames
+        : this.video.webkitDecodedFrameCount;
+      this.processFrame(now, {
+        presentedFrames,
+        mediaTime: this.video.currentTime,
+      });
+    } finally {
+      this.scheduleFrame();
+    }
+  };
+
+  processFrame(now, metadata = {}) {
+    if (!this.running) return;
+    if (this.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+    const fresh = this.frameGate.accept({
+      presentedFrames: metadata.presentedFrames,
+      mediaTime: Number.isFinite(metadata.mediaTime)
+        ? metadata.mediaTime
+        : this.video.currentTime,
+    });
+    if (!fresh) return;
+
+    this.context.save();
+    this.context.translate(frameWidth, 0);
+    this.context.scale(-1, 1);
+    this.context.drawImage(this.video, 0, 0, frameWidth, frameHeight);
+    this.context.restore();
+    const rgba = this.context.getImageData(0, 0, frameWidth, frameHeight).data;
+    const grayscale = new Uint8Array(frameWidth * frameHeight);
+    for (let pixel = 0, offset = 0; pixel < grayscale.length; pixel += 1, offset += 4) {
+      grayscale[pixel] = Math.round(
+        rgba[offset] * 0.299 + rgba[offset + 1] * 0.587 + rgba[offset + 2] * 0.114,
+      );
+    }
+    if (this.previous) {
+      this.consumeFrame(
+        motionCentroid(this.previous, grayscale, frameWidth, frameHeight),
+        now,
+      );
+    }
+    this.previous = grayscale;
+    this.lastFrameAt = now;
+    if (this.faceDetector && now - this.lastFaceAt > 620) this.detectFace(now);
+  }
 
   consumeFrame(motion, now) {
     const neutral = motion.activeRatio < 0.012;
@@ -442,9 +510,13 @@ function onCenterRest(source) {
   }
 }
 
-function stopMedia() {
-  recognitionRestartAllowed = false;
+function stopMedia({ preserveVoiceRecovery = false } = {}) {
+  clearRecognitionRestartTimer();
+  const keepRecoveryListener = preserveVoiceRecovery && !recognitionTerminalFailure;
+  recognitionRestartAllowed = keepRecoveryListener;
   recognitionRecoveryRequired = true;
+  recognitionRecoveryOnly = keepRecoveryListener;
+  if (!keepRecoveryListener && recognitionActive) recognition.abort();
   replacingSensors = true;
   const activeStream = stream;
   try {
@@ -467,22 +539,45 @@ function stopMedia() {
   }
 }
 
-function handleSensorLoss(kind) {
+function handleSensorLoss(kind, { terminalSpeechFailure = false, speechError = "" } = {}) {
   if (!engine || replacingSensors) return;
+  if (terminalSpeechFailure) {
+    recognitionTerminalFailure = true;
+    recognitionRestartAllowed = false;
+    recognitionRecoveryOnly = false;
+    clearRecognitionRestartTimer();
+  }
   const cause = `${kind}-lost`;
   const alreadyFrozenForSensor = engine.state.freezeCauses.includes(cause);
   const lostAt = elapsed();
-  stopMedia();
-  if (alreadyFrozenForSensor) return;
-  engine.sensorLost(kind, lostAt);
+  const preserveVoiceRecovery = preservesVoiceRecoveryOnSensorLoss(
+    kind,
+    recognitionTerminalFailure,
+  );
+  stopMedia({ preserveVoiceRecovery });
+  if (!alreadyFrozenForSensor) engine.sensorLost(kind, lostAt);
   setSensor(
     kind === "camera" ? elements.cameraStatus : elements.voiceStatus,
     `${kind} · lost`,
     "bad",
   );
+  if (preserveVoiceRecovery) {
+    setSensor(elements.voiceStatus, "voice · recovery only", "warn");
+  } else {
+    setSensor(elements.voiceStatus, "voice · unavailable", "bad");
+  }
   setSensor(elements.neutralStatus, "neutral · canceled", "bad");
-  setCaption(`${kind} lost; state frozen and every pending preview canceled`);
-  announce(`${kind} lost. State frozen. Say recover, or press R.`);
+  setCaption(
+    terminalSpeechFailure
+      ? `Voice recognition stopped permanently (${speechError}); press R for explicit recovery`
+      : `${kind} lost; state frozen and every pending preview canceled`,
+  );
+  announce(
+    preserveVoiceRecovery
+      ? "Camera lost. State frozen. Say recover, or press R."
+      : "Voice recognition unavailable. State frozen. Press R to recover.",
+  );
+  if (preserveVoiceRecovery) startRecognition();
   render();
 }
 
@@ -557,6 +652,10 @@ async function startSensors({ recovery = false } = {}) {
     }
     recognitionRestartAllowed = true;
     recognitionRecoveryRequired = false;
+    recognitionRecoveryOnly = false;
+    recognitionTerminalFailure = false;
+    recognitionTransientFailures = 0;
+    clearRecognitionRestartTimer();
     startRecognition();
     setCaption(
       tracker.faceDetector
@@ -651,12 +750,17 @@ function startRecognition() {
         return;
       }
       recognitionActive = true;
-      setSensor(elements.voiceStatus, "voice · listening", "ok");
+      setSensor(
+        elements.voiceStatus,
+        recognitionRecoveryOnly ? "voice · recovery only" : "voice · listening",
+        recognitionRecoveryOnly ? "warn" : "ok",
+      );
     };
     recognition.onresult = (event) => {
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const result = event.results[index];
         const alternative = result[0];
+        recognitionTransientFailures = 0;
         if (result.isFinal) {
           handleVoice(alternative.transcript, alternative.confidence);
         } else {
@@ -665,12 +769,22 @@ function startRecognition() {
       }
     };
     recognition.onerror = (event) => {
-      if (event.error === "audio-capture" || event.error === "not-allowed") {
+      if (isTerminalSpeechRecognitionError(event.error)) {
         recognitionRestartAllowed = false;
         recognitionRecoveryRequired = true;
+        recognitionRecoveryOnly = false;
+        recognitionTerminalFailure = true;
         recognitionActive = false;
-        handleSensorLoss("microphone");
+        clearRecognitionRestartTimer();
+        handleSensorLoss("microphone", {
+          terminalSpeechFailure: true,
+          speechError: event.error,
+        });
       } else {
+        const expectedAbort =
+          event.error === "aborted" &&
+          (speechPaused || tearingDown || !recognitionRestartAllowed);
+        if (!expectedAbort) recognitionTransientFailures += 1;
         setSensor(elements.voiceStatus, `voice · ${event.error}`, "warn");
       }
     };
@@ -686,7 +800,12 @@ function startRecognition() {
           tearingDown,
         })
       ) {
-        window.setTimeout(startRecognition, 450);
+        clearRecognitionRestartTimer();
+        const delay = recognitionBackoffMs(recognitionTransientFailures);
+        recognitionRestartTimer = window.setTimeout(() => {
+          recognitionRestartTimer = 0;
+          startRecognition();
+        }, delay);
       }
     };
   }
@@ -700,6 +819,15 @@ function startRecognition() {
 function handleVoice(transcript, confidence) {
   const phrase = normalizeSpeech(transcript);
   if (!phrase) return;
+  if (recognitionRecoveryOnly) {
+    if (/\brecover\b/.test(phrase)) {
+      setCaption("Restricted voice recovery requested", transcript);
+      recoverSensors({ explicit: true });
+    } else {
+      setCaption("Camera is lost; restricted voice listener accepts only “recover”", transcript);
+    }
+    return;
+  }
   if (/\bexport\b/.test(phrase)) {
     if (prepareEvidence()) {
       setCaption("Local metrics and replay exports are ready", transcript);
@@ -947,7 +1075,7 @@ frameWatchdog = window.setInterval(() => {
     launched &&
     tracker?.running &&
     document.visibilityState === "visible" &&
-    performance.now() - tracker.lastFrameAt > 2500
+    isCameraFrameStale(tracker.lastFrameAt, performance.now())
   ) {
     handleSensorLoss("camera");
   }
@@ -960,6 +1088,9 @@ window.addEventListener(
     launched = false;
     recognitionRestartAllowed = false;
     recognitionRecoveryRequired = true;
+    recognitionRecoveryOnly = false;
+    recognitionTerminalFailure = true;
+    clearRecognitionRestartTimer();
     window.clearInterval(frameWatchdog);
     recognition?.abort();
     recognitionActive = false;

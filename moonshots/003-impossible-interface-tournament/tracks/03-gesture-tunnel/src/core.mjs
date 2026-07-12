@@ -163,6 +163,36 @@ export function clamp(value, minimum = 0, maximum = 1) {
   return Math.min(maximum, Math.max(minimum, number));
 }
 
+export class MediaFrameGate {
+  constructor() {
+    this.lastPresentedFrames = null;
+    this.lastMediaTime = null;
+  }
+
+  accept({ presentedFrames, mediaTime } = {}) {
+    if (Number.isFinite(presentedFrames)) {
+      if (this.lastPresentedFrames !== null && presentedFrames <= this.lastPresentedFrames) {
+        return false;
+      }
+      this.lastPresentedFrames = presentedFrames;
+      if (Number.isFinite(mediaTime)) this.lastMediaTime = mediaTime;
+      return true;
+    }
+    if (!Number.isFinite(mediaTime)) return false;
+    if (this.lastMediaTime !== null && mediaTime <= this.lastMediaTime) return false;
+    this.lastMediaTime = mediaTime;
+    return true;
+  }
+}
+
+export function isCameraFrameStale(lastFreshFrameAt, now, thresholdMs = 2500) {
+  return (
+    Number.isFinite(lastFreshFrameAt) &&
+    Number.isFinite(now) &&
+    now - lastFreshFrameAt > thresholdMs
+  );
+}
+
 export function normalizeSpeechConfidence(value, fallback = 0) {
   return Number.isFinite(value) ? clamp(value) : clamp(fallback);
 }
@@ -264,6 +294,32 @@ export function shouldRestartRecognition({
     !simulationMode &&
     !tearingDown
   );
+}
+
+const TERMINAL_SPEECH_ERRORS = new Set([
+  "audio-capture",
+  "bad-grammar",
+  "language-not-supported",
+  "not-allowed",
+  "phrases-not-supported",
+  "service-not-allowed",
+]);
+
+export function isTerminalSpeechRecognitionError(error) {
+  return TERMINAL_SPEECH_ERRORS.has(String(error ?? ""));
+}
+
+export function preservesVoiceRecoveryOnSensorLoss(kind, terminalSpeechFailure = false) {
+  return kind === "camera" && !terminalSpeechFailure;
+}
+
+export function recognitionBackoffMs(
+  failureCount,
+  { baseMs = 250, maximumMs = 4000 } = {},
+) {
+  const safeFailures = Math.max(0, Math.floor(Number(failureCount) || 0));
+  const exponent = Math.min(16, Math.max(0, safeFailures - 1));
+  return Math.min(maximumMs, baseMs * 2 ** exponent);
 }
 
 export function wrapIndex(index, count = OPTION_COUNT) {
@@ -397,10 +453,10 @@ export function classifyMotionGesture(sample = {}) {
   const distance = Math.hypot(dx, dy);
   if (distance < 0.22) return null;
 
-  const durationQuality = 1 - Math.abs(durationMs - 420) / 620;
+  const durationQuality = 1 - Math.abs(durationMs - 420) / 1000;
   const motionQuality = 1 - Math.abs(activeRatio - 0.12) / 0.43;
   const confidence = clamp(
-    ((distance - 0.16) / 0.34) * clamp(durationQuality, 0.35, 1) * clamp(motionQuality, 0.35, 1),
+    ((distance - 0.16) / 0.34) * clamp(durationQuality, 0.72, 1) * clamp(motionQuality, 0.35, 1),
   );
   if (confidence < GESTURE_CONFIDENCE) return null;
 

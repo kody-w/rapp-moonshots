@@ -9,6 +9,7 @@ user who interprets “gaze” more literally than the implementation warrants.
 | Attack or failure | Defense | Residual risk |
 |---|---|---|
 | Background motion resembles a swipe | 480 ms neutral gate, full-frame-motion rejection, confidence threshold, 900 ms cooldown | Fans, screens, or another person can still move the centroid |
+| 60 Hz display repeats a 30 fps frame | Video-frame callback/media-time gate ignores duplicates before motion state or liveness changes | Browser media timestamps must advance correctly |
 | A head-position preview is mistaken for eye tracking | UI and docs say coarse webcam gaze estimate/head-position proxy; no eye or identity claim | “Gaze” can still create an inflated expectation |
 | Preview causes a false commit | Preview and motion-enter cannot call commit; voice “choose” or switch Enter is required | Misrecognized “choose” remains possible, so voice confidence and commit cooldown apply |
 | Camera disappears while a tunnel is armed | Sensor loss freezes depth and clears preview/armed state | Browser track-ended timing varies; a 2.5 s stale-frame watchdog is the backup |
@@ -16,6 +17,8 @@ user who interprets “gaze” more literally than the implementation warrants.
 | Stop and sensor loss overlap | Independent freeze causes require both matching sensor recovery and explicit resume | The user may need two distinct recovery phrases |
 | Recognition reports zero or omits confidence | Zero is preserved and missing/nonfinite values default below threshold | Safety commands remain deliberately available at low confidence |
 | Recognition permission/audio capture fails and `onend` loops | Terminal errors disable restart; only explicit successful recovery re-enables it | Recovery requires the keyboard fallback when voice is unavailable |
+| Camera fails but microphone recognition still works | Listener switches to recovery-only vocabulary and can restart after speech synthesis | Browser speech services can independently fail and then require keyboard recovery |
+| Network/no-speech errors retry too aggressively | Consecutive transient failures back off from 250 ms to a 4 s cap | Vendor services may remain unavailable indefinitely |
 | Recognition hears speech synthesis | Recognition is aborted while synthesis speaks, then restarted | Browser events can race; captions and switch fallback remain authoritative |
 | Browser recognition sends audio remotely | Launch disclosure calls out vendor/cloud processing | The app cannot audit browser internals; `?accessible=1` is the strictly local path |
 | `FaceDetector` is absent | Frame-difference centroid remains available | Coarse preview is less stable and should not be described as gaze tracking |

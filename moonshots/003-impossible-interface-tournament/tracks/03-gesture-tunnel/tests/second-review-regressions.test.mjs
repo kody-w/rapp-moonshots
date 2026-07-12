@@ -79,7 +79,7 @@ test("terminal recognition errors and teardown make restart fail closed", () => 
     appSource.indexOf("recognition.onerror"),
     appSource.indexOf("recognition.onend"),
   );
-  assert.match(recognitionError, /event\.error === "audio-capture" \|\| event\.error === "not-allowed"/);
+  assert.match(recognitionError, /isTerminalSpeechRecognitionError\(event\.error\)/);
   assert.match(recognitionError, /recognitionRestartAllowed = false/);
   assert.match(recognitionError, /recognitionRecoveryRequired = true/);
 
@@ -146,7 +146,8 @@ test("launch announces ready only after successful sensor startup", () => {
     appSource.indexOf("function handleSensorLoss"),
     appSource.indexOf("async function startSensors"),
   );
-  assert.match(failureSource, /announce\(`\$\{kind\} lost\. State frozen/);
+  assert.match(failureSource, /Camera lost\. State frozen\. Say recover/);
+  assert.match(failureSource, /Voice recognition unavailable\. State frozen/);
   const recoverySource = appSource.slice(
     appSource.indexOf("async function recoverSensors"),
     appSource.indexOf("function startRecognition"),

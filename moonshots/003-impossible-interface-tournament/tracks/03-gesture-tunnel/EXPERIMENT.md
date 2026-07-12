@@ -100,6 +100,11 @@ The follow-up experiment also holds these independent invariants:
   until an explicit recovery succeeds;
 - deterministic camera loss stops and restarts both runtime media tracks; and
 - launch speaks “ready” only after sensor startup returns success.
+- 60 Hz display callbacks admit only new 30 fps media frames, preserving a
+  120 ms gesture while duplicate frames cannot mask a 2.5-second camera stall;
+- camera loss retains a recovery-only voice path, while permanent speech
+  errors fail closed; and
+- transient recognition retries follow bounded exponential backoff.
 
 `npm run experiment` performs two identical simulations, compares both with the
 checked-in metrics and replay, and writes `evidence/experiment-summary.json`.

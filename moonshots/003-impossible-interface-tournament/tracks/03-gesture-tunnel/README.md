@@ -31,6 +31,9 @@ camera-motion sweep, dip to open its threshold, then say **“choose.”** Say
 - Camera frames are mirrored, downsampled to 96×72, converted to grayscale, and
   immediately reduced to a frame-difference centroid. No raw frame leaves the
   animation callback.
+- Motion runs only for fresh camera frames via `requestVideoFrameCallback`, with
+  advancing media time as fallback. Duplicate display frames cannot end a
+  gesture or refresh the 2.5-second camera-stall watchdog.
 - The detector recognizes only coarse displacement. It does **not** classify
   hands, identity, emotion, or precise eye direction.
 - When `FaceDetector` exists, the face bounding-box center can provide a coarse
@@ -51,9 +54,11 @@ camera-motion sweep, dip to open its threshold, then say **“choose.”** Say
 Camera loss freezes depth and cancels pending input. Recovery never replays the
 canceled preview. Confidence thresholds, 600 ms camera dwell, 900 ms gesture
 cooldown, 500 ms commit cooldown, and a 480 ms neutral gate reject noisy input.
-Terminal recognition errors and media teardown cannot auto-restart listening;
-the user must explicitly recover. Evidence appears only for a completed route
-and labels exact and mismatched results differently.
+Camera loss preserves a voice listener restricted to “recover.” Terminal
+recognition errors—including permission, audio capture, service, and language
+failures—disable restart until explicit keyboard recovery; transient failures
+use exponential backoff capped at four seconds. Evidence appears only for a
+completed route and labels exact and mismatched results differently.
 
 ## Deterministic proof
 
