@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "moonshot": "001-fleetgate",
+  "result": "pass",
+  "source_commit": "9ea689d861b291954900162583038468af91a7d6",
+  "source_clean": true,
+  "node_executions": 12,
+  "node_executions_passed": 12,
+  "portability_records": 36,
+  "rounds": 3,
+  "deterministic": true,
+  "remote_writes": 0,
+  "safety_proofs": [
+    {
+      "name": "tamper_rejection",
+      "ok": true
+    },
+    {
+      "name": "timeout_isolation",
+      "ok": true
+    },
+    {
+      "name": "launch_failure_isolation",
+      "ok": true
+    },
+    {
+      "name": "malformed_output_isolation",
+      "ok": true
+    }
+  ],
+  "normalized_evidence_hash": "b42fb577974384ab13f8de77fd357061aa560d9e9a0b4edf7d51edfc56edf2a9",
+  "runtimes": [
+    {
+      "role": "controller",
+      "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+      "python": "3.14.4"
+    },
+    {
+      "role": "m4-worker",
+      "platform": "macOS-26.3-arm64-arm-64bit",
+      "python": "3.9.6"
+    },
+    {
+      "role": "m4-worker",
+      "platform": "macOS-26.5.1-arm64-arm-64bit",
+      "python": "3.9.6"
+    },
+    {
+      "role": "windows-gpu-worker",
+      "platform": "Windows-11-10.0.26200-SP0",
+      "python": "3.12.10"
+    }
+  ],
+  "private_capsule_sha256": "52a858053424182bec7dedc6db10dc60eb799f205a711d1969836b3c69fdbba2",
+  "note": "Hostnames, addresses, paths, and complete private evidence are intentionally omitted."
+}

@@ -1,0 +1,17 @@
+# Moonshot Backlog
+
+| Candidate | State |
+|---|---|
+| AI Reality Show | idea |
+| Invent a New Game Genre | idea |
+| Living Science-Fiction Universe | idea |
+| Digital Time Machine | idea |
+| Parallel-Universe Product Tournament | idea |
+| Prestige TV Pilot | idea |
+| Agent Olympics | idea |
+| Fleet as a Starship | idea |
+| Autonomous Invention Laboratory | **active as 002** |
+| Sealed Surprise Moonshot | idea |
+
+Ideas become numbered moonshots only when execution begins.
+

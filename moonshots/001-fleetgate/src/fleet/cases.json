@@ -1,0 +1,40 @@
+[
+  {
+    "agent_file": "case_convert_agent.py",
+    "class_name": "CaseConvertAgent",
+    "calls": [
+      {
+        "args": {"text": "RAPP Fleet", "mode": "upper"},
+        "expected": "RAPP FLEET"
+      },
+      {
+        "args": {"text": "PORTABLE agents", "mode": "title"},
+        "expected": "Portable Agents"
+      }
+    ]
+  },
+  {
+    "agent_file": "hash_text_agent.py",
+    "class_name": "HashTextAgent",
+    "calls": [
+      {
+        "args": {"text": "same bytes, same answer"},
+        "expected": "63b35046eba649aa02e632c042794b9beaf56c184b80b7632b19d468a6077330"
+      }
+    ]
+  },
+  {
+    "agent_file": "slugify_text_agent.py",
+    "class_name": "SlugifyTextAgent",
+    "calls": [
+      {
+        "args": {"text": "RAPP: One Agent, Every Machine!"},
+        "expected": "rapp-one-agent-every-machine"
+      },
+      {
+        "args": {"text": "Crème brûlée déjà vu"},
+        "expected": "creme-brulee-deja-vu"
+      }
+    ]
+  }
+]

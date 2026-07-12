@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "moonshots": [
+    {
+      "id": "001",
+      "slug": "fleetgate",
+      "title": "FleetGate",
+      "status": "complete",
+      "path": "moonshots/001-fleetgate"
+    },
+    {
+      "id": "002",
+      "slug": "autonomous-invention-lab",
+      "title": "Autonomous Invention Laboratory",
+      "status": "active",
+      "path": "moonshots/002-autonomous-invention-lab"
+    }
+  ]
+}
+

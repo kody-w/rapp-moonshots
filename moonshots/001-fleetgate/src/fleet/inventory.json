@@ -1,0 +1,32 @@
+{
+  "nodes": [
+    {
+      "name": "controller",
+      "transport": "local",
+      "python": "python3",
+      "role": "controller"
+    },
+    {
+      "name": "mac-worker-a",
+      "transport": "ssh",
+      "host": "moonshot-mac-a",
+      "python": "python3",
+      "role": "mac-worker"
+    },
+    {
+      "name": "mac-worker-b",
+      "transport": "ssh",
+      "host": "moonshot-mac-b",
+      "python": "python3",
+      "role": "mac-worker"
+    },
+    {
+      "name": "windows-worker",
+      "transport": "ssh",
+      "host": "moonshot-windows",
+      "python": "python3.exe",
+      "role": "windows-worker"
+    }
+  ]
+}
+
