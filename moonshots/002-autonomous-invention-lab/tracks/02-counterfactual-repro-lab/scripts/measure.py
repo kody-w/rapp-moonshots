@@ -24,10 +24,32 @@ EXPECTED_CAUSES = {
 
 
 def remove_tree_verified(path: Path) -> None:
-    if path.exists():
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        raise RuntimeError(
+            "Measurement workspace state could not be inspected"
+        ) from error
+
+    try:
         shutil.rmtree(path)
-    if path.exists() or path.is_symlink():
-        raise RuntimeError("Measurement workspace cleanup could not be verified")
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        raise RuntimeError(
+            "Measurement workspace deletion failed"
+        ) from error
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        raise RuntimeError(
+            "Measurement workspace cleanup could not be verified"
+        ) from error
+    raise RuntimeError("Measurement workspace cleanup left residue")
 
 
 def measure() -> dict:
