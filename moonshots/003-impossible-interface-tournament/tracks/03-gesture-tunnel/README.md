@@ -51,6 +51,9 @@ camera-motion sweep, dip to open its threshold, then say **“choose.”** Say
 Camera loss freezes depth and cancels pending input. Recovery never replays the
 canceled preview. Confidence thresholds, 600 ms camera dwell, 900 ms gesture
 cooldown, 500 ms commit cooldown, and a 480 ms neutral gate reject noisy input.
+Terminal recognition errors and media teardown cannot auto-restart listening;
+the user must explicitly recover. Evidence appears only for a completed route
+and labels exact and mismatched results differently.
 
 ## Deterministic proof
 

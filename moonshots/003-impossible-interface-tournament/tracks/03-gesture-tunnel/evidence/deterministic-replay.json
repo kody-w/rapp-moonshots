@@ -158,6 +158,20 @@
     {
       "sequence": 18,
       "atMs": 4400,
+      "type": "sensor-stopped",
+      "depth": 2,
+      "sensor": "camera"
+    },
+    {
+      "sequence": 19,
+      "atMs": 4400,
+      "type": "sensor-stopped",
+      "depth": 2,
+      "sensor": "microphone"
+    },
+    {
+      "sequence": 20,
+      "atMs": 4400,
       "type": "sensor-lost",
       "depth": 2,
       "sensor": "camera",
@@ -166,21 +180,21 @@
       ]
     },
     {
-      "sequence": 19,
+      "sequence": 21,
       "atMs": 4650,
       "type": "voice-input",
       "depth": 2,
       "confidence": 0.96
     },
     {
-      "sequence": 20,
+      "sequence": 22,
       "atMs": 4850,
       "type": "voice-input",
       "depth": 2,
       "confidence": 0.96
     },
     {
-      "sequence": 21,
+      "sequence": 23,
       "atMs": 4850,
       "type": "commit-blocked",
       "depth": 2,
@@ -188,7 +202,21 @@
       "reason": "frozen"
     },
     {
-      "sequence": 22,
+      "sequence": 24,
+      "atMs": 5300,
+      "type": "sensor-started",
+      "depth": 2,
+      "sensor": "camera"
+    },
+    {
+      "sequence": 25,
+      "atMs": 5300,
+      "type": "sensor-started",
+      "depth": 2,
+      "sensor": "microphone"
+    },
+    {
+      "sequence": 26,
       "atMs": 5300,
       "type": "sensor-recovered",
       "depth": 2,
@@ -196,14 +224,22 @@
       "freezeCauses": []
     },
     {
-      "sequence": 23,
+      "sequence": 27,
+      "atMs": 5300,
+      "type": "sensor-recovered",
+      "depth": 2,
+      "sensor": "microphone",
+      "freezeCauses": []
+    },
+    {
+      "sequence": 28,
       "atMs": 5550,
       "type": "voice-input",
       "depth": 2,
       "confidence": 0.96
     },
     {
-      "sequence": 24,
+      "sequence": 29,
       "atMs": 5550,
       "type": "preview",
       "depth": 2,
@@ -212,14 +248,14 @@
       "confidence": 0.96
     },
     {
-      "sequence": 25,
+      "sequence": 30,
       "atMs": 6200,
       "type": "voice-input",
       "depth": 2,
       "confidence": 0.96
     },
     {
-      "sequence": 26,
+      "sequence": 31,
       "atMs": 6200,
       "type": "commit",
       "depth": 2,
@@ -229,14 +265,14 @@
       "source": "voice"
     },
     {
-      "sequence": 27,
+      "sequence": 32,
       "atMs": 6800,
       "type": "voice-input",
       "depth": 3,
       "confidence": 0.96
     },
     {
-      "sequence": 28,
+      "sequence": 33,
       "atMs": 6800,
       "type": "preview",
       "depth": 3,
@@ -245,14 +281,14 @@
       "confidence": 0.96
     },
     {
-      "sequence": 29,
+      "sequence": 34,
       "atMs": 7450,
       "type": "voice-input",
       "depth": 3,
       "confidence": 0.96
     },
     {
-      "sequence": 30,
+      "sequence": 35,
       "atMs": 7450,
       "type": "commit",
       "depth": 3,
@@ -262,14 +298,14 @@
       "source": "voice"
     },
     {
-      "sequence": 31,
+      "sequence": 36,
       "atMs": 8050,
       "type": "voice-input",
       "depth": 4,
       "confidence": 0.96
     },
     {
-      "sequence": 32,
+      "sequence": 37,
       "atMs": 8050,
       "type": "preview",
       "depth": 4,
@@ -278,14 +314,14 @@
       "confidence": 0.96
     },
     {
-      "sequence": 33,
+      "sequence": 38,
       "atMs": 8700,
       "type": "voice-input",
       "depth": 4,
       "confidence": 0.96
     },
     {
-      "sequence": 34,
+      "sequence": 39,
       "atMs": 8700,
       "type": "commit",
       "depth": 4,
@@ -295,14 +331,14 @@
       "source": "voice"
     },
     {
-      "sequence": 35,
+      "sequence": 40,
       "atMs": 9300,
       "type": "voice-input",
       "depth": 5,
       "confidence": 0.96
     },
     {
-      "sequence": 36,
+      "sequence": 41,
       "atMs": 9300,
       "type": "preview",
       "depth": 5,
@@ -311,14 +347,14 @@
       "confidence": 0.96
     },
     {
-      "sequence": 37,
+      "sequence": 42,
       "atMs": 9950,
       "type": "voice-input",
       "depth": 5,
       "confidence": 0.96
     },
     {
-      "sequence": 38,
+      "sequence": 43,
       "atMs": 9950,
       "type": "commit",
       "depth": 5,
@@ -328,14 +364,14 @@
       "source": "voice"
     },
     {
-      "sequence": 39,
+      "sequence": 44,
       "atMs": 10550,
       "type": "voice-input",
       "depth": 6,
       "confidence": 0.96
     },
     {
-      "sequence": 40,
+      "sequence": 45,
       "atMs": 10550,
       "type": "preview",
       "depth": 6,
@@ -344,14 +380,14 @@
       "confidence": 0.96
     },
     {
-      "sequence": 41,
+      "sequence": 46,
       "atMs": 11200,
       "type": "voice-input",
       "depth": 6,
       "confidence": 0.96
     },
     {
-      "sequence": 42,
+      "sequence": 47,
       "atMs": 11200,
       "type": "commit",
       "depth": 6,
@@ -361,14 +397,14 @@
       "source": "voice"
     },
     {
-      "sequence": 43,
+      "sequence": 48,
       "atMs": 11800,
       "type": "voice-input",
       "depth": 7,
       "confidence": 0.96
     },
     {
-      "sequence": 44,
+      "sequence": 49,
       "atMs": 11800,
       "type": "preview",
       "depth": 7,
@@ -377,14 +413,14 @@
       "confidence": 0.96
     },
     {
-      "sequence": 45,
+      "sequence": 50,
       "atMs": 12450,
       "type": "voice-input",
       "depth": 7,
       "confidence": 0.96
     },
     {
-      "sequence": 46,
+      "sequence": 51,
       "atMs": 12450,
       "type": "commit",
       "depth": 7,
@@ -394,7 +430,7 @@
       "source": "voice"
     },
     {
-      "sequence": 47,
+      "sequence": 52,
       "atMs": 12450,
       "type": "task-complete",
       "depth": 8,

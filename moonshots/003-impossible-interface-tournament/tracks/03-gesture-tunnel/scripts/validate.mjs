@@ -4,13 +4,17 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  DETERMINISTIC_ACTIONS,
   OPTION_COUNT,
   TASK_LAYERS,
   TunnelEngine,
   allowsMediaCapture,
   completionAnnouncement,
+  evidencePresentation,
+  matchVoiceOption,
   normalizeSpeechConfidence,
   runDeterministicSimulation,
+  shouldRestartRecognition,
   shouldHandleTunnelShortcut,
 } from "../src/core.mjs";
 
@@ -137,6 +141,31 @@ gate("reviewed runtime invariants", () => {
   assert.match(app, /releaseMediaResources\(activeStream, elements\.video\)/);
   assert.match(app, /allowsMediaCapture\(\{ accessibleMode, simulationMode \}\)/);
   assert.doesNotMatch(app, /alternative\.confidence\s*\|\|/);
+});
+
+gate("second review invariants", () => {
+  const payload = TASK_LAYERS.find((layer) => layer.id === "payload");
+  assert.equal(payload.options[matchVoiceOption(payload.options, "five cobalt beacons")].id, "cobalt-5");
+  assert.equal(payload.options[matchVoiceOption(payload.options, "three cobalt beacons")].id, "cobalt-3");
+  assert.equal(evidencePresentation({ completed: false, exact: false }).visible, false);
+  assert.match(evidencePresentation({ completed: true, exact: false }).label, /mismatch/i);
+  assert.equal(evidencePresentation({ completed: true, exact: true }).label, "Exact route sealed");
+  assert.equal(
+    shouldRestartRecognition({
+      launched: true,
+      restartAllowed: false,
+      tearingDown: false,
+    }),
+    false,
+  );
+  assert.deepEqual(
+    DETERMINISTIC_ACTIONS.filter((action) => action.at === 4400).map(
+      ({ type, sensor }) => `${type}:${sensor}`,
+    ),
+    ["sensor-stopped:camera", "sensor-stopped:microphone", "sensor-lost:camera"],
+  );
+  assert.match(app, /if \(sensorsReady\) announce\("Gesture Tunnel ready\. Say route\."\)/);
+  assert.match(app, /recognitionRecoveryRequired && !explicit/);
 });
 
 gate("evidence and rollback docs", () => {

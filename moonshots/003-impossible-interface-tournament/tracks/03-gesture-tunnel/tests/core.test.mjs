@@ -132,7 +132,7 @@ test("deterministic simulation completes the exact cobalt route after undo and r
   assert.equal(result.metrics.recoveredFromSensorLoss, true);
   assert.equal(result.metrics.neutralCalibrationMs, 100);
   assert.equal(result.metrics.sensorOnMs.camera, 11550);
-  assert.equal(result.metrics.sensorOnMs.microphone, 12450);
+  assert.equal(result.metrics.sensorOnMs.microphone, 11550);
   assert.equal(result.metrics.confirmationSources.voice, 9);
   assert.equal(result.metrics.rawFramesStored, 0);
   assert.equal(result.metrics.audioStored, 0);

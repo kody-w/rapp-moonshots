@@ -7,9 +7,11 @@ import {
   classifyMotionGesture,
   coarseSector,
   completionAnnouncement,
+  evidencePresentation,
   motionCentroid,
   normalizeSpeech,
   releaseMediaResources,
+  shouldRestartRecognition,
   shouldHandleTunnelShortcut,
 } from "./core.mjs";
 
@@ -40,6 +42,8 @@ const elements = {
   caption: document.querySelector("#voice-caption"),
   route: document.querySelector("#route-sequence"),
   evidence: document.querySelector("#evidence-seal"),
+  evidenceTitle: document.querySelector("#evidence-title"),
+  evidenceCopy: document.querySelector("#evidence-copy"),
   metricsDownload: document.querySelector("#metrics-download"),
   replayDownload: document.querySelector("#replay-download"),
   srState: document.querySelector("#sr-state"),
@@ -53,8 +57,11 @@ let stream = null;
 let tracker = null;
 let recognition = null;
 let recognitionActive = false;
+let recognitionRestartAllowed = false;
+let recognitionRecoveryRequired = false;
 let speechPaused = false;
 let launched = false;
+let tearingDown = false;
 let replacingSensors = false;
 let recoveryInFlight = false;
 let frameWatchdog = 0;
@@ -114,6 +121,21 @@ function makeNode(tag, className, text) {
   node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
+}
+
+function clearEvidenceUrls() {
+  evidenceUrls.splice(0).forEach((url) => URL.revokeObjectURL(url));
+  elements.metricsDownload.removeAttribute("href");
+  elements.replayDownload.removeAttribute("href");
+}
+
+function renderEvidenceState(snapshot) {
+  const presentation = evidencePresentation(snapshot);
+  elements.evidence.dataset.visible = String(presentation.visible);
+  elements.evidenceTitle.textContent = presentation.label;
+  elements.evidenceCopy.textContent = presentation.description;
+  if (!presentation.visible) clearEvidenceUrls();
+  return presentation;
 }
 
 function renderHistory(snapshot) {
@@ -227,7 +249,8 @@ function render() {
     ? `Task complete. Exact route ${snapshot.exact ? "confirmed" : "not confirmed"}.`
     : `Depth ${snapshot.depth + 1}. ${snapshot.frozen ? "Input frozen. " : ""}${layer.title}. ${optionSummary}.`;
 
-  if (snapshot.completed) prepareEvidence();
+  const evidenceState = renderEvidenceState(snapshot);
+  if (evidenceState.visible) prepareEvidence(snapshot);
 }
 
 class LocalMotionTracker {
@@ -420,6 +443,8 @@ function onCenterRest(source) {
 }
 
 function stopMedia() {
+  recognitionRestartAllowed = false;
+  recognitionRecoveryRequired = true;
   replacingSensors = true;
   const activeStream = stream;
   try {
@@ -530,6 +555,8 @@ async function startSensors({ recovery = false } = {}) {
         engine.sensorRecovered("unknown", elapsed());
       }
     }
+    recognitionRestartAllowed = true;
+    recognitionRecoveryRequired = false;
     startRecognition();
     setCaption(
       tracker.faceDetector
@@ -548,12 +575,13 @@ async function startSensors({ recovery = false } = {}) {
   }
 }
 
-async function recoverSensors() {
+async function recoverSensors({ explicit = false } = {}) {
   if (recoveryInFlight) return;
   if (!allowsMediaCapture({ accessibleMode, simulationMode })) {
     setCaption("This mode never requests camera or microphone access");
     return;
   }
+  if (recognitionRecoveryRequired && !explicit) return;
   const sensorCauses = engine.state.freezeCauses.filter((cause) => cause.endsWith("-lost"));
   if (sensorCauses.length === 0) {
     setCaption(
@@ -583,7 +611,19 @@ async function recoverSensors() {
 }
 
 function startRecognition() {
-  if (!launched || simulationMode || accessibleMode || speechPaused || recognitionActive) return;
+  if (
+    recognitionActive ||
+    !shouldRestartRecognition({
+      launched,
+      restartAllowed: recognitionRestartAllowed,
+      speechPaused,
+      accessibleMode,
+      simulationMode,
+      tearingDown,
+    })
+  ) {
+    return;
+  }
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
     setSensor(elements.voiceStatus, "voice · switch fallback", "warn");
@@ -596,6 +636,20 @@ function startRecognition() {
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
     recognition.onstart = () => {
+      if (
+        !shouldRestartRecognition({
+          launched,
+          restartAllowed: recognitionRestartAllowed,
+          speechPaused,
+          accessibleMode,
+          simulationMode,
+          tearingDown,
+        })
+      ) {
+        recognitionActive = false;
+        recognition.abort();
+        return;
+      }
       recognitionActive = true;
       setSensor(elements.voiceStatus, "voice · listening", "ok");
     };
@@ -612,6 +666,9 @@ function startRecognition() {
     };
     recognition.onerror = (event) => {
       if (event.error === "audio-capture" || event.error === "not-allowed") {
+        recognitionRestartAllowed = false;
+        recognitionRecoveryRequired = true;
+        recognitionActive = false;
         handleSensorLoss("microphone");
       } else {
         setSensor(elements.voiceStatus, `voice · ${event.error}`, "warn");
@@ -619,7 +676,16 @@ function startRecognition() {
     };
     recognition.onend = () => {
       recognitionActive = false;
-      if (launched && !speechPaused && !accessibleMode && !simulationMode) {
+      if (
+        shouldRestartRecognition({
+          launched,
+          restartAllowed: recognitionRestartAllowed,
+          speechPaused,
+          accessibleMode,
+          simulationMode,
+          tearingDown,
+        })
+      ) {
         window.setTimeout(startRecognition, 450);
       }
     };
@@ -635,14 +701,17 @@ function handleVoice(transcript, confidence) {
   const phrase = normalizeSpeech(transcript);
   if (!phrase) return;
   if (/\bexport\b/.test(phrase)) {
-    prepareEvidence();
-    setCaption("Local metrics and replay exports are ready", transcript);
-    announce("Local evidence is ready.");
+    if (prepareEvidence()) {
+      setCaption("Local metrics and replay exports are ready", transcript);
+      announce("Local evidence is ready.");
+    } else {
+      setCaption("Evidence remains locked until the route is complete", transcript);
+    }
     return;
   }
   if (/\brecover\b/.test(phrase) && engine.state.frozen) {
     setCaption("Recovery requested", transcript);
-    recoverSensors();
+    recoverSensors({ explicit: true });
     return;
   }
   if (/\bresume\b/.test(phrase)) {
@@ -686,9 +755,11 @@ function handleVoice(transcript, confidence) {
   render();
 }
 
-function prepareEvidence() {
+function prepareEvidence(snapshot = engine?.snapshot()) {
   if (!engine) return;
-  evidenceUrls.splice(0).forEach((url) => URL.revokeObjectURL(url));
+  const presentation = renderEvidenceState(snapshot);
+  if (!presentation.visible) return false;
+  clearEvidenceUrls();
   const pairs = [
     [elements.metricsDownload, engine.exportMetrics()],
     [elements.replayDownload, engine.exportReplay()],
@@ -702,6 +773,7 @@ function prepareEvidence() {
     anchor.href = url;
   });
   elements.evidence.dataset.visible = "true";
+  return true;
 }
 
 function useFallback(action) {
@@ -709,7 +781,7 @@ function useFallback(action) {
   engine.noteFallback(elapsed());
   const snapshot = engine.snapshot();
   if (action === "recover") {
-    recoverSensors();
+    recoverSensors({ explicit: true });
     return;
   }
   if (snapshot.frozen) {
@@ -721,7 +793,11 @@ function useFallback(action) {
   if (action === "choose") engine.choose({ source: "switch", at: elapsed() });
   if (action === "undo") engine.undo({ source: "switch", at: elapsed() });
   if (action === "cancel") engine.cancel({ source: "switch", at: elapsed() });
-  if (action === "export") prepareEvidence();
+  if (action === "export" && !prepareEvidence()) {
+    setCaption("Accessibility fallback: evidence remains locked until completion");
+    render();
+    return;
+  }
   setCaption(`Accessibility fallback: ${action}`);
   render();
 }
@@ -739,8 +815,26 @@ async function runSimulation() {
       setSensor(elements.cameraStatus, "camera · lost", "bad");
       setSensor(elements.neutralStatus, "neutral · canceled", "bad");
     }
+    if (action.type === "sensor-stopped") {
+      setSensor(
+        action.sensor === "camera" ? elements.cameraStatus : elements.voiceStatus,
+        `${action.sensor} · stopped`,
+        "warn",
+      );
+    }
+    if (action.type === "sensor-started") {
+      setSensor(
+        action.sensor === "camera" ? elements.cameraStatus : elements.voiceStatus,
+        `${action.sensor} · restarted`,
+        "ok",
+      );
+    }
     if (action.type === "sensor-recovered") {
-      setSensor(elements.cameraStatus, "camera · recovered", "ok");
+      setSensor(
+        action.sensor === "camera" ? elements.cameraStatus : elements.voiceStatus,
+        `${action.sensor} · recovered`,
+        "ok",
+      );
       setSensor(elements.neutralStatus, "neutral · deterministic", "ok");
     }
     setCaption(action.caption, action.text ?? "");
@@ -786,8 +880,8 @@ async function launch() {
   }
 
   render();
-  await startSensors();
-  announce("Gesture Tunnel ready. Say route.");
+  const sensorsReady = await startSensors();
+  if (sensorsReady) announce("Gesture Tunnel ready. Say route.");
 }
 
 elements.launch.addEventListener("click", launch, { once: true });
@@ -830,7 +924,9 @@ window.addEventListener("keydown", (event) => {
 
 if (navigator.mediaDevices?.addEventListener) {
   navigator.mediaDevices.addEventListener("devicechange", () => {
-    if (launched && engine?.state.frozen && !accessibleMode && !simulationMode) recoverSensors();
+    if (launched && engine?.state.frozen && !accessibleMode && !simulationMode) {
+      recoverSensors({ explicit: false });
+    }
   });
 }
 
@@ -842,7 +938,7 @@ document.addEventListener("visibilitychange", () => {
     !accessibleMode &&
     !simulationMode
   ) {
-    recoverSensors();
+    recoverSensors({ explicit: false });
   }
 });
 
@@ -860,10 +956,15 @@ frameWatchdog = window.setInterval(() => {
 window.addEventListener(
   "pagehide",
   () => {
+    tearingDown = true;
+    launched = false;
+    recognitionRestartAllowed = false;
+    recognitionRecoveryRequired = true;
     window.clearInterval(frameWatchdog);
     recognition?.abort();
+    recognitionActive = false;
     stopMedia();
-    evidenceUrls.forEach((url) => URL.revokeObjectURL(url));
+    clearEvidenceUrls();
   },
   { once: true },
 );

@@ -15,11 +15,13 @@ user who interprets “gaze” more literally than the implementation warrants.
 | Camera returns and stale intent executes | Recovery starts with no pending preview | User must name/preview the tunnel again |
 | Stop and sensor loss overlap | Independent freeze causes require both matching sensor recovery and explicit resume | The user may need two distinct recovery phrases |
 | Recognition reports zero or omits confidence | Zero is preserved and missing/nonfinite values default below threshold | Safety commands remain deliberately available at low confidence |
+| Recognition permission/audio capture fails and `onend` loops | Terminal errors disable restart; only explicit successful recovery re-enables it | Recovery requires the keyboard fallback when voice is unavailable |
 | Recognition hears speech synthesis | Recognition is aborted while synthesis speaks, then restarted | Browser events can race; captions and switch fallback remain authoritative |
 | Browser recognition sends audio remotely | Launch disclosure calls out vendor/cloud processing | The app cannot audit browser internals; `?accessible=1` is the strictly local path |
 | `FaceDetector` is absent | Frame-difference centroid remains available | Coarse preview is less stable and should not be described as gaze tracking |
 | Permissions are denied | State freezes and visible switch instructions remain | Primary voice/motion path is unavailable |
 | Repeated “choose” commits twice | Preview clears after commit plus a 500 ms commit cooldown | A new preview plus a later choose is intentionally a new action |
+| “Five cobalt” overlaps a generic cobalt alias | Whole-token, most-specific matching and ambiguity rejection replace first substring wins | Novel paraphrases may require a repair |
 | A wrong tunnel is committed | Undo is available from voice, upward motion, or switch fallback; old shells stay legible | Wrong commits still cost time and are counted |
 | User cannot speak or move on camera | Full switch-access path uses the same task and safety state | This is not proof of compatibility with every assistive technology |
 | Global Enter/Space hijacks a native control | Shortcuts require tunnel focus and ignore native interactive targets | Assistive technology event retargeting still varies by browser |

@@ -33,15 +33,36 @@ export const TASK_LAYERS = Object.freeze([
     prompt: "Say “three cobalt beacons”",
     target: "cobalt-3",
     options: Object.freeze([
-      option("amber-2", "2 amber", "Two amber beacons", ["two amber", "2 amber"]),
+      option("amber-2", "2 amber", "Two amber beacons", [
+        "two amber beacons",
+        "2 amber beacons",
+        "two amber",
+        "2 amber",
+      ]),
       option("cobalt-3", "3 cobalt", "Three cobalt beacons", [
+        "three cobalt beacons",
+        "3 cobalt beacons",
         "three cobalt",
         "3 cobalt",
-        "cobalt beacons",
       ]),
-      option("cobalt-5", "5 cobalt", "Five cobalt beacons", ["five cobalt", "5 cobalt"]),
-      option("silver-3", "3 silver", "Three silver beacons", ["three silver", "3 silver"]),
-      option("single-cobalt", "1 cobalt", "One cobalt beacon", ["one cobalt", "1 cobalt"]),
+      option("cobalt-5", "5 cobalt", "Five cobalt beacons", [
+        "five cobalt beacons",
+        "5 cobalt beacons",
+        "five cobalt",
+        "5 cobalt",
+      ]),
+      option("silver-3", "3 silver", "Three silver beacons", [
+        "three silver beacons",
+        "3 silver beacons",
+        "three silver",
+        "3 silver",
+      ]),
+      option("single-cobalt", "1 cobalt", "One cobalt beacon", [
+        "one cobalt beacon",
+        "1 cobalt beacon",
+        "one cobalt",
+        "1 cobalt",
+      ]),
       option("all-beacons", "All", "Every staged beacon", ["all beacons", "all"]),
     ]),
   }),
@@ -206,6 +227,45 @@ export function completionAnnouncement(snapshot, committedLabel = "Tunnel") {
     : "Route complete, but it does not match the cobalt mission. Say undo to repair it.";
 }
 
+export function evidencePresentation(snapshot) {
+  if (!snapshot?.completed) {
+    return {
+      visible: false,
+      label: "Evidence locked",
+      description: "Complete the route before exporting local replay and metrics.",
+    };
+  }
+  return snapshot.exact
+    ? {
+        visible: true,
+        label: "Exact route sealed",
+        description: "Exact replay and metrics were generated locally.",
+      }
+    : {
+        visible: true,
+        label: "Route mismatch captured",
+        description: "Replay and metrics show a completed route that differs from the mission.",
+      };
+}
+
+export function shouldRestartRecognition({
+  launched = false,
+  restartAllowed = false,
+  speechPaused = false,
+  accessibleMode = false,
+  simulationMode = false,
+  tearingDown = false,
+} = {}) {
+  return (
+    launched &&
+    restartAllowed &&
+    !speechPaused &&
+    !accessibleMode &&
+    !simulationMode &&
+    !tearingDown
+  );
+}
+
 export function wrapIndex(index, count = OPTION_COUNT) {
   const safeCount = Math.max(1, Math.floor(Number(count) || 1));
   return ((Math.floor(Number(index) || 0) % safeCount) + safeCount) % safeCount;
@@ -217,6 +277,42 @@ export function normalizeSpeech(text) {
     .replace(/[^\w\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export function matchVoiceOption(options, text) {
+  const phrase = normalizeSpeech(text);
+  if (!phrase || !Array.isArray(options)) return -1;
+  const paddedPhrase = ` ${phrase} `;
+  const matches = [];
+
+  options.forEach((candidate, index) => {
+    candidate.aliases.forEach((rawAlias) => {
+      const alias = normalizeSpeech(rawAlias);
+      const exact = phrase === alias;
+      if (!exact && !paddedPhrase.includes(` ${alias} `)) return;
+      matches.push({
+        index,
+        exact,
+        tokens: alias.split(" ").length,
+        characters: alias.length,
+      });
+    });
+  });
+
+  matches.sort(
+    (left, right) =>
+      Number(right.exact) - Number(left.exact) ||
+      right.tokens - left.tokens ||
+      right.characters - left.characters,
+  );
+  if (matches.length === 0) return -1;
+  const best = matches[0];
+  const equallySpecific = matches.filter(
+    (match) =>
+      match.exact === best.exact &&
+      match.tokens === best.tokens,
+  );
+  return new Set(equallySpecific.map((match) => match.index)).size === 1 ? best.index : -1;
 }
 
 export function coarseSector(point, count = OPTION_COUNT, deadzone = 0.16) {
@@ -783,9 +879,7 @@ export class TunnelEngine {
       }
       return { command: "intent", accepted: false };
     }
-    const index = layer.options.findIndex((candidate) =>
-      candidate.aliases.some((alias) => phrase.includes(normalizeSpeech(alias))),
-    );
+    const index = matchVoiceOption(layer.options, phrase);
     if (index < 0) {
       this.metrics.voiceRepairs += 1;
       this.record("voice-repair", { reason: "unmatched" }, timestamp);
@@ -843,10 +937,15 @@ export const DETERMINISTIC_ACTIONS = Object.freeze([
   Object.freeze({ at: 2700, type: "voice", text: "fifteen hundred", caption: "Intentional wrong tunnel: 15:00" }),
   Object.freeze({ at: 3350, type: "voice", text: "choose", caption: "Wrong tunnel intentionally committed" }),
   Object.freeze({ at: 3900, type: "voice", text: "undo", caption: "Undo restores the schedule shell" }),
+  Object.freeze({ at: 4400, type: "sensor-stopped", sensor: "camera", caption: "Runtime camera track stops" }),
+  Object.freeze({ at: 4400, type: "sensor-stopped", sensor: "microphone", caption: "Runtime microphone track stops with the stream" }),
   Object.freeze({ at: 4400, type: "sensor-lost", sensor: "camera", caption: "Camera loss freezes every layer" }),
   Object.freeze({ at: 4650, type: "voice", text: "fourteen thirty", caption: "Input is safely blocked while frozen" }),
   Object.freeze({ at: 4850, type: "voice", text: "choose", caption: "Choose is rejected while the camera is lost" }),
+  Object.freeze({ at: 5300, type: "sensor-started", sensor: "camera", caption: "Recovered camera track starts" }),
+  Object.freeze({ at: 5300, type: "sensor-started", sensor: "microphone", caption: "Recovered microphone track starts" }),
   Object.freeze({ at: 5300, type: "sensor-recovered", sensor: "camera", caption: "Camera recovered; pending input stays canceled" }),
+  Object.freeze({ at: 5300, type: "sensor-recovered", sensor: "microphone", caption: "Microphone lifecycle matches runtime recovery" }),
   Object.freeze({ at: 5550, type: "voice", text: "fourteen thirty", caption: "Correct schedule previewed" }),
   Object.freeze({ at: 6200, type: "voice", text: "choose", caption: "14:30 confirmed" }),
   Object.freeze({ at: 6800, type: "voice", text: "fragile", caption: "Fragile handling" }),
@@ -877,6 +976,9 @@ export function applyDeterministicAction(engine, action) {
       break;
     case "sensor-started":
       engine.sensorStarted(action.sensor, action.at);
+      break;
+    case "sensor-stopped":
+      engine.sensorStopped(action.sensor, action.at);
       break;
     case "neutral-ready":
       engine.noteNeutralReady(action.at);

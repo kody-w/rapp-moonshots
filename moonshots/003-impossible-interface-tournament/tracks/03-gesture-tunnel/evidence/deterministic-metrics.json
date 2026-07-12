@@ -32,7 +32,7 @@
   "sensorRecoveryMs": 900,
   "sensorOnMs": {
     "camera": 11550,
-    "microphone": 12450
+    "microphone": 11550
   },
   "rawFramesStored": 0,
   "audioStored": 0,

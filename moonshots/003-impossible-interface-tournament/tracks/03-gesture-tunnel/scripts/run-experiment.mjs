@@ -24,6 +24,7 @@ assert.equal(first.metrics.falseCommits, 1);
 assert.equal(first.metrics.undos, 1);
 assert.equal(first.metrics.blockedCommits, 1);
 assert.equal(first.metrics.recoveredFromSensorLoss, true);
+assert.deepEqual(first.metrics.sensorOnMs, { camera: 11550, microphone: 11550 });
 assert.equal(first.metrics.rawFramesStored, 0);
 assert.equal(first.metrics.audioStored, 0);
 assert.equal(first.metrics.networkRequestsByApp, 0);
@@ -40,6 +41,8 @@ const summary = {
   undos: first.metrics.undos,
   blockedCommitsDuringLoss: first.metrics.blockedCommits,
   sensorRecoveryMs: first.metrics.sensorRecoveryMs,
+  cameraOnMs: first.metrics.sensorOnMs.camera,
+  microphoneOnMs: first.metrics.sensorOnMs.microphone,
   noMediaOrNetworkPersistence:
     first.metrics.rawFramesStored === 0 &&
     first.metrics.audioStored === 0 &&

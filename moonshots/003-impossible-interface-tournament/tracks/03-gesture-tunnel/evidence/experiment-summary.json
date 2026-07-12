@@ -10,5 +10,7 @@
   "undos": 1,
   "blockedCommitsDuringLoss": 1,
   "sensorRecoveryMs": 900,
+  "cameraOnMs": 11550,
+  "microphoneOnMs": 11550,
   "noMediaOrNetworkPersistence": true
 }
