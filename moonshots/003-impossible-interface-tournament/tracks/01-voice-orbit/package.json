@@ -1,0 +1,10 @@
+{
+  "name": "moonshot-003-voice-orbit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local-first predictive radial voice, coarse gaze, and gesture interface.",
+  "scripts": {
+    "test": "node tests/run-tests.js && node tests/validator.js",
+    "validate": "node tests/validator.js"
+  }
+}

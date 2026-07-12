@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script>
+      (() => {
+        const param = new URLSearchParams(window.location.search).get("scoutTheme");
+        const theme =
+          param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Voice Orbit: a local-first voice, coarse webcam gaze, and explicit gesture interface experiment."
+    />
+    <title>Voice Orbit · Moonshot 003</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --cp-bg: #f7f4ef;
+        --cp-bg-elevated: #fcfbf8;
+        --cp-surface: #ffffff;
+        --cp-surface-soft: #f5f5f5;
+        --cp-border: #dedede;
+        --cp-border-strong: #919191;
+        --cp-text: #242424;
+        --cp-text-muted: #5c5c5c;
+        --cp-text-soft: #6f6f6f;
+        --cp-accent: #b11f4b;
+        --cp-accent-hover: #9a1a41;
+        --cp-accent-soft: rgba(177, 31, 75, 0.08);
+        --cp-accent-fg: #ffffff;
+        --cp-success: #16a34a;
+        --cp-danger: #dc2626;
+        --cp-warning: #f59e0b;
+        --cp-link: #0078d4;
+        --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+        --cp-overlay: rgba(255, 255, 255, 0.8);
+        --cp-panel: rgba(255, 255, 255, 0.86);
+        --cp-panel-strong: rgba(255, 255, 255, 0.96);
+        --cp-sheen: rgba(255, 255, 255, 0.55);
+        --cp-highlight: rgba(177, 31, 75, 0.12);
+      }
+      html[data-theme="dark"] {
+        color-scheme: dark;
+        --cp-bg: #3d3b3a;
+        --cp-bg-elevated: #343231;
+        --cp-surface: #292929;
+        --cp-surface-soft: #2e2e2e;
+        --cp-border: #474747;
+        --cp-border-strong: #5f5f5f;
+        --cp-text: #dedede;
+        --cp-text-muted: #919191;
+        --cp-text-soft: #b0b0b0;
+        --cp-accent: #fd8ea1;
+        --cp-accent-hover: #fb7b91;
+        --cp-accent-soft: rgba(253, 142, 161, 0.14);
+        --cp-accent-fg: #1a1a1a;
+        --cp-success: #4ade80;
+        --cp-danger: #f87171;
+        --cp-warning: #fbbf24;
+        --cp-link: #4da6ff;
+        --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+        --cp-overlay: rgba(41, 41, 41, 0.88);
+        --cp-panel: rgba(41, 41, 41, 0.72);
+        --cp-panel-strong: rgba(41, 41, 41, 0.96);
+        --cp-sheen: rgba(255, 255, 255, 0.04);
+        --cp-highlight: rgba(253, 142, 161, 0.12);
+      }
+    </style>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="sky-grid" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="wordmark" href="./" aria-label="Reload Voice Orbit">
+        <span class="wordmark-mark" aria-hidden="true">◎</span>
+        <span>
+          <strong>VOICE ORBIT</strong>
+          <small>MOONSHOT 003 · TRACK 01</small>
+        </span>
+      </a>
+      <div class="sensor-strip" aria-label="Sensor status">
+        <span class="sensor-pill" id="camera-indicator" data-state="off">
+          <i aria-hidden="true"></i>
+          <span>CAM</span>
+          <strong>OFF</strong>
+        </span>
+        <span class="sensor-pill" id="microphone-indicator" data-state="off">
+          <i aria-hidden="true"></i>
+          <span>MIC</span>
+          <strong>OFF</strong>
+        </span>
+        <span class="sensor-pill" id="estimator-indicator" data-state="off">
+          <i aria-hidden="true"></i>
+          <span>AIM</span>
+          <strong>WAIT</strong>
+        </span>
+      </div>
+      <div class="session-readout" aria-live="polite">
+        <span id="mode-label">NOT STARTED</span>
+        <time id="session-time">00:00.0</time>
+      </div>
+    </header>
+
+    <main>
+      <section class="launch" id="launch-screen" aria-labelledby="launch-title">
+        <div class="launch-copy">
+          <p class="eyebrow"><span></span> PREDICTIVE MULTIMODAL CONTROL</p>
+          <h1 id="launch-title">Speak the mission.<br /><em>Orbit the choice.</em></h1>
+          <p class="lede">
+            Voice supplies intent and values. A coarse webcam estimate highlights a radial
+            prediction. Only your spoken <strong>“select”</strong> or a deliberate nod confirms.
+          </p>
+
+          <div class="launch-actions" aria-label="Start choices">
+            <button class="primary-action" id="start-live" type="button">
+              <span>Start voice + camera</span>
+              <small>One permission gesture</small>
+            </button>
+            <button class="secondary-action" id="start-fallback" type="button">
+              <span>Start keyboard + touch</span>
+              <small>No camera · no microphone · no speech service</small>
+            </button>
+            <button class="secondary-action" id="start-simulation" type="button">
+              <span>Run deterministic mission</span>
+              <small>No permissions · 8 seconds</small>
+            </button>
+          </div>
+
+          <div class="permission-note" role="note">
+            <strong>Local camera, honest speech caveat.</strong>
+            <p>
+              Webcam frames are processed ephemerally in this tab and are never recorded,
+              persisted, or sent by this app. Web Speech API recognition may use your browser
+              vendor’s network speech service; its audio handling follows that browser’s privacy
+              policy. Choose the no-media keyboard + touch mode or simulation if that is not
+              acceptable.
+            </p>
+          </div>
+        </div>
+
+        <aside class="launch-visual" aria-label="Interaction contract preview">
+          <div class="preview-orbit" aria-hidden="true">
+            <span class="preview-petal petal-a">14:30</span>
+            <span class="preview-petal petal-b">COBALT ×3</span>
+            <span class="preview-petal petal-c">ORION-7</span>
+            <span class="preview-petal petal-d">NORTH GATE</span>
+            <span class="preview-center">
+              <i></i>
+              SAFE<br />REST
+            </span>
+          </div>
+          <ol class="contract-list">
+            <li><b>01</b><span>Speak broad intent + values</span></li>
+            <li><b>02</b><span>Aim to highlight, never execute</span></li>
+            <li><b>03</b><span>Say “select” or deliberately nod</span></li>
+          </ol>
+        </aside>
+      </section>
+
+      <section class="workspace" id="workspace" hidden aria-label="Voice Orbit mission control">
+        <aside class="mission-panel panel">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-kicker">MISSION DRAFT</span>
+              <h2 id="stage-label">Awaiting intent</h2>
+            </div>
+            <span class="stage-chip" id="stage-chip">INTENT</span>
+          </div>
+
+          <dl class="manifest" id="manifest">
+            <div><dt>Action</dt><dd data-field="action">—</dd></div>
+            <div><dt>Payload</dt><dd data-field="payload">—</dd></div>
+            <div><dt>Departure</dt><dd data-field="time">—</dd></div>
+            <div><dt>Handling</dt><dd data-field="fragile">—</dd></div>
+            <div><dt>Destination</dt><dd data-field="destination">—</dd></div>
+            <div><dt>Gate</dt><dd data-field="gate">—</dd></div>
+          </dl>
+
+          <div class="voice-console">
+            <span class="panel-kicker">VOICE CHANNEL</span>
+            <p id="last-heard" aria-live="polite">Listening begins after start.</p>
+            <small id="speech-caveat">Browser speech service may be network-backed.</small>
+          </div>
+
+          <div class="priority-stack" aria-label="Priority commands">
+            <span>ALWAYS PRIORITY</span>
+            <kbd>STOP</kbd><kbd>CANCEL</kbd><kbd>UNDO</kbd>
+          </div>
+        </aside>
+
+        <section class="orbit-stage" aria-labelledby="orbit-prompt">
+          <div class="prompt-stack">
+            <span id="interaction-mode">COARSE WEBCAM ESTIMATE</span>
+            <h2 id="orbit-prompt" aria-live="polite">Speak a broad intent.</h2>
+            <p>Gaze/dwell only highlights · never activates</p>
+          </div>
+
+          <div class="orbit-shell" id="orbit-shell">
+            <div class="orbital-trace trace-one" aria-hidden="true"></div>
+            <div class="orbital-trace trace-two" aria-hidden="true"></div>
+            <div
+              class="petal-layer"
+              id="petal-layer"
+              role="listbox"
+              aria-label="Predictive radial choices"
+            ></div>
+            <div class="aim-vector" id="aim-vector" aria-hidden="true"></div>
+            <div class="center-orb" id="center-orb" role="status" aria-label="Center safe rest zone">
+              <div class="dwell-ring" id="dwell-ring" aria-hidden="true"></div>
+              <span class="orb-pulse" aria-hidden="true"></span>
+              <small>RETURN GAZE</small>
+              <strong>SAFE REST</strong>
+              <span id="orb-state">RELAXED</span>
+            </div>
+          </div>
+
+          <div class="confirmation-legend">
+            <span><i class="legend-voice" aria-hidden="true"></i> SAY “SELECT”</span>
+            <b>OR</b>
+            <span><i class="legend-gesture" aria-hidden="true"></i> DELIBERATE NOD</span>
+          </div>
+        </section>
+
+        <aside class="telemetry-panel panel">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-kicker">LOCAL TELEMETRY</span>
+              <h2>Flight recorder</h2>
+            </div>
+            <span class="record-dot" title="Derived events only">REC</span>
+          </div>
+
+          <div class="camera-monitor">
+            <video id="camera-preview" autoplay muted playsinline aria-label="Local camera preview"></video>
+            <div class="camera-reticle" aria-hidden="true"><span></span></div>
+            <div class="camera-caption">
+              <span>EPHEMERAL FRAME</span>
+              <strong id="estimator-label">WAITING</strong>
+            </div>
+          </div>
+          <canvas id="analysis-canvas" width="32" height="24" hidden></canvas>
+
+          <dl class="metrics">
+            <div><dt>Elapsed</dt><dd id="metric-time">0.0s</dd></div>
+            <div><dt>Errors</dt><dd id="metric-errors">0</dd></div>
+            <div><dt>Repairs</dt><dd id="metric-repairs">0</dd></div>
+            <div><dt>Dwell</dt><dd id="metric-dwell">0.0s</dd></div>
+            <div><dt>Gestures</dt><dd id="metric-gestures">0</dd></div>
+            <div><dt>Sensor loss</dt><dd id="metric-loss">0</dd></div>
+          </dl>
+
+          <details class="privacy-details">
+            <summary>Privacy boundary</summary>
+            <p>
+              No network clients, MediaRecorder, storage APIs, raw frame capture, or audio
+              persistence are present. Export contains derived events and task values only.
+            </p>
+          </details>
+
+          <button class="export-button" id="export-json" type="button">Export local JSON</button>
+        </aside>
+
+        <div class="fallback-dock" aria-label="Keyboard and touch fallback controls">
+          <span>ACCESSIBLE FALLBACK</span>
+          <button id="fallback-confirm" type="button">Confirm highlighted</button>
+          <button id="fallback-cancel" type="button">Cancel</button>
+          <button id="fallback-undo" type="button">Undo</button>
+          <button id="fallback-stop" type="button">Stop sensors</button>
+        </div>
+
+        <div class="freeze-banner" id="freeze-banner" role="alert" hidden>
+          <strong>INPUTS FROZEN</strong>
+          <span id="freeze-reason">A required sensor was lost. No selection can execute.</span>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>VOICE ORBIT / LOCAL-FIRST PROTOTYPE</span>
+      <span>Keyboard: arrows aim · Enter confirms · Esc cancels · Ctrl/⌘ Z undoes</span>
+    </footer>
+
+    <div class="announcer" id="announcer" aria-live="assertive" aria-atomic="true"></div>
+    <script src="core.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
