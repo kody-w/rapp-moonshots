@@ -63,5 +63,4 @@ Safety and fallback parity are mandatory before speed can win.
 
 ## Status
 
-**Active — three interface applications building in parallel**
-
+**Active — three validated interface applications complete; unified Adaptive Orb building**
