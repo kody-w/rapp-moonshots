@@ -62,6 +62,26 @@ The final product includes an offline deterministic AI demo, an optional
 server-side RAPP brainstem connector, and a mobile/installable iOS PWA. Browser
 credentials and raw camera/audio never enter persistent storage.
 
+## Mobile-first thesis
+
+Adaptive Orb is an eyes-up operating layer for speaking with AI when hands and
+attention are occupied.
+
+The primary scenarios are:
+
+- guided cooking and hands-busy tasks,
+- field and workshop checklists,
+- walking note capture and decision support,
+- accessibility and switch-assisted control, and
+- quick real-world planning without stopping to type.
+
+The phone experience is designed first: portrait-safe layout, large radial
+targets, short spoken responses, progressive microphone/camera permission, and
+state recovery after interruption or orientation change. Desktop remains a
+development and fallback environment.
+
+The application is not intended for driving or safety-critical control.
+
 ## Measured gates
 
 - exact task completion,
