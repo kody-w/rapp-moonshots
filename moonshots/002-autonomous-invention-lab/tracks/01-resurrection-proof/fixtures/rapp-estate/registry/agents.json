@@ -1,0 +1,26 @@
+{
+  "agents": [
+    {
+      "id": "archivist",
+      "enabled": true,
+      "capabilities": [
+        "memory-recall",
+        "inventory"
+      ]
+    },
+    {
+      "id": "greeter",
+      "enabled": true,
+      "capabilities": [
+        "greeting"
+      ]
+    },
+    {
+      "id": "retired-demo",
+      "enabled": false,
+      "capabilities": [
+        "greeting"
+      ]
+    }
+  ]
+}
