@@ -1,0 +1,484 @@
+{
+  "schemaVersion": 1,
+  "appVersion": "1.0.0",
+  "taskId": "cobalt-beacon-route-v1",
+  "sessionId": "gesture-tunnel-deterministic-v1",
+  "expectedRoute": [
+    "route",
+    "cobalt-3",
+    "14:30",
+    "fragile",
+    "orion-7",
+    "north-gate",
+    "confirm-route",
+    "home"
+  ],
+  "replay": [
+    {
+      "sequence": 0,
+      "atMs": 0,
+      "type": "session-start",
+      "depth": 0
+    },
+    {
+      "sequence": 1,
+      "atMs": 0,
+      "type": "sensor-started",
+      "depth": 0,
+      "sensor": "camera"
+    },
+    {
+      "sequence": 2,
+      "atMs": 0,
+      "type": "sensor-started",
+      "depth": 0,
+      "sensor": "microphone"
+    },
+    {
+      "sequence": 3,
+      "atMs": 100,
+      "type": "neutral-ready",
+      "depth": 0,
+      "calibrationMs": 100
+    },
+    {
+      "sequence": 4,
+      "atMs": 200,
+      "type": "voice-input",
+      "depth": 0,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 5,
+      "atMs": 200,
+      "type": "preview",
+      "depth": 0,
+      "optionId": "route",
+      "source": "voice",
+      "confidence": 0.96
+    },
+    {
+      "sequence": 6,
+      "atMs": 850,
+      "type": "voice-input",
+      "depth": 0,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 7,
+      "atMs": 850,
+      "type": "commit",
+      "depth": 0,
+      "layerId": "intent",
+      "optionId": "route",
+      "expected": true,
+      "source": "voice"
+    },
+    {
+      "sequence": 8,
+      "atMs": 1450,
+      "type": "voice-input",
+      "depth": 1,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 9,
+      "atMs": 1450,
+      "type": "preview",
+      "depth": 1,
+      "optionId": "cobalt-3",
+      "source": "voice",
+      "confidence": 0.96
+    },
+    {
+      "sequence": 10,
+      "atMs": 2100,
+      "type": "voice-input",
+      "depth": 1,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 11,
+      "atMs": 2100,
+      "type": "commit",
+      "depth": 1,
+      "layerId": "payload",
+      "optionId": "cobalt-3",
+      "expected": true,
+      "source": "voice"
+    },
+    {
+      "sequence": 12,
+      "atMs": 2700,
+      "type": "voice-input",
+      "depth": 2,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 13,
+      "atMs": 2700,
+      "type": "preview",
+      "depth": 2,
+      "optionId": "15:00",
+      "source": "voice",
+      "confidence": 0.96
+    },
+    {
+      "sequence": 14,
+      "atMs": 3350,
+      "type": "voice-input",
+      "depth": 2,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 15,
+      "atMs": 3350,
+      "type": "commit",
+      "depth": 2,
+      "layerId": "schedule",
+      "optionId": "15:00",
+      "expected": false,
+      "source": "voice"
+    },
+    {
+      "sequence": 16,
+      "atMs": 3900,
+      "type": "voice-input",
+      "depth": 3,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 17,
+      "atMs": 3900,
+      "type": "undo",
+      "depth": 2,
+      "source": "voice",
+      "removedOptionId": "15:00"
+    },
+    {
+      "sequence": 18,
+      "atMs": 4400,
+      "type": "sensor-lost",
+      "depth": 2,
+      "sensor": "camera"
+    },
+    {
+      "sequence": 19,
+      "atMs": 4650,
+      "type": "voice-input",
+      "depth": 2,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 20,
+      "atMs": 4850,
+      "type": "voice-input",
+      "depth": 2,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 21,
+      "atMs": 4850,
+      "type": "commit-blocked",
+      "depth": 2,
+      "source": "voice",
+      "reason": "frozen"
+    },
+    {
+      "sequence": 22,
+      "atMs": 5300,
+      "type": "sensor-recovered",
+      "depth": 2,
+      "sensor": "camera"
+    },
+    {
+      "sequence": 23,
+      "atMs": 5550,
+      "type": "voice-input",
+      "depth": 2,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 24,
+      "atMs": 5550,
+      "type": "preview",
+      "depth": 2,
+      "optionId": "14:30",
+      "source": "voice",
+      "confidence": 0.96
+    },
+    {
+      "sequence": 25,
+      "atMs": 6200,
+      "type": "voice-input",
+      "depth": 2,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 26,
+      "atMs": 6200,
+      "type": "commit",
+      "depth": 2,
+      "layerId": "schedule",
+      "optionId": "14:30",
+      "expected": true,
+      "source": "voice"
+    },
+    {
+      "sequence": 27,
+      "atMs": 6800,
+      "type": "voice-input",
+      "depth": 3,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 28,
+      "atMs": 6800,
+      "type": "preview",
+      "depth": 3,
+      "optionId": "fragile",
+      "source": "voice",
+      "confidence": 0.96
+    },
+    {
+      "sequence": 29,
+      "atMs": 7450,
+      "type": "voice-input",
+      "depth": 3,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 30,
+      "atMs": 7450,
+      "type": "commit",
+      "depth": 3,
+      "layerId": "handling",
+      "optionId": "fragile",
+      "expected": true,
+      "source": "voice"
+    },
+    {
+      "sequence": 31,
+      "atMs": 8050,
+      "type": "voice-input",
+      "depth": 4,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 32,
+      "atMs": 8050,
+      "type": "preview",
+      "depth": 4,
+      "optionId": "orion-7",
+      "source": "voice",
+      "confidence": 0.96
+    },
+    {
+      "sequence": 33,
+      "atMs": 8700,
+      "type": "voice-input",
+      "depth": 4,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 34,
+      "atMs": 8700,
+      "type": "commit",
+      "depth": 4,
+      "layerId": "destination",
+      "optionId": "orion-7",
+      "expected": true,
+      "source": "voice"
+    },
+    {
+      "sequence": 35,
+      "atMs": 9300,
+      "type": "voice-input",
+      "depth": 5,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 36,
+      "atMs": 9300,
+      "type": "preview",
+      "depth": 5,
+      "optionId": "north-gate",
+      "source": "voice",
+      "confidence": 0.96
+    },
+    {
+      "sequence": 37,
+      "atMs": 9950,
+      "type": "voice-input",
+      "depth": 5,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 38,
+      "atMs": 9950,
+      "type": "commit",
+      "depth": 5,
+      "layerId": "gate",
+      "optionId": "north-gate",
+      "expected": true,
+      "source": "voice"
+    },
+    {
+      "sequence": 39,
+      "atMs": 10550,
+      "type": "voice-input",
+      "depth": 6,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 40,
+      "atMs": 10550,
+      "type": "preview",
+      "depth": 6,
+      "optionId": "confirm-route",
+      "source": "voice",
+      "confidence": 0.96
+    },
+    {
+      "sequence": 41,
+      "atMs": 11200,
+      "type": "voice-input",
+      "depth": 6,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 42,
+      "atMs": 11200,
+      "type": "commit",
+      "depth": 6,
+      "layerId": "review",
+      "optionId": "confirm-route",
+      "expected": true,
+      "source": "voice"
+    },
+    {
+      "sequence": 43,
+      "atMs": 11800,
+      "type": "voice-input",
+      "depth": 7,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 44,
+      "atMs": 11800,
+      "type": "preview",
+      "depth": 7,
+      "optionId": "home",
+      "source": "voice",
+      "confidence": 0.96
+    },
+    {
+      "sequence": 45,
+      "atMs": 12450,
+      "type": "voice-input",
+      "depth": 7,
+      "confidence": 0.96
+    },
+    {
+      "sequence": 46,
+      "atMs": 12450,
+      "type": "commit",
+      "depth": 7,
+      "layerId": "return",
+      "optionId": "home",
+      "expected": true,
+      "source": "voice"
+    },
+    {
+      "sequence": 47,
+      "atMs": 12450,
+      "type": "task-complete",
+      "depth": 8,
+      "exact": true
+    }
+  ],
+  "finalState": {
+    "depth": 8,
+    "layerId": "complete",
+    "selections": [
+      {
+        "depth": 0,
+        "layerId": "intent",
+        "optionId": "route",
+        "label": "Route",
+        "expected": true,
+        "source": "voice",
+        "atMs": 850
+      },
+      {
+        "depth": 1,
+        "layerId": "payload",
+        "optionId": "cobalt-3",
+        "label": "3 cobalt",
+        "expected": true,
+        "source": "voice",
+        "atMs": 2100
+      },
+      {
+        "depth": 2,
+        "layerId": "schedule",
+        "optionId": "14:30",
+        "label": "14:30",
+        "expected": true,
+        "source": "voice",
+        "atMs": 6200
+      },
+      {
+        "depth": 3,
+        "layerId": "handling",
+        "optionId": "fragile",
+        "label": "Fragile",
+        "expected": true,
+        "source": "voice",
+        "atMs": 7450
+      },
+      {
+        "depth": 4,
+        "layerId": "destination",
+        "optionId": "orion-7",
+        "label": "ORION-7",
+        "expected": true,
+        "source": "voice",
+        "atMs": 8700
+      },
+      {
+        "depth": 5,
+        "layerId": "gate",
+        "optionId": "north-gate",
+        "label": "North Gate",
+        "expected": true,
+        "source": "voice",
+        "atMs": 9950
+      },
+      {
+        "depth": 6,
+        "layerId": "review",
+        "optionId": "confirm-route",
+        "label": "Confirm",
+        "expected": true,
+        "source": "voice",
+        "atMs": 11200
+      },
+      {
+        "depth": 7,
+        "layerId": "return",
+        "optionId": "home",
+        "label": "Home",
+        "expected": true,
+        "source": "voice",
+        "atMs": 12450
+      }
+    ],
+    "preview": null,
+    "armed": false,
+    "frozen": false,
+    "freezeReason": null,
+    "completed": true,
+    "exact": true
+  }
+}

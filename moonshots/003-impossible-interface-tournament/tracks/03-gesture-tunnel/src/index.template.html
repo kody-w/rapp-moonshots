@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Gesture Tunnel: a local-first voice, coarse webcam preview, and camera-motion spatial interface."
+    />
+    <title>Gesture Tunnel — Cobalt Beacon Route</title>
+    <script>
+      (() => {
+        const param = new URLSearchParams(window.location.search).get("scoutTheme");
+        const theme =
+          param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
+    <style>
+/*__STYLES__*/
+    </style>
+  </head>
+  <body>
+    <section class="gateway" id="gateway" aria-labelledby="gateway-title">
+      <div class="gateway-card">
+        <div class="gateway-mark">Moonshot 003 · Track 03</div>
+        <h1 id="gateway-title">Gesture Tunnel</h1>
+        <p class="gateway-copy" id="gateway-copy">
+          One permission click opens a voice-first route through cumulative spatial layers.
+          After launch, speak, look coarsely toward a tunnel, or use broad camera motion—no
+          pointer is needed.
+        </p>
+        <div class="privacy-disclosure">
+          <strong>Local frame math</strong>
+          <span id="privacy-copy">
+            Video frames are downsampled for ephemeral frame-difference motion only; this app
+            never records, stores, uploads, or makes network requests. Optional browser speech
+            recognition can be vendor/cloud-backed—use the documented accessible mode for a
+            strictly no-microphone path. Speech synthesis uses the browser’s available voices.
+          </span>
+        </div>
+        <button class="launch-control" id="launch-control" type="button">
+          Allow camera + microphone · enter
+        </button>
+        <p class="launch-note">
+          The center is always safe. Gaze preview and motion never commit; “choose” does.
+        </p>
+      </div>
+    </section>
+
+    <main class="app-shell" id="app-shell" tabindex="-1" aria-label="Gesture Tunnel application">
+      <header class="topbar">
+        <div class="brand">
+          <span class="eyebrow">Impossible Interface Tournament</span>
+          <span class="brand-name">Gesture Tunnel</span>
+        </div>
+        <div class="sensor-strip" aria-label="Sensor status">
+          <span class="sensor-pill" id="camera-status" data-state="warn">
+            <span>camera</span> waiting
+          </span>
+          <span class="sensor-pill" id="voice-status" data-state="warn">
+            <span>voice</span> waiting
+          </span>
+          <span class="sensor-pill" id="neutral-status" data-state="warn">
+            <span>neutral</span> gate
+          </span>
+        </div>
+      </header>
+
+      <aside class="privacy-stamp">
+        <strong>Ephemeral by design.</strong><br />
+        96×72 frame difference · no hand classification · no recording · no app network
+      </aside>
+
+      <section
+        class="tunnel-stage"
+        id="tunnel-stage"
+        aria-label="Six spatial tunnel previews around a central safe orb"
+      >
+        <div class="depth-axis" aria-hidden="true"></div>
+        <div class="history-shells" id="history-shells" aria-hidden="true"></div>
+        <div class="mouth-orbit" id="mouth-orbit" role="group" aria-label="Current tunnel mouths"></div>
+        <div class="orb-cluster" id="orb-cluster" data-frozen="false" data-exact="false">
+          <div class="orb-halo" aria-hidden="true"></div>
+          <div class="orb">
+            <div class="orb-copy">
+              <span class="orb-depth" id="orb-depth">Depth 0 / 8</span>
+              <span class="orb-title" id="orb-title">Safe center</span>
+              <span class="orb-state" id="orb-state">Waiting to launch</span>
+            </div>
+          </div>
+          <div class="confidence" aria-label="Preview confidence">
+            <div class="confidence-fill" id="confidence-fill"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="voice-rail" aria-label="Voice and status captions">
+        <p class="voice-command" id="voice-command">Center holds until permission is granted</p>
+        <p class="voice-caption" id="voice-caption" aria-live="polite">
+          Camera motion is a coarse directional signal, not hand or eye tracking.
+        </p>
+      </section>
+
+      <footer class="bottom-rail">
+        <div class="route-summary">
+          <div class="route-kicker">Cumulative route shells</div>
+          <div class="route-sequence" id="route-sequence" aria-label="Committed route layers"></div>
+        </div>
+        <div class="fallback-hint">
+          Access fallback: ←/→ preview · Enter choose · ↑ undo · Esc cancel · R recover · E export.
+          Primary route needs no keyboard or pointer.
+        </div>
+      </footer>
+
+      <aside class="evidence-seal" id="evidence-seal" data-visible="false" aria-label="Local evidence exports">
+        <strong>Exact route sealed</strong>
+        <p>Replay and metrics were generated locally. Voice “export” or use the links after the task.</p>
+        <div class="evidence-links">
+          <a id="metrics-download" href="#" download="gesture-tunnel-metrics.json">Metrics JSON</a>
+          <a id="replay-download" href="#" download="gesture-tunnel-replay.json">Replay JSON</a>
+        </div>
+      </aside>
+
+      <p class="visually-hidden" id="sr-state" aria-live="assertive"></p>
+      <video id="camera" muted playsinline aria-hidden="true"></video>
+      <canvas id="motion-canvas" width="96" height="72" aria-hidden="true"></canvas>
+    </main>
+
+    <script type="module">
+//__CORE__
+
+//__APP__
+    </script>
+  </body>
+</html>
