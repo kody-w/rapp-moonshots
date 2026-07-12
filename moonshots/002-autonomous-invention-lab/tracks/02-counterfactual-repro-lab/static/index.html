@@ -1325,7 +1325,9 @@
 
       state.recipe = result.copyable_recipe;
       document.getElementById("recipeText").textContent =
-        "$ " + result.recipe.command + "\n\n" + result.copyable_recipe;
+        result.recipe.launch_command + "\n" +
+        result.recipe.command + "\n\n" +
+        result.copyable_recipe;
       document.getElementById("receiptId").textContent =
         "receipt " + result.experiment_id.slice(0, 8);
       document.getElementById("downloadButton").href =

@@ -74,10 +74,13 @@ python3 -m unittest discover -s tests -v
 python3 scripts/measure.py
 ```
 
+Exported recipes automatically use `python3` with `./launch.sh` on POSIX and
+`python` with `launch.bat` on Windows.
+
 The committed experiment ran 36 isolated trials: **3/3 causes identified,
 9/9 baseline failures reproduced, 9/9 counterfactual passes repeated, six
 controls rejected, and zero residual workspaces**. Median scenario time was
-553.23 ms. See [`EXPERIMENT.md`](EXPERIMENT.md) and the machine-readable
+538.89 ms. See [`EXPERIMENT.md`](EXPERIMENT.md) and the machine-readable
 [`evidence/experiment-results.json`](evidence/experiment-results.json).
 
 ## Review package

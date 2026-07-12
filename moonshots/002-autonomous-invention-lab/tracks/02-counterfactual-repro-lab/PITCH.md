@@ -46,7 +46,7 @@ No arbitrary command. No network. No package install.”
 “Our falsifiable experiment ran 36 isolated trials. It found all three seeded
 causes, reproduced 9/9 baseline failures and 9/9 counterfactual passes, rejected
 six plausible controls, verified 36/36 workspace deletions, and took a median
-553 ms per scenario.”
+539 ms per scenario.”
 
 ## 2:20 — Why this is a moonshot
 

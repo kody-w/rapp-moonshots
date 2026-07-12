@@ -96,13 +96,40 @@ class ExperimentRunnerTests(unittest.TestCase):
         self.assertEqual(recipe["schema"], "counterfactual-repro-recipe/v1")
         self.assertEqual(recipe["scenario"], "environment-flag")
         self.assertEqual(recipe["rerun_count"], 3)
+        commands = self.runner._platform_commands("environment-flag")
         self.assertEqual(
             recipe["command"],
-            "python3 cli.py run environment-flag --json",
+            commands["replay"],
         )
+        self.assertEqual(recipe["launch_command"], commands["launch"])
+        self.assertEqual(recipe["platform"], commands["platform"])
         changed = recipe["change_exactly_one"]
         self.assertNotIn(changed["variable"], recipe["hold_constant"])
         self.assertEqual(len(recipe["hold_constant"]), 2)
+
+    def test_recipe_commands_cover_windows_and_posix_launchers(self):
+        windows = self.runner._platform_commands(
+            "path-precedence", platform_name="nt"
+        )
+        self.assertEqual(
+            windows,
+            {
+                "platform": "windows",
+                "launch": "launch.bat",
+                "replay": "python cli.py run path-precedence --json",
+            },
+        )
+        posix = self.runner._platform_commands(
+            "path-precedence", platform_name="posix"
+        )
+        self.assertEqual(
+            posix,
+            {
+                "platform": "posix",
+                "launch": "./launch.sh",
+                "replay": "python3 cli.py run path-precedence --json",
+            },
+        )
 
     def test_unknown_scenario_is_rejected_before_workspace_creation(self):
         with self.assertRaises(UnknownScenarioError):
@@ -164,6 +191,21 @@ class ExperimentRunnerTests(unittest.TestCase):
         self.assertNotEqual(list(TEST_ROOT.iterdir()), [])
         shutil.rmtree(TEST_ROOT)
         TEST_ROOT.mkdir(parents=True)
+
+    def test_cleanup_verification_stat_error_fails_closed(self):
+        absent = TEST_ROOT / "already-absent"
+        self.runner._remove_workspace_verified(absent)
+
+        with patch.object(
+            Path,
+            "lstat",
+            side_effect=PermissionError("verification denied"),
+        ):
+            with self.assertRaisesRegex(
+                WorkspaceCleanupError, "could not be verified"
+            ) as context:
+                self.runner._remove_workspace_verified(absent)
+        self.assertIsInstance(context.exception.__cause__, PermissionError)
 
 
 if __name__ == "__main__":

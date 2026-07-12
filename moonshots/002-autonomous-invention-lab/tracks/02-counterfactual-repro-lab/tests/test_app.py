@@ -64,6 +64,7 @@ class ApplicationTests(unittest.TestCase):
         self.assertIn("--cp-bg: #f7f4ef;", html)
         self.assertIn("--cp-accent: #b11f4b;", html)
         self.assertIn('"Segoe UI", Aptos, Calibri', html)
+        self.assertIn("result.recipe.launch_command", html)
         self.assertNotIn('src="http', html)
         self.assertNotIn('href="http', html)
 
@@ -167,6 +168,24 @@ class RunRegistryShutdownTests(unittest.TestCase):
                 raise WorkspaceCleanupError("residue")
 
         registry = RunRegistry(CleanupFailingRunner())
+        run = registry.create("line-endings")
+        for _ in range(100):
+            if registry.active_worker_count() == 0:
+                break
+            time.sleep(0.01)
+
+        snapshot = registry.get(run["id"])
+        self.assertEqual(snapshot["status"], "failed")
+        self.assertIsNone(snapshot["result"])
+        self.assertFalse(snapshot["cleanup_verified"])
+        self.assertFalse(registry.shutdown())
+
+    def test_unknown_worker_failure_fails_cleanup_closed(self):
+        class UnknownFailingRunner:
+            def run(self, *args, **kwargs):
+                raise RuntimeError("unknown failure")
+
+        registry = RunRegistry(UnknownFailingRunner())
         run = registry.create("line-endings")
         for _ in range(100):
             if registry.active_worker_count() == 0:

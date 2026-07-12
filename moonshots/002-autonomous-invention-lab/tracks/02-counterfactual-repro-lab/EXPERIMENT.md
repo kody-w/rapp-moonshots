@@ -46,7 +46,7 @@ Measurement captured in
 | Variables changed per trial | 1 | **1** |
 | Trial workspaces cleaned | 36/36 | **36/36** |
 | Residual workspaces | 0 | **0** |
-| Median scenario duration | <3,000 ms | **553.23 ms** |
+| Median scenario duration | <3,000 ms | **538.89 ms** |
 
 **Result: PASS.**
 

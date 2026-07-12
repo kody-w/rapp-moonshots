@@ -204,6 +204,7 @@ class ExperimentRunner:
             repeats=self.repetitions,
             controls=prior_controls,
         )
+        platform_commands = self._platform_commands(scenario.id)
         recipe = {
             "schema": "counterfactual-repro-recipe/v1",
             "scenario": scenario.id,
@@ -223,7 +224,9 @@ class ExperimentRunner:
             "expected_transition": "{0} -> {1}".format(
                 baseline_label, flipped_label
             ),
-            "command": "python3 cli.py run {0} --json".format(scenario.id),
+            "platform": platform_commands["platform"],
+            "launch_command": platform_commands["launch"],
+            "command": platform_commands["replay"],
         }
         bootstrap_keys = self._bootstrap_environment_key_names()
         environment_boundary = {
@@ -434,6 +437,24 @@ class ExperimentRunner:
         return sorted(cls._windows_bootstrap_environment())
 
     @staticmethod
+    def _platform_commands(
+        scenario_id: str,
+        platform_name: Optional[str] = None,
+    ) -> Dict[str, str]:
+        name = os.name if platform_name is None else platform_name
+        if name == "nt":
+            return {
+                "platform": "windows",
+                "launch": "launch.bat",
+                "replay": "python cli.py run {0} --json".format(scenario_id),
+            }
+        return {
+            "platform": "posix",
+            "launch": "./launch.sh",
+            "replay": "python3 cli.py run {0} --json".format(scenario_id),
+        }
+
+    @staticmethod
     def _materialize(
         scenario_id: str, controlled: Dict[str, str], workspace: Path
     ) -> None:
@@ -480,10 +501,18 @@ class ExperimentRunner:
             raise WorkspaceCleanupError(
                 "Trial workspace deletion failed; evidence receipt withheld"
             ) from error
-        if workspace.exists() or workspace.is_symlink():
+        try:
+            workspace.lstat()
+        except FileNotFoundError:
+            return
+        except OSError as error:
             raise WorkspaceCleanupError(
-                "Trial workspace residue detected; evidence receipt withheld"
-            )
+                "Trial workspace absence could not be verified; "
+                "evidence receipt withheld"
+            ) from error
+        raise WorkspaceCleanupError(
+            "Trial workspace residue detected; evidence receipt withheld"
+        )
 
     def _fixture_digest(self) -> str:
         return hashlib.sha256(self.fixture_path.read_bytes()).hexdigest()

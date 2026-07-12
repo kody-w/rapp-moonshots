@@ -178,9 +178,11 @@ class RunRegistry:
                 run["status"] = "failed"
                 run["error"] = (
                     "The fixed local experiment could not complete. "
-                    "No workspace evidence was retained."
+                    "Cleanup could not be independently confirmed, "
+                    "so no evidence receipt was retained."
                 )
-                run["cleanup_verified"] = True
+                run["cleanup_verified"] = False
+                self._cleanup_failure_detected = True
         finally:
             with self._lock:
                 self._workers.pop(run_id, None)
