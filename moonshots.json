@@ -14,6 +14,13 @@
       "title": "Autonomous Invention Laboratory",
       "status": "complete",
       "path": "moonshots/002-autonomous-invention-lab"
+    },
+    {
+      "id": "003",
+      "slug": "impossible-interface-tournament",
+      "title": "Impossible Interface Tournament",
+      "status": "active",
+      "path": "moonshots/003-impossible-interface-tournament"
     }
   ]
 }
