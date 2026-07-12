@@ -1,0 +1,1376 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A local causal debugger for cross-environment failures.">
+  <title>Counterfactual Repro Lab</title>
+  <script>
+  (() => {
+    const param = new URLSearchParams(window.location.search).get("scoutTheme");
+    const theme =
+      param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --cp-bg: #f7f4ef;
+      --cp-bg-elevated: #fcfbf8;
+      --cp-surface: #ffffff;
+      --cp-surface-soft: #f5f5f5;
+      --cp-border: #dedede;
+      --cp-border-strong: #919191;
+      --cp-text: #242424;
+      --cp-text-muted: #5c5c5c;
+      --cp-text-soft: #6f6f6f;
+      --cp-accent: #b11f4b;
+      --cp-accent-hover: #9a1a41;
+      --cp-accent-soft: rgba(177, 31, 75, 0.08);
+      --cp-accent-fg: #ffffff;
+      --cp-success: #16a34a;
+      --cp-danger: #dc2626;
+      --cp-warning: #f59e0b;
+      --cp-link: #0078d4;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+      --cp-overlay: rgba(255, 255, 255, 0.8);
+      --cp-panel: rgba(255, 255, 255, 0.86);
+      --cp-panel-strong: rgba(255, 255, 255, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.55);
+      --cp-highlight: rgba(177, 31, 75, 0.12);
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --cp-bg: #3d3b3a;
+      --cp-bg-elevated: #343231;
+      --cp-surface: #292929;
+      --cp-surface-soft: #2e2e2e;
+      --cp-border: #474747;
+      --cp-border-strong: #5f5f5f;
+      --cp-text: #dedede;
+      --cp-text-muted: #919191;
+      --cp-text-soft: #b0b0b0;
+      --cp-accent: #fd8ea1;
+      --cp-accent-hover: #fb7b91;
+      --cp-accent-soft: rgba(253, 142, 161, 0.14);
+      --cp-accent-fg: #1a1a1a;
+      --cp-success: #4ade80;
+      --cp-danger: #f87171;
+      --cp-warning: #fbbf24;
+      --cp-link: #4da6ff;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+      --cp-overlay: rgba(41, 41, 41, 0.88);
+      --cp-panel: rgba(41, 41, 41, 0.72);
+      --cp-panel-strong: rgba(41, 41, 41, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.04);
+      --cp-highlight: rgba(253, 142, 161, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-height: 100%;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      background: var(--cp-bg);
+      color: var(--cp-text);
+      font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    button,
+    a {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    button:focus-visible,
+    a:focus-visible {
+      outline: 3px solid var(--cp-accent);
+      outline-offset: 3px;
+    }
+
+    .topline {
+      border-bottom: 1px solid var(--cp-border);
+      background: var(--cp-bg-elevated);
+    }
+
+    .topline-inner {
+      width: min(1440px, calc(100% - 40px));
+      min-height: 44px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      color: var(--cp-text-muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+
+    .local-status,
+    .eyebrow,
+    .pill,
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .local-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--cp-success);
+    }
+
+    .theme-button,
+    .quiet-button,
+    .scenario-card,
+    .copy-button,
+    .download-button {
+      border: 1px solid var(--cp-border);
+      background: var(--cp-surface);
+      border-radius: .625rem;
+      cursor: pointer;
+    }
+
+    .theme-button {
+      min-height: 30px;
+      padding: 4px 10px;
+      color: var(--cp-text-muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .theme-button:hover,
+    .quiet-button:hover,
+    .copy-button:hover,
+    .download-button:hover {
+      border-color: var(--cp-border-strong);
+      color: var(--cp-text);
+    }
+
+    .page {
+      width: min(1440px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 36px;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--cp-accent);
+      border-radius: .625rem;
+      background: var(--cp-accent);
+      color: var(--cp-accent-fg);
+      font-family: Consolas, "Courier New", Courier, monospace;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .brand-name {
+      font-weight: 800;
+      letter-spacing: -.01em;
+    }
+
+    .brand-sub {
+      color: var(--cp-text-muted);
+      font-size: 12px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(300px, .55fr);
+      gap: 32px;
+      align-items: end;
+      padding-bottom: 32px;
+      border-bottom: 1px solid var(--cp-border);
+    }
+
+    .hero-copy {
+      max-width: 880px;
+    }
+
+    .eyebrow {
+      color: var(--cp-accent);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 28px;
+      height: 2px;
+      background: var(--cp-accent);
+    }
+
+    h1 {
+      max-width: 860px;
+      margin: 14px 0 16px;
+      font-size: clamp(42px, 6vw, 78px);
+      line-height: .98;
+      letter-spacing: -.055em;
+    }
+
+    .hero-copy p {
+      max-width: 760px;
+      margin: 0;
+      color: var(--cp-text-muted);
+      font-size: clamp(17px, 2vw, 21px);
+    }
+
+    .method-card {
+      padding: 22px;
+      border: 1px solid var(--cp-border);
+      border-radius: 16px;
+      background: var(--cp-surface);
+      box-shadow: 0 1px 0 var(--cp-border);
+    }
+
+    .method-card h2 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .formula {
+      padding: 14px;
+      border-left: 3px solid var(--cp-accent);
+      background: var(--cp-accent-soft);
+      color: var(--cp-text);
+      font-family: Consolas, "Courier New", Courier, monospace;
+      font-size: 13px;
+    }
+
+    .method-card p {
+      margin: 14px 0 0;
+      color: var(--cp-text-muted);
+      font-size: 13px;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      margin: 20px 0 32px;
+      border: 1px solid var(--cp-border);
+      border-radius: 16px;
+      background: var(--cp-surface);
+      overflow: hidden;
+    }
+
+    .metric {
+      min-height: 90px;
+      padding: 18px 20px;
+      border-right: 1px solid var(--cp-border);
+    }
+
+    .metric:last-child {
+      border-right: 0;
+    }
+
+    .metric strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 24px;
+      letter-spacing: -.04em;
+    }
+
+    .metric span {
+      color: var(--cp-text-muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .lab-grid {
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr);
+      gap: 24px;
+      align-items: start;
+    }
+
+    .scenario-panel,
+    .workbench {
+      border: 1px solid var(--cp-border);
+      border-radius: 16px;
+      background: var(--cp-surface);
+      box-shadow: 0 1px 0 var(--cp-border);
+    }
+
+    .panel-heading {
+      padding: 22px 22px 18px;
+      border-bottom: 1px solid var(--cp-border);
+    }
+
+    .step-label {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--cp-accent);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .panel-heading h2,
+    .workbench-heading h2 {
+      margin: 0;
+      font-size: 21px;
+      letter-spacing: -.02em;
+    }
+
+    .panel-heading p,
+    .workbench-heading p {
+      margin: 6px 0 0;
+      color: var(--cp-text-muted);
+      font-size: 13px;
+    }
+
+    .scenario-list {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+    }
+
+    .scenario-card {
+      width: 100%;
+      padding: 16px;
+      text-align: left;
+      transition: border-color 140ms ease, background 140ms ease;
+    }
+
+    .scenario-card:hover {
+      border-color: var(--cp-border-strong);
+    }
+
+    .scenario-card.selected {
+      border-color: var(--cp-accent);
+      background: var(--cp-accent-soft);
+    }
+
+    .scenario-card small {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--cp-accent);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .1em;
+    }
+
+    .scenario-card strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 15px;
+    }
+
+    .scenario-card span {
+      display: block;
+      color: var(--cp-text-muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .scenario-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 12px;
+      color: var(--cp-text-soft);
+      font-family: Consolas, "Courier New", Courier, monospace;
+      font-size: 10px;
+    }
+
+    .scenario-actions {
+      padding: 0 14px 14px;
+    }
+
+    .run-button {
+      width: 100%;
+      min-height: 48px;
+      border: 1px solid var(--cp-accent);
+      border-radius: .625rem;
+      background: var(--cp-accent);
+      color: var(--cp-accent-fg);
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    .run-button:hover {
+      border-color: var(--cp-accent-hover);
+      background: var(--cp-accent-hover);
+    }
+
+    .run-button:disabled {
+      border-color: var(--cp-border);
+      background: var(--cp-surface-soft);
+      color: var(--cp-text-muted);
+      cursor: not-allowed;
+    }
+
+    .safety-note {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      margin: 11px 2px 0;
+      color: var(--cp-text-muted);
+      font-size: 11px;
+    }
+
+    .shield {
+      flex: 0 0 auto;
+      width: 15px;
+      height: 15px;
+      color: var(--cp-success);
+    }
+
+    .workbench {
+      min-height: 650px;
+      overflow: hidden;
+    }
+
+    .workbench-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 22px 24px;
+      border-bottom: 1px solid var(--cp-border);
+    }
+
+    .pill,
+    .status-chip {
+      padding: 5px 9px;
+      border: 1px solid var(--cp-border);
+      border-radius: 999px;
+      color: var(--cp-text-muted);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .pill::before,
+    .status-chip::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--cp-border-strong);
+    }
+
+    .pill.running::before {
+      background: var(--cp-warning);
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    .pill.complete::before,
+    .status-chip.pass::before {
+      background: var(--cp-success);
+    }
+
+    .status-chip.fail::before {
+      background: var(--cp-danger);
+    }
+
+    .empty-state {
+      min-height: 565px;
+      display: grid;
+      place-items: center;
+      padding: 44px;
+      text-align: center;
+    }
+
+    .empty-inner {
+      max-width: 500px;
+    }
+
+    .empty-visual {
+      width: 114px;
+      height: 114px;
+      margin: 0 auto 24px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--cp-border);
+      border-radius: 50%;
+      background: var(--cp-surface-soft);
+      color: var(--cp-accent);
+      font-family: Consolas, "Courier New", Courier, monospace;
+      font-size: 24px;
+      font-weight: 800;
+    }
+
+    .empty-state h3 {
+      margin: 0 0 8px;
+      font-size: 22px;
+    }
+
+    .empty-state p {
+      margin: 0;
+      color: var(--cp-text-muted);
+    }
+
+    .running-view,
+    .result-view {
+      padding: 24px;
+    }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: end;
+      margin-bottom: 14px;
+    }
+
+    .progress-header strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 17px;
+    }
+
+    .progress-message {
+      color: var(--cp-text-muted);
+      font-size: 13px;
+    }
+
+    .progress-count {
+      color: var(--cp-accent);
+      font-family: Consolas, "Courier New", Courier, monospace;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .progress-track {
+      height: 8px;
+      border-radius: 999px;
+      background: var(--cp-surface-soft);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--cp-accent);
+      transition: width 180ms ease;
+    }
+
+    .event-log {
+      min-height: 320px;
+      margin-top: 24px;
+      border: 1px solid var(--cp-border);
+      border-radius: .625rem;
+      background: var(--cp-bg-elevated);
+      overflow: hidden;
+    }
+
+    .event-log-title {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--cp-border);
+      color: var(--cp-text-muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .event-list {
+      list-style: none;
+      margin: 0;
+      padding: 8px 14px 14px;
+      font-family: Consolas, "Courier New", Courier, monospace;
+      font-size: 12px;
+    }
+
+    .event-list li {
+      display: grid;
+      grid-template-columns: 58px 1fr;
+      gap: 12px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--cp-border);
+    }
+
+    .event-list li:last-child {
+      border-bottom: 0;
+    }
+
+    .event-index {
+      color: var(--cp-accent);
+    }
+
+    .result-view {
+      display: grid;
+      gap: 18px;
+    }
+
+    .verdict {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: center;
+      padding: 22px;
+      border: 1px solid var(--cp-accent);
+      border-radius: 16px;
+      background: var(--cp-accent-soft);
+    }
+
+    .verdict h3 {
+      margin: 4px 0 7px;
+      font-size: 25px;
+      letter-spacing: -.03em;
+    }
+
+    .verdict p {
+      max-width: 780px;
+      margin: 0;
+      color: var(--cp-text-muted);
+      font-size: 13px;
+    }
+
+    .flip-badge {
+      min-width: 150px;
+      padding: 12px 14px;
+      border: 1px solid var(--cp-border);
+      border-radius: .625rem;
+      background: var(--cp-surface);
+      text-align: center;
+      font-family: Consolas, "Courier New", Courier, monospace;
+    }
+
+    .flip-badge span {
+      display: block;
+      color: var(--cp-text-muted);
+      font-size: 10px;
+      letter-spacing: .08em;
+    }
+
+    .flip-badge strong {
+      display: block;
+      margin-top: 4px;
+      color: var(--cp-success);
+      font-size: 18px;
+    }
+
+    .evidence-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border: 1px solid var(--cp-border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .evidence-stat {
+      padding: 16px;
+      border-right: 1px solid var(--cp-border);
+      background: var(--cp-bg-elevated);
+    }
+
+    .evidence-stat:last-child {
+      border-right: 0;
+    }
+
+    .evidence-stat span {
+      display: block;
+      color: var(--cp-text-muted);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .evidence-stat strong {
+      display: block;
+      margin-top: 5px;
+      font-size: 20px;
+    }
+
+    .section-card {
+      border: 1px solid var(--cp-border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .section-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--cp-border);
+      background: var(--cp-bg-elevated);
+    }
+
+    .section-card-header h3 {
+      margin: 0;
+      font-size: 14px;
+    }
+
+    .intervention-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .intervention-table th,
+    .intervention-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--cp-border);
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    .intervention-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .intervention-table th {
+      color: var(--cp-text-muted);
+      font-size: 10px;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+
+    .mono {
+      font-family: Consolas, "Courier New", Courier, monospace;
+    }
+
+    .mechanism {
+      padding: 16px;
+      color: var(--cp-text-muted);
+      font-size: 13px;
+    }
+
+    .mechanism strong {
+      color: var(--cp-text);
+    }
+
+    .recipe-shell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 0;
+      background: var(--cp-bg-elevated);
+    }
+
+    pre {
+      max-height: 310px;
+      margin: 0;
+      padding: 18px;
+      overflow: auto;
+      color: var(--cp-text);
+      font-family: Consolas, "Courier New", Courier, monospace;
+      font-size: 11px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    .recipe-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 14px;
+      border-left: 1px solid var(--cp-border);
+    }
+
+    .copy-button,
+    .download-button,
+    .quiet-button {
+      min-height: 36px;
+      padding: 7px 12px;
+      color: var(--cp-text-muted);
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .footer-note {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 24px;
+    }
+
+    .principle {
+      padding: 18px;
+      border-top: 2px solid var(--cp-border);
+    }
+
+    .principle strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 13px;
+    }
+
+    .principle span {
+      color: var(--cp-text-muted);
+      font-size: 12px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: .35; }
+      50% { opacity: 1; }
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .lab-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .metrics {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .metric:nth-child(2) {
+        border-right: 0;
+      }
+
+      .metric:nth-child(-n+2) {
+        border-bottom: 1px solid var(--cp-border);
+      }
+
+      .scenario-list {
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      .scenario-actions {
+        max-width: 420px;
+      }
+    }
+
+    @media (max-width: 700px) {
+      .page,
+      .topline-inner {
+        width: min(100% - 24px, 1440px);
+      }
+
+      .page {
+        padding-top: 22px;
+      }
+
+      .topline-copy {
+        display: none;
+      }
+
+      .brand {
+        margin-bottom: 24px;
+      }
+
+      h1 {
+        font-size: 44px;
+      }
+
+      .scenario-list,
+      .evidence-grid,
+      .footer-note {
+        grid-template-columns: 1fr;
+      }
+
+      .evidence-stat {
+        border-right: 0;
+        border-bottom: 1px solid var(--cp-border);
+      }
+
+      .evidence-stat:last-child {
+        border-bottom: 0;
+      }
+
+      .verdict {
+        grid-template-columns: 1fr;
+      }
+
+      .flip-badge {
+        text-align: left;
+      }
+
+      .recipe-shell {
+        grid-template-columns: 1fr;
+      }
+
+      .recipe-actions {
+        flex-direction: row;
+        border-top: 1px solid var(--cp-border);
+        border-left: 0;
+      }
+
+      .intervention-table {
+        min-width: 620px;
+      }
+
+      .table-scroll {
+        overflow-x: auto;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition: none !important;
+        animation: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="topline">
+    <div class="topline-inner">
+      <span class="topline-copy">Autonomous Invention Laboratory · Track 02</span>
+      <span class="local-status"><span class="local-dot"></span>Loopback · no network writes</span>
+      <button class="theme-button" id="themeButton" type="button" aria-label="Toggle color theme">Theme</button>
+    </div>
+  </div>
+
+  <main class="page">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">C↯</div>
+      <div>
+        <div class="brand-name">Counterfactual Repro Lab</div>
+        <div class="brand-sub">Causal debugging, one variable at a time</div>
+      </div>
+    </div>
+
+    <section class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow">Stop guessing at environment drift</span>
+        <h1>Find the smallest difference that made it fail.</h1>
+        <p>Capture a failure. Change one bounded environmental variable. Rerun the same safe fixture until the first repeatable flip becomes evidence.</p>
+      </div>
+      <aside class="method-card" aria-label="Experiment method">
+        <h2>The controlled method</h2>
+        <div class="formula">3× FAIL baseline + 3× FAIL controls + 3× PASS cause → receipt</div>
+        <p>No experiment or secret host variables cross the boundary. On Windows, only SYSTEMROOT bootstraps Python; its value is never recorded.</p>
+      </aside>
+    </section>
+
+    <section class="metrics" aria-label="Lab guarantees">
+      <div class="metric"><strong>3</strong><span>Seeded failures</span></div>
+      <div class="metric"><strong>1</strong><span>Variable per trial</span></div>
+      <div class="metric"><strong>3×</strong><span>Repeat verification</span></div>
+      <div class="metric"><strong>0</strong><span>Secret env keys</span></div>
+    </section>
+
+    <section class="lab-grid" aria-label="Experiment workbench">
+      <aside class="scenario-panel">
+        <div class="panel-heading">
+          <span class="step-label">Step 01</span>
+          <h2>Choose a failure</h2>
+          <p>Each scenario is deterministic, local, and deliberately bounded.</p>
+        </div>
+        <div class="scenario-list" id="scenarioList" aria-live="polite"></div>
+        <div class="scenario-actions">
+          <button class="run-button" id="runButton" type="button" disabled>Run controlled experiment</button>
+          <div class="safety-note">
+            <svg class="shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 5 6v5c0 4.8 2.8 8.5 7 10 4.2-1.5 7-5.2 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-5"/></svg>
+            <span>No arbitrary commands, dependency installs, remote writes, or private host data.</span>
+          </div>
+        </div>
+      </aside>
+
+      <section class="workbench">
+        <div class="workbench-heading">
+          <div>
+            <span class="step-label">Step 02</span>
+            <h2>Controlled experiment</h2>
+            <p id="workbenchSubtitle">Select a seeded failure to inspect its causal chain.</p>
+          </div>
+          <span class="pill" id="runStatus">Ready</span>
+        </div>
+
+        <div class="empty-state" id="emptyState">
+          <div class="empty-inner">
+            <div class="empty-visual" aria-hidden="true">A ⇄ B</div>
+            <h3>Build a causal receipt</h3>
+            <p>The lab will capture the baseline, reject plausible controls, isolate the first repeatable flip, and produce a copyable recipe.</p>
+          </div>
+        </div>
+
+        <div class="running-view hidden" id="runningView" aria-live="polite">
+          <div class="progress-header">
+            <div>
+              <strong id="progressStage">Capturing baseline</strong>
+              <div class="progress-message" id="progressMessage">Preparing an isolated workspace</div>
+            </div>
+            <span class="progress-count" id="progressCount">0 / 12</span>
+          </div>
+          <div class="progress-track" role="progressbar" aria-label="Experiment progress" aria-valuemin="0" aria-valuemax="12" aria-valuenow="0" id="progressTrack">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <div class="event-log">
+            <div class="event-log-title"><span>Evidence stream</span><span>fresh workspace / trial</span></div>
+            <ol class="event-list" id="eventList"></ol>
+          </div>
+        </div>
+
+        <div class="result-view hidden" id="resultView">
+          <section class="verdict">
+            <div>
+              <span class="step-label">Causal verdict</span>
+              <h3 id="verdictTitle">Repeatable flip found</h3>
+              <p id="causalExplanation"></p>
+            </div>
+            <div class="flip-badge">
+              <span>Observed transition</span>
+              <strong id="flipTransition">FAIL → PASS</strong>
+            </div>
+          </section>
+
+          <section class="evidence-grid" aria-label="Evidence metrics">
+            <div class="evidence-stat"><span>Baseline</span><strong id="baselineMetric">3/3 fail</strong></div>
+            <div class="evidence-stat"><span>Counterfactual</span><strong id="counterfactualMetric">3/3 pass</strong></div>
+            <div class="evidence-stat"><span>Absolute effect</span><strong id="effectMetric">+100%</strong></div>
+          </section>
+
+          <section class="section-card">
+            <div class="section-card-header">
+              <h3>Intervention ledger</h3>
+              <span class="pill complete">one Δ each</span>
+            </div>
+            <div class="table-scroll">
+              <table class="intervention-table">
+                <thead><tr><th>#</th><th>Only variable changed</th><th>Transition</th><th>Repeats</th><th>Verdict</th></tr></thead>
+                <tbody id="interventionRows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section-card">
+            <div class="section-card-header"><h3>Why it flipped</h3><span class="pill complete">mechanism</span></div>
+            <div class="mechanism" id="mechanism"></div>
+          </section>
+
+          <section class="section-card">
+            <div class="section-card-header">
+              <h3>Copyable repro recipe</h3>
+              <span class="mono" id="receiptId">receipt</span>
+            </div>
+            <div class="recipe-shell">
+              <pre id="recipeText"></pre>
+              <div class="recipe-actions">
+                <button class="copy-button" id="copyButton" type="button">Copy recipe</button>
+                <a class="download-button" id="downloadButton" href="#" download>Download receipt</a>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </section>
+
+    <section class="footer-note" aria-label="Method boundaries">
+      <div class="principle"><strong>Fixed fixture</strong><span>The application executes only three reviewed local fixture paths—not user commands.</span></div>
+      <div class="principle"><strong>Clean counterfactuals</strong><span>Every candidate differs from baseline by exactly one allowlisted value.</span></div>
+      <div class="principle"><strong>Honest causality</strong><span>The verdict is bounded to tested values and names untested-variable uncertainty.</span></div>
+    </section>
+  </main>
+
+  <script>
+    const state = {
+      scenarios: [],
+      selected: null,
+      activeRunId: null,
+      timer: null,
+      recipe: ""
+    };
+
+    const elements = {
+      scenarioList: document.getElementById("scenarioList"),
+      runButton: document.getElementById("runButton"),
+      runStatus: document.getElementById("runStatus"),
+      emptyState: document.getElementById("emptyState"),
+      runningView: document.getElementById("runningView"),
+      resultView: document.getElementById("resultView"),
+      subtitle: document.getElementById("workbenchSubtitle"),
+      progressStage: document.getElementById("progressStage"),
+      progressMessage: document.getElementById("progressMessage"),
+      progressCount: document.getElementById("progressCount"),
+      progressTrack: document.getElementById("progressTrack"),
+      progressFill: document.getElementById("progressFill"),
+      eventList: document.getElementById("eventList")
+    };
+
+    function setThemeButtonLabel() {
+      const current = document.documentElement.getAttribute("data-theme");
+      document.getElementById("themeButton").textContent =
+        current === "dark" ? "Light theme" : "Dark theme";
+    }
+
+    document.getElementById("themeButton").addEventListener("click", () => {
+      const current = document.documentElement.getAttribute("data-theme");
+      document.documentElement.setAttribute("data-theme", current === "dark" ? "light" : "dark");
+      setThemeButtonLabel();
+    });
+
+    async function loadScenarios() {
+      try {
+        const response = await fetch("/api/scenarios", { headers: { "Accept": "application/json" } });
+        if (!response.ok) throw new Error("Scenario catalog unavailable");
+        const payload = await response.json();
+        state.scenarios = payload.scenarios;
+        state.selected = state.scenarios[0]?.id || null;
+        renderScenarios();
+        elements.runButton.disabled = !state.selected;
+        updateSubtitle();
+      } catch (error) {
+        elements.scenarioList.textContent = "The local scenario catalog could not be loaded.";
+      }
+    }
+
+    function renderScenarios() {
+      elements.scenarioList.replaceChildren();
+      state.scenarios.forEach((scenario, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "scenario-card" + (scenario.id === state.selected ? " selected" : "");
+        button.setAttribute("aria-pressed", scenario.id === state.selected ? "true" : "false");
+
+        const eyebrow = document.createElement("small");
+        eyebrow.textContent = scenario.eyebrow;
+        const title = document.createElement("strong");
+        title.textContent = scenario.title;
+        const symptom = document.createElement("span");
+        symptom.textContent = scenario.symptom;
+        const meta = document.createElement("div");
+        meta.className = "scenario-meta";
+        const candidate = document.createElement("span");
+        candidate.textContent = scenario.candidate_count + " candidates";
+        const repeats = document.createElement("span");
+        repeats.textContent = scenario.repeat_count + " repeats";
+        meta.append(candidate, repeats);
+        button.append(eyebrow, title, symptom, meta);
+        button.addEventListener("click", () => {
+          if (state.activeRunId) return;
+          state.selected = scenario.id;
+          renderScenarios();
+          updateSubtitle();
+        });
+        elements.scenarioList.append(button);
+      });
+    }
+
+    function updateSubtitle() {
+      const scenario = state.scenarios.find(item => item.id === state.selected);
+      if (scenario) elements.subtitle.textContent = scenario.hypothesis;
+    }
+
+    function showView(name) {
+      elements.emptyState.classList.toggle("hidden", name !== "empty");
+      elements.runningView.classList.toggle("hidden", name !== "running");
+      elements.resultView.classList.toggle("hidden", name !== "result");
+    }
+
+    async function startRun() {
+      if (!state.selected || state.activeRunId) return;
+      elements.runButton.disabled = true;
+      elements.runButton.textContent = "Experiment running…";
+      elements.runStatus.className = "pill running";
+      elements.runStatus.textContent = "Running";
+      showView("running");
+      elements.eventList.replaceChildren();
+      renderProgress({
+        progress: { stage: "queued", completed: 0, total: 12, message: "Experiment queued locally" },
+        events: []
+      });
+      try {
+        const response = await fetch("/api/runs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body: JSON.stringify({ scenario_id: state.selected })
+        });
+        if (!response.ok) throw new Error("The experiment could not start");
+        const run = await response.json();
+        state.activeRunId = run.id;
+        pollRun();
+      } catch (error) {
+        resetAfterFailure("The local experiment could not start. Try again.");
+      }
+    }
+
+    async function pollRun() {
+      if (!state.activeRunId) return;
+      try {
+        const response = await fetch("/api/runs/" + state.activeRunId, {
+          headers: { "Accept": "application/json" }
+        });
+        if (!response.ok) throw new Error("Experiment status unavailable");
+        const run = await response.json();
+        renderProgress(run);
+        if (run.status === "complete") {
+          renderResult(run);
+          return;
+        }
+        if (run.status === "failed") {
+          resetAfterFailure(run.error || "The fixed experiment did not complete.");
+          return;
+        }
+        state.timer = window.setTimeout(pollRun, 180);
+      } catch (error) {
+        resetAfterFailure("The evidence stream was interrupted. Start a fresh run.");
+      }
+    }
+
+    function renderProgress(run) {
+      const progress = run.progress;
+      const labels = {
+        queued: "Queueing experiment",
+        capturing: "Capturing failing baseline",
+        intervening: "Testing one-variable counterfactuals",
+        complete: "Causal receipt complete"
+      };
+      elements.progressStage.textContent = labels[progress.stage] || "Running experiment";
+      elements.progressMessage.textContent = progress.message;
+      elements.progressCount.textContent = progress.completed + " / " + progress.total;
+      elements.progressTrack.setAttribute("aria-valuemax", String(progress.total));
+      elements.progressTrack.setAttribute("aria-valuenow", String(progress.completed));
+      const percent = progress.total ? (progress.completed / progress.total) * 100 : 0;
+      elements.progressFill.style.width = percent + "%";
+
+      elements.eventList.replaceChildren();
+      run.events.forEach((event, index) => {
+        const item = document.createElement("li");
+        const marker = document.createElement("span");
+        marker.className = "event-index";
+        marker.textContent = String(index + 1).padStart(2, "0") + " / " + event.stage;
+        const message = document.createElement("span");
+        message.textContent = event.message;
+        item.append(marker, message);
+        elements.eventList.append(item);
+      });
+    }
+
+    function renderResult(run) {
+      window.clearTimeout(state.timer);
+      const result = run.result;
+      const flip = result.first_repeatable_flip;
+      elements.runStatus.className = "pill complete";
+      elements.runStatus.textContent = "Evidence ready";
+      document.getElementById("verdictTitle").textContent =
+        flip.variable + " caused the first repeatable flip";
+      document.getElementById("causalExplanation").textContent = result.causal_explanation;
+      document.getElementById("flipTransition").textContent =
+        flip.baseline_status + " → " + flip.counterfactual_status;
+      document.getElementById("baselineMetric").textContent =
+        result.baseline_capture.repetitions + "/" + result.baseline_capture.repetitions + " " +
+        result.baseline_capture.status.toLowerCase();
+      document.getElementById("counterfactualMetric").textContent =
+        flip.repeat_count + "/" + flip.repeat_count + " " + flip.counterfactual_status.toLowerCase();
+      document.getElementById("effectMetric").textContent =
+        Math.round(result.confidence.absolute_pass_rate_change * 100) + "%";
+
+      const rows = document.getElementById("interventionRows");
+      rows.replaceChildren();
+      result.interventions.forEach(intervention => {
+        const row = document.createElement("tr");
+        const values = [
+          String(intervention.order).padStart(2, "0"),
+          intervention.variable,
+          intervention.from + " → " + intervention.to,
+          intervention.pass_count + "/" + intervention.trials.length + " pass",
+          intervention.flipped ? "CAUSAL FLIP" : "NO FLIP"
+        ];
+        values.forEach((value, index) => {
+          const cell = document.createElement("td");
+          if (index === 0 || index === 1 || index === 2) cell.className = "mono";
+          if (index === 4) {
+            const chip = document.createElement("span");
+            chip.className = "status-chip " + (intervention.flipped ? "pass" : "fail");
+            chip.textContent = value;
+            cell.append(chip);
+          } else {
+            cell.textContent = value;
+          }
+          row.append(cell);
+        });
+        rows.append(row);
+      });
+
+      const mechanism = document.getElementById("mechanism");
+      mechanism.replaceChildren();
+      const lead = document.createElement("strong");
+      lead.textContent = "Observed mechanism. ";
+      mechanism.append(lead, document.createTextNode(result.mechanism));
+
+      state.recipe = result.copyable_recipe;
+      document.getElementById("recipeText").textContent =
+        result.recipe.launch_command + "\n" +
+        result.recipe.command + "\n\n" +
+        result.copyable_recipe;
+      document.getElementById("receiptId").textContent =
+        "receipt " + result.experiment_id.slice(0, 8);
+      document.getElementById("downloadButton").href =
+        "/api/runs/" + run.id + "/export";
+      showView("result");
+      state.activeRunId = null;
+      elements.runButton.disabled = false;
+      elements.runButton.textContent = "Run again";
+      renderScenarios();
+    }
+
+    function resetAfterFailure(message) {
+      window.clearTimeout(state.timer);
+      state.activeRunId = null;
+      elements.runStatus.className = "pill";
+      elements.runStatus.textContent = "Needs retry";
+      elements.progressStage.textContent = "Experiment stopped";
+      elements.progressMessage.textContent = message;
+      elements.runButton.disabled = false;
+      elements.runButton.textContent = "Retry experiment";
+      renderScenarios();
+    }
+
+    async function copyRecipe() {
+      const button = document.getElementById("copyButton");
+      try {
+        await navigator.clipboard.writeText(state.recipe);
+      } catch (error) {
+        const field = document.createElement("textarea");
+        field.value = state.recipe;
+        document.body.append(field);
+        field.select();
+        document.execCommand("copy");
+        field.remove();
+      }
+      button.textContent = "Copied";
+      window.setTimeout(() => { button.textContent = "Copy recipe"; }, 1400);
+    }
+
+    elements.runButton.addEventListener("click", startRun);
+    document.getElementById("copyButton").addEventListener("click", copyRecipe);
+    setThemeButtonLabel();
+    loadScenarios();
+  </script>
+</body>
+</html>
