@@ -6,7 +6,7 @@
     throw new Error("Voice Orbit core failed to load.");
   }
 
-  const machine = new Core.VoiceOrbitMachine();
+  let machine = new Core.VoiceOrbitMachine();
   const elements = {
     launch: document.getElementById("launch-screen"),
     workspace: document.getElementById("workspace"),
@@ -53,6 +53,7 @@
   const runtime = {
     started: false,
     simulation: false,
+    epoch: new Core.SessionEpoch(),
     stream: null,
     recognition: null,
     recognitionWanted: false,
@@ -102,6 +103,21 @@
     document.body.classList.toggle("fallback-mode", mode === "fallback");
     elements.orbitPrompt.setAttribute("tabindex", "-1");
     elements.orbitPrompt.focus({ preventScroll: true });
+  }
+
+  function beginSession(mode) {
+    const generation = runtime.epoch.begin();
+    showWorkspace(mode);
+    dispatch({ type: "START", mode });
+    return generation;
+  }
+
+  function sessionIsCurrent(generation) {
+    return (
+      runtime.epoch.isCurrent(generation) &&
+      runtime.started &&
+      machine.state.status === "active"
+    );
   }
 
   function updateIndicator(element, status, override) {
@@ -295,6 +311,28 @@
     context.clearRect(0, 0, elements.canvas.width, elements.canvas.height);
   }
 
+  function stopMediaStream(stream) {
+    if (!stream) {
+      return;
+    }
+    stream.getTracks().forEach((track) => {
+      track.onended = null;
+      track.onmute = null;
+      track.onunmute = null;
+      track.stop();
+    });
+    if (elements.cameraPreview.srcObject === stream) {
+      elements.cameraPreview.srcObject = null;
+    }
+  }
+
+  function discardSessionStream(stream) {
+    if (runtime.stream === stream) {
+      runtime.stream = null;
+    }
+    stopMediaStream(stream);
+  }
+
   function stopRuntimeSensors() {
     runtime.recognitionWanted = false;
     if (runtime.recognitionRestart) {
@@ -319,15 +357,9 @@
     }
     runtime.simulationTimers.forEach((timer) => window.clearTimeout(timer));
     runtime.simulationTimers = [];
-    if (runtime.stream) {
-      runtime.stream.getTracks().forEach((track) => {
-        track.onended = null;
-        track.onmute = null;
-        track.onunmute = null;
-        track.stop();
-      });
-      runtime.stream = null;
-    }
+    const stream = runtime.stream;
+    runtime.stream = null;
+    stopMediaStream(stream);
     elements.cameraPreview.srcObject = null;
     if (runtime.previousFrame) {
       runtime.previousFrame.fill(0);
@@ -335,6 +367,7 @@
     runtime.previousFrame = null;
     clearAnalysisCanvas();
     runtime.detector = null;
+    runtime.detectorBusy = false;
     runtime.baseline = null;
     runtime.stableIndex = null;
     runtime.dwellProgress = 0;
@@ -347,6 +380,9 @@
     machine.dispatch(action);
     render();
 
+    if (previousStatus !== "stopped" && machine.state.status === "stopped") {
+      runtime.epoch.invalidate();
+    }
     if (action.type === "VOICE" && machine.state.lastAction === "route-locked") {
       elements.lastHeard.textContent =
         "Route locked after confirmation. Say “undo” or explicitly choose New route first.";
@@ -530,13 +566,17 @@
     processGestureSample(aim, gestureY, now);
   }
 
-  async function analyzeFace(now) {
-    if (runtime.detectorBusy || !runtime.detector) {
+  async function analyzeFace(now, generation) {
+    const detector = runtime.detector;
+    if (runtime.detectorBusy || !detector || !sessionIsCurrent(generation)) {
       return;
     }
     runtime.detectorBusy = true;
     try {
-      const faces = await runtime.detector.detect(elements.cameraPreview);
+      const faces = await detector.detect(elements.cameraPreview);
+      if (!sessionIsCurrent(generation) || runtime.detector !== detector) {
+        return;
+      }
       if (faces.length) {
         processFace(faces[0], now);
       } else if (now - runtime.lastFaceAt > 1100) {
@@ -550,10 +590,15 @@
         elements.estimatorLabel.textContent = "FACE LOST";
       }
     } catch (error) {
+      if (!sessionIsCurrent(generation) || runtime.detector !== detector) {
+        return;
+      }
       setSensor("estimator", "error", "FaceDetector failed");
       dispatch({ type: "ERROR", area: "estimator", code: error.name || "face-detector" });
     } finally {
-      runtime.detectorBusy = false;
+      if (runtime.detector === detector) {
+        runtime.detectorBusy = false;
+      }
     }
   }
 
@@ -620,23 +665,28 @@
     }
   }
 
-  function analysisLoop(timestamp) {
-    if (!runtime.stream || machine.state.status === "stopped") {
+  function analysisLoop(timestamp, generation) {
+    if (!runtime.stream || !sessionIsCurrent(generation)) {
       return;
     }
     const now = Date.now();
     if (elements.cameraPreview.readyState >= 2 && timestamp - runtime.lastAnalysisAt > 110) {
       runtime.lastAnalysisAt = timestamp;
       if (runtime.detector) {
-        void analyzeFace(now);
+        void analyzeFace(now, generation);
       } else {
         analyzeMotion(now);
       }
     }
-    runtime.analysisFrame = window.requestAnimationFrame(analysisLoop);
+    runtime.analysisFrame = window.requestAnimationFrame((nextTimestamp) =>
+      analysisLoop(nextTimestamp, generation),
+    );
   }
 
-  function startEstimator() {
+  function startEstimator(generation) {
+    if (!sessionIsCurrent(generation)) {
+      return;
+    }
     runtime.lastFaceAt = Date.now();
     runtime.baseline = null;
     runtime.baselineSamples = 0;
@@ -657,7 +707,9 @@
       elements.estimatorLabel.textContent = "MOTION FALLBACK";
       elements.interactionMode.textContent = "COARSE FRAME-MOTION FALLBACK · NOT EYE TRACKING";
     }
-    runtime.analysisFrame = window.requestAnimationFrame(analysisLoop);
+    runtime.analysisFrame = window.requestAnimationFrame((timestamp) =>
+      analysisLoop(timestamp, generation),
+    );
   }
 
   function speechErrorCode(event) {
@@ -665,7 +717,8 @@
   }
 
   function startSpeechRecognition() {
-    if (machine.state.status !== "active" || !runtime.stream) {
+    const generation = runtime.epoch.current();
+    if (!sessionIsCurrent(generation) || !runtime.stream) {
       return;
     }
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -686,7 +739,7 @@
     recognition.onstart = () => {
       if (
         !runtime.recognitionWanted ||
-        machine.state.status !== "active" ||
+        !sessionIsCurrent(generation) ||
         runtime.recognition !== recognition
       ) {
         try {
@@ -702,7 +755,7 @@
     recognition.onresult = (event) => {
       if (
         !runtime.recognitionWanted ||
-        machine.state.status !== "active" ||
+        !sessionIsCurrent(generation) ||
         runtime.recognition !== recognition
       ) {
         return;
@@ -725,7 +778,7 @@
       }
     };
     recognition.onerror = (event) => {
-      if (machine.state.status !== "active" || runtime.recognition !== recognition) {
+      if (!sessionIsCurrent(generation) || runtime.recognition !== recognition) {
         return;
       }
       const code = speechErrorCode(event);
@@ -755,7 +808,7 @@
     recognition.onend = () => {
       if (
         !runtime.recognitionWanted ||
-        machine.state.status !== "active" ||
+        !sessionIsCurrent(generation) ||
         runtime.recognition !== recognition
       ) {
         return;
@@ -763,7 +816,7 @@
       runtime.recognitionRestart = window.setTimeout(() => {
         if (
           !runtime.recognitionWanted ||
-          machine.state.status !== "active" ||
+          !sessionIsCurrent(generation) ||
           runtime.recognition !== recognition
         ) {
           return;
@@ -801,8 +854,7 @@
     if (runtime.started) {
       return;
     }
-    showWorkspace("fallback");
-    dispatch({ type: "START", mode: "fallback" });
+    beginSession("fallback");
     elements.interactionMode.textContent = "KEYBOARD + TOUCH · NO MEDIA";
     elements.estimatorLabel.textContent = "NOT REQUESTED";
     elements.lastHeard.textContent =
@@ -816,8 +868,7 @@
     if (runtime.started) {
       return;
     }
-    showWorkspace("live");
-    dispatch({ type: "START", mode: "live" });
+    const generation = beginSession("live");
     announce("Requesting local camera and microphone permission.");
     elements.startLive.disabled = true;
     elements.startFallback.disabled = true;
@@ -844,8 +895,8 @@
           autoGainControl: true,
         },
       });
-      if (machine.state.status === "stopped") {
-        stream.getTracks().forEach((track) => track.stop());
+      if (!sessionIsCurrent(generation)) {
+        discardSessionStream(stream);
         return;
       }
       runtime.stream = stream;
@@ -869,24 +920,31 @@
       try {
         await elements.cameraPreview.play();
       } catch (error) {
+        if (!sessionIsCurrent(generation) || runtime.stream !== stream) {
+          discardSessionStream(stream);
+          return;
+        }
         dispatch({
           type: "ERROR",
           area: "camera-preview",
           code: error.name || "autoplay",
         });
       }
-      if (machine.state.status !== "active" || runtime.stream !== stream) {
-        stopRuntimeSensors();
+      if (!sessionIsCurrent(generation) || runtime.stream !== stream) {
+        discardSessionStream(stream);
         return;
       }
-      startEstimator();
-      if (machine.state.status !== "active" || runtime.stream !== stream) {
-        stopRuntimeSensors();
+      startEstimator(generation);
+      if (!sessionIsCurrent(generation) || runtime.stream !== stream) {
+        discardSessionStream(stream);
         return;
       }
       startSpeechRecognition();
       announce("Sensors active. Speak a broad intent.");
     } catch (error) {
+      if (!sessionIsCurrent(generation)) {
+        return;
+      }
       const code = error && error.name ? error.name : "permission-error";
       setSensor("camera", "denied", code);
       setSensor("microphone", "denied", code);
@@ -898,8 +956,9 @@
   }
 
   function simulationStep(delay, label, action, spokenText) {
+    const generation = runtime.epoch.current();
     const timer = window.setTimeout(() => {
-      if (machine.state.status !== "active") {
+      if (!sessionIsCurrent(generation)) {
         return;
       }
       if (spokenText) {
@@ -917,8 +976,7 @@
     if (runtime.started) {
       return;
     }
-    showWorkspace("simulation");
-    dispatch({ type: "START", mode: "simulation" });
+    const generation = beginSession("simulation");
     elements.interactionMode.textContent = "DETERMINISTIC COARSE-GAZE SIMULATION";
     elements.estimatorLabel.textContent = "SIMULATION READY";
     elements.lastHeard.textContent = "Simulation will complete the shared mission hands-free.";
@@ -971,6 +1029,9 @@
       source: "simulation-camera",
     });
     const finishTimer = window.setTimeout(() => {
+      if (!sessionIsCurrent(generation)) {
+        return;
+      }
       const record = machine.exportRecord();
       if (record.complete && record.taskExact) {
         elements.lastHeard.textContent =
@@ -1002,6 +1063,46 @@
         ),
       )
     );
+  }
+
+  function terminateForPageHide() {
+    runtime.epoch.invalidate();
+    if (machine.state.status === "active") {
+      machine.dispatch({ type: "STOP", source: "pagehide" });
+    }
+    stopRuntimeSensors();
+    if (runtime.started) {
+      render();
+    }
+  }
+
+  function restoreFromPageCache(event) {
+    if (!event.persisted) {
+      return;
+    }
+    runtime.epoch.invalidate();
+    if (machine.state.status === "active") {
+      machine.dispatch({ type: "STOP", source: "pageshow" });
+    }
+    stopRuntimeSensors();
+    machine = new Core.VoiceOrbitMachine();
+    runtime.started = false;
+    runtime.simulation = false;
+    runtime.petalSignature = "";
+    elements.launch.hidden = false;
+    elements.workspace.hidden = true;
+    elements.startLive.disabled = false;
+    elements.startFallback.disabled = false;
+    elements.startSimulation.disabled = false;
+    elements.lastHeard.textContent = "Listening begins after start.";
+    elements.speechCaveat.textContent = "Browser speech service may be network-backed.";
+    elements.estimatorLabel.textContent = "WAITING";
+    elements.interactionMode.textContent = "COARSE WEBCAM ESTIMATE";
+    elements.sessionTime.textContent = "00:00.0";
+    document.body.classList.remove("simulation-mode", "fallback-mode", "session-complete");
+    render();
+    announce("Page restored safely. Start a new session when ready.");
+    elements.startLive.focus({ preventScroll: true });
   }
 
   elements.startLive.addEventListener("click", () => void startLive());
@@ -1055,7 +1156,8 @@
   });
 
   window.addEventListener("resize", positionPetals);
-  window.addEventListener("pagehide", stopRuntimeSensors);
+  window.addEventListener("pagehide", terminateForPageHide);
+  window.addEventListener("pageshow", restoreFromPageCache);
   window.setInterval(() => {
     if (!runtime.started) {
       return;
@@ -1067,9 +1169,18 @@
 
   render();
   const query = new URLSearchParams(window.location.search);
+  const initialGeneration = runtime.epoch.current();
   if (query.get("simulate") === "1") {
-    window.setTimeout(startSimulation, 0);
+    window.setTimeout(() => {
+      if (runtime.epoch.isCurrent(initialGeneration) && !runtime.started) {
+        startSimulation();
+      }
+    }, 0);
   } else if (query.get("fallback") === "1") {
-    window.setTimeout(startFallback, 0);
+    window.setTimeout(() => {
+      if (runtime.epoch.isCurrent(initialGeneration) && !runtime.started) {
+        startFallback();
+      }
+    }, 0);
   }
 })();

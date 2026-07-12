@@ -80,6 +80,9 @@ Negation is scoped to fragile, delicate, and handle-with-care phrasing.
 - Every awaited media step rechecks the active session. Stop cleanup is
   idempotent, removes every recognition callback/restart, and cannot revive
   speech after a delayed preview start.
+- `pagehide` invalidates the session generation, marks the machine stopped, and
+  releases resources. A persisted `pageshow` restores a clean, sensor-off
+  launch screen; delayed media from the old generation is stopped on arrival.
 - This is not medical-grade eye tracking and does not claim pixel accuracy.
 
 Webcam frames stay in memory only long enough for local analysis. The

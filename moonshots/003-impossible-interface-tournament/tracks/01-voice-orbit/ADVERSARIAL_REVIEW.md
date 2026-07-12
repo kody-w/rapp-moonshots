@@ -15,6 +15,7 @@ coarse and browser-dependent.
 | Face leaves frame | Stale highlight | Estimator loss clears highlight and freezes commits | Detection may report loss late |
 | Camera/mic track ends or mutes | Missing modality | Immediate freeze; priority controls remain | Voice stop cannot work after mic loss; keyboard/touch stop remains |
 | Stop occurs while preview playback is awaited | Speech could start after stop | Active/stream recheck after await; unconditional idempotent cleanup detaches recognizer callbacks and restarts | Browser-level media teardown still depends on platform APIs |
+| Page enters bfcache during media permission/playback | Delayed stream could revive a cached session | Pagehide invalidates generation and stops state/resources; persisted pageshow creates a clean restart screen | Browser lifecycle delivery remains platform-controlled |
 | Speech hears `confirm` incorrectly | Wrong commit | Confirmation requires an existing highlight | Highlight itself can be wrong |
 | New route values spoken after commit | Confirmed task silently changes | Committed/complete stages reject all parsed route mutations until undo/new route | User must notice the rejection prompt/event |
 | Unsupported destination follows a valid one | Stale valid value could survive | Destination-like unsupported speech clears the field and emits a repair | Vocabulary remains intentionally limited |

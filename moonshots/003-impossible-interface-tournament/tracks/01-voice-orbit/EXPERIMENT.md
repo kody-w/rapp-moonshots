@@ -60,6 +60,7 @@ participants or media.
 | Handling negation | Negation applies to fragile, delicate, and handle-with-care only |
 | Repeated safety | Repeated stop preserves first stop time; non-voice empty undo is not a voice repair |
 | Speech separation | Service denial disables retries but leaves an active mic and non-speech confirmations available |
+| Page lifecycle | Pagehide invalidates delayed media; bfcache restore is clean and sensor-off |
 | Theme | Exact Clawpilot variables and required fonts present |
 
 ## Metrics

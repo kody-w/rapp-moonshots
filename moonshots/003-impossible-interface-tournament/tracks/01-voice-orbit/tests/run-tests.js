@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const {
   NodGestureGate,
+  SessionEpoch,
   VoiceOrbitMachine,
   isSupportedDestination,
   normalizeDestinationIdentifier,
@@ -199,6 +200,45 @@ test("center rest cancels a downward aim without completing a nod", () => {
     now: 430,
   });
   assert.equal(explicitReturnToPetalPose.confirmed, true);
+});
+
+test("pagehide generation invalidates delayed media before a clean restart", () => {
+  const epoch = new SessionEpoch();
+  const delayedGeneration = epoch.begin();
+  const track = {
+    stopped: false,
+    stop() {
+      this.stopped = true;
+    },
+  };
+  const machine = new VoiceOrbitMachine();
+  machine.dispatch({ type: "START", mode: "live" });
+  let recognitionStarts = 0;
+
+  epoch.invalidate();
+  machine.dispatch({ type: "STOP", source: "pagehide" });
+  if (!epoch.isCurrent(delayedGeneration)) {
+    track.stop();
+  }
+  if (epoch.isCurrent(delayedGeneration)) {
+    recognitionStarts += 1;
+  }
+  assert.equal(track.stopped, true);
+  assert.equal(recognitionStarts, 0);
+  assert.equal(machine.state.status, "stopped");
+  assert.equal(epoch.isCurrent(delayedGeneration), false);
+
+  const restoredMachine = new VoiceOrbitMachine();
+  assert.equal(restoredMachine.state.status, "idle");
+  assert.deepEqual(restoredMachine.state.sensors, {
+    camera: "off",
+    microphone: "off",
+    speech: "off",
+    estimator: "waiting",
+  });
+  const restartedGeneration = epoch.begin();
+  assert.equal(epoch.isCurrent(restartedGeneration), true);
+  assert.equal(epoch.isCurrent(delayedGeneration), false);
 });
 
 test("every interaction stage emits four to eight petals", () => {

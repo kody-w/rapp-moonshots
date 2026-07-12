@@ -134,7 +134,7 @@ check("no-media fallback cannot request microphone or start speech", () => {
   const fallback = section(app, "function startFallback()", "async function startLive()");
   assert.match(index, /id="start-fallback"/);
   assert.match(index, /No camera · no microphone · no speech service/);
-  assert.match(fallback, /type: "START", mode: "fallback"/);
+  assert.match(fallback, /beginSession\("fallback"\)/);
   assert.doesNotMatch(fallback, /getUserMedia/);
   assert.doesNotMatch(fallback, /startSpeechRecognition/);
   assert.doesNotMatch(fallback, /SpeechRecognition/);
@@ -148,17 +148,24 @@ check("preview and recognition stop races fail closed", () => {
   const speech = section(app, "function startSpeechRecognition()", "function bindTrackSafety(");
   const cleanup = section(app, "function stopRuntimeSensors()", "function dispatch(action)");
   const dispatcher = section(app, "function dispatch(action)", "function setSensor(");
+  const mediaIndex = live.indexOf("await navigator.mediaDevices.getUserMedia");
+  const postMediaGuard = live.indexOf("if (!sessionIsCurrent(generation))", mediaIndex);
   const playIndex = live.indexOf("await elements.cameraPreview.play()");
   const postPlayGuard = live.indexOf(
-    'if (machine.state.status !== "active" || runtime.stream !== stream)',
+    "if (!sessionIsCurrent(generation) || runtime.stream !== stream)",
     playIndex,
   );
   const recognitionIndex = live.indexOf("startSpeechRecognition()");
-  assert.ok(playIndex >= 0 && postPlayGuard > playIndex && recognitionIndex > postPlayGuard);
-  assert.match(
-    speech,
-    /if \(machine\.state\.status !== "active" \|\| !runtime\.stream\)\s*{\s*return;/,
+  assert.ok(
+    mediaIndex >= 0 &&
+      postMediaGuard > mediaIndex &&
+      playIndex > postMediaGuard &&
+      postPlayGuard > playIndex &&
+      recognitionIndex > postPlayGuard,
   );
+  assert.match(live, /discardSessionStream\(stream\)/);
+  assert.match(speech, /const generation = runtime\.epoch\.current\(\)/);
+  assert.match(speech, /if \(!sessionIsCurrent\(generation\) \|\| !runtime\.stream\)/);
   assert.match(speech, /runtime\.recognition !== recognition/);
   assert.match(cleanup, /runtime\.recognition\.onstart = null/);
   assert.match(cleanup, /runtime\.recognition\.onresult = null/);
@@ -210,7 +217,11 @@ check("native Enter activation is preserved for interactive controls", () => {
 });
 
 check("center aim precedes the independent nod gesture signal", () => {
-  const face = section(app, "function processFace(face, now)", "async function analyzeFace(now)");
+  const face = section(
+    app,
+    "function processFace(face, now)",
+    "async function analyzeFace(now, generation)",
+  );
   const aimIndex = face.indexOf("updateDirectionalAim(");
   const gestureIndex = face.indexOf("processGestureSample(");
   assert.ok(aimIndex >= 0 && gestureIndex > aimIndex);
@@ -220,13 +231,45 @@ check("center aim precedes the independent nod gesture signal", () => {
 });
 
 check("analysis canvas is cleared after sampling and during cleanup", () => {
-  const motion = section(app, "function analyzeMotion(now)", "function analysisLoop(timestamp)");
+  const motion = section(
+    app,
+    "function analyzeMotion(now)",
+    "function analysisLoop(timestamp, generation)",
+  );
   const cleanup = section(app, "function stopRuntimeSensors()", "function dispatch(action)");
   assert.match(motion, /getImageData\([^;]+;\s*}\s*finally\s*{\s*context\.clearRect\(/s);
   assert.match(motion, /pixels\.fill\(0\)/);
   assert.match(cleanup, /runtime\.previousFrame\.fill\(0\)/);
   assert.match(cleanup, /clearAnalysisCanvas\(\)/);
-  assert.match(app, /window\.addEventListener\("pagehide", stopRuntimeSensors\)/);
+  assert.match(app, /window\.addEventListener\("pagehide", terminateForPageHide\)/);
+});
+
+check("page lifecycle invalidates delayed media and safely resets bfcache state", () => {
+  const live = section(app, "async function startLive()", "function simulationStep(");
+  const pagehide = section(app, "function terminateForPageHide()", "function restoreFromPageCache(");
+  const pageshow = section(
+    app,
+    "function restoreFromPageCache(event)",
+    'elements.startLive.addEventListener("click"',
+  );
+  assert.match(core, /class SessionEpoch/);
+  assert.match(live, /const generation = beginSession\("live"\)/);
+  assert.match(live, /if \(!sessionIsCurrent\(generation\)\)\s*{\s*discardSessionStream\(stream\)/);
+  assert.match(
+    live,
+    /if \(!sessionIsCurrent\(generation\) \|\| runtime\.stream !== stream\)\s*{\s*discardSessionStream\(stream\)/,
+  );
+  const invalidationIndex = pagehide.indexOf("runtime.epoch.invalidate()");
+  const terminalIndex = pagehide.indexOf('machine.dispatch({ type: "STOP", source: "pagehide" })');
+  const cleanupIndex = pagehide.indexOf("stopRuntimeSensors()");
+  assert.ok(invalidationIndex >= 0 && terminalIndex > invalidationIndex && cleanupIndex > terminalIndex);
+  assert.match(pagehide, /machine\.dispatch\({ type: "STOP", source: "pagehide" }\)/);
+  assert.match(pageshow, /if \(!event\.persisted\)/);
+  assert.match(pageshow, /machine = new Core\.VoiceOrbitMachine\(\)/);
+  assert.match(pageshow, /runtime\.started = false/);
+  assert.match(pageshow, /elements\.launch\.hidden = false/);
+  assert.match(pageshow, /elements\.workspace\.hidden = true/);
+  assert.match(app, /window\.addEventListener\("pageshow", restoreFromPageCache\)/);
 });
 
 check("safety, fallback, and local export controls are visible", () => {

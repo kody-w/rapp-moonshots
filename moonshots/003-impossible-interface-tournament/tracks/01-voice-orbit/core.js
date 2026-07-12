@@ -205,6 +205,30 @@
     );
   }
 
+  class SessionEpoch {
+    constructor() {
+      this.value = 0;
+    }
+
+    begin() {
+      this.value += 1;
+      return this.value;
+    }
+
+    invalidate() {
+      this.value += 1;
+      return this.value;
+    }
+
+    current() {
+      return this.value;
+    }
+
+    isCurrent(generation) {
+      return generation === this.value;
+    }
+  }
+
   class NodGestureGate {
     constructor(configuration) {
       const options = configuration || {};
@@ -1150,6 +1174,7 @@
     SUPPORTED_DESTINATIONS,
     TASK_TEMPLATE,
     NodGestureGate,
+    SessionEpoch,
     VoiceOrbitMachine,
     isSupportedDestination,
     normalizeDestinationIdentifier,

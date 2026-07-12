@@ -5,7 +5,9 @@
 Say **stop** or use **Stop sensors**. Voice Orbit stops every media track,
 stops speech recognition, cancels frame analysis, clears ephemeral frame
 buffers, detaches the preview, and freezes the state. Navigating away also runs
-the same cleanup through `pagehide`.
+the same cleanup through `pagehide`, invalidates in-flight media work, and
+marks the session stopped. A bfcache return shows a clean restart screen rather
+than reviving the prior sensor state.
 
 Browser permission can additionally be revoked from the site-permission icon.
 The app creates no service worker, background process, database, cookie, local
