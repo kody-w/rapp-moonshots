@@ -42,7 +42,14 @@ Each finalist must provide:
 Tracks execute independently. Shared infrastructure is read-only until two
 tracks prove they need the same capability.
 
+## Finalists
+
+1. [Resurrection Proof](tracks/01-resurrection-proof/)
+2. [Counterfactual Repro Lab](tracks/02-counterfactual-repro-lab/)
+3. [Ghost Ops](tracks/03-ghost-ops/)
+
+See [`SELECTION.md`](SELECTION.md) for the decision record.
+
 ## Status
 
-**Active — discovery and selection**
-
+**Active — three applications building in parallel**
