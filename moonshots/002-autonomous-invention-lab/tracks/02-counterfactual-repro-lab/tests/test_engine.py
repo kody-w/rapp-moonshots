@@ -1,9 +1,18 @@
 import json
 import shutil
+import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from counterfactual_lab import ExperimentRunner, SCENARIOS, UnknownScenarioError
+from counterfactual_lab import (
+    ExperimentCancelled,
+    ExperimentRunner,
+    FixtureExecutionError,
+    SCENARIOS,
+    UnknownScenarioError,
+    WorkspaceCleanupError,
+)
 
 
 TRACK_ROOT = Path(__file__).resolve().parent.parent
@@ -52,9 +61,14 @@ class ExperimentRunnerTests(unittest.TestCase):
                 self.assertEqual(flip["pass_count"], 3)
                 self.assertEqual(result["metrics"]["trials_run"], 12)
                 self.assertEqual(result["metrics"]["workspaces_cleaned"], 12)
+                boundary = result["baseline_capture"]["environment_boundary"]
                 self.assertEqual(
-                    result["baseline_capture"]["inherited_environment_keys"], 0
+                    boundary["inherited_experiment_environment_keys"], 0
                 )
+                self.assertEqual(
+                    boundary["inherited_secret_environment_keys"], 0
+                )
+                self.assertFalse(boundary["bootstrap_values_recorded"])
                 self.assertEqual(
                     result["baseline_capture"]["private_data_fields_captured"], 0
                 )
@@ -71,6 +85,7 @@ class ExperimentRunnerTests(unittest.TestCase):
             for trial in intervention["trials"]:
                 self.assertEqual(len(trial["manifest_sha256"]), 64)
                 self.assertEqual(len(trial["environment_sha256"]), 64)
+                self.assertTrue(trial["workspace_cleanup_verified"])
         self.assertFalse(result["interventions"][0]["flipped"])
         self.assertFalse(result["interventions"][1]["flipped"])
         self.assertTrue(result["interventions"][2]["flipped"])
@@ -97,6 +112,58 @@ class ExperimentRunnerTests(unittest.TestCase):
     def test_runtime_root_cannot_escape_the_owned_track(self):
         with self.assertRaisesRegex(ValueError, "inside Track 02"):
             ExperimentRunner(runtime_root=TRACK_ROOT.parent / "outside-track")
+
+    def test_windows_environment_keeps_only_required_bootstrap_key(self):
+        controlled = SCENARIOS["line-endings"].baseline_dict()
+        environment = self.runner._fixture_environment(
+            controlled,
+            host_environment={
+                "SYSTEMROOT": r"C:\Windows",
+                "PATH": r"C:\untrusted",
+                "API_TOKEN": "must-not-cross-boundary",
+            },
+            platform_name="nt",
+        )
+        self.assertEqual(environment["SYSTEMROOT"], r"C:\Windows")
+        self.assertNotIn("PATH", environment)
+        self.assertNotIn("API_TOKEN", environment)
+        self.assertEqual(
+            set(environment) - {"SYSTEMROOT"},
+            {
+                "CFR_CHECKOUT_LINE_ENDING",
+                "CFR_PROCESS_LOCALE",
+                "CFR_RUNTIME_VALIDATION",
+            },
+        )
+        with self.assertRaisesRegex(FixtureExecutionError, "SYSTEMROOT"):
+            self.runner._fixture_environment(
+                controlled,
+                host_environment={"PATH": r"C:\untrusted"},
+                platform_name="nt",
+            )
+
+    def test_cancellation_waits_until_current_workspace_is_clean(self):
+        cancel_event = threading.Event()
+
+        def cancel_after_first_trial(event):
+            if event["completed"] == 1:
+                cancel_event.set()
+
+        with self.assertRaises(ExperimentCancelled):
+            self.runner.run(
+                "line-endings",
+                progress=cancel_after_first_trial,
+                cancel_event=cancel_event,
+            )
+        self.assertEqual(list(TEST_ROOT.iterdir()), [])
+
+    def test_cleanup_residue_withholds_completed_receipt(self):
+        with patch("counterfactual_lab.engine.shutil.rmtree", return_value=None):
+            with self.assertRaisesRegex(WorkspaceCleanupError, "residue"):
+                self.runner.run("line-endings")
+        self.assertNotEqual(list(TEST_ROOT.iterdir()), [])
+        shutil.rmtree(TEST_ROOT)
+        TEST_ROOT.mkdir(parents=True)
 
 
 if __name__ == "__main__":

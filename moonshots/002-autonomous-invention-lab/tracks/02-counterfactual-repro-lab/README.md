@@ -46,15 +46,19 @@ Each trial records:
 - the allowlisted controlled environment and its SHA-256 digest,
 - a fixture and workspace-manifest digest,
 - expected versus actual observation,
-- status, exit code, duration, and cleanup evidence, and
-- zero inherited host-environment keys and zero private-data fields.
+- status, exit code, duration, and verified deletion evidence, and
+- zero inherited experiment/secret keys and zero private-data fields.
 
 ## Safety boundaries
 
 - The API accepts exactly one field: a seeded `scenario_id`.
 - The child process uses a fixed argument vector—never a shell.
 - The fixture receives a replacement allowlisted environment, not `os.environ`.
-- Trial files live under this track's `.runtime/` and are deleted after every run.
+  On Windows, only required `SYSTEMROOT` bootstraps Python; its value is neither
+  captured nor written to a receipt.
+- Trial files live under this track's `.runtime/`; deletion is verified after
+  every trial, and any residue withholds the completed receipt.
+- `Ctrl+C` cancels and joins tracked non-daemon workers before shutdown returns.
 - There are no network calls, remote writes, arbitrary commands, uploads, or
   dependency installs.
 - Static assets are self-contained and protected by a restrictive CSP.
@@ -73,7 +77,7 @@ python3 scripts/measure.py
 The committed experiment ran 36 isolated trials: **3/3 causes identified,
 9/9 baseline failures reproduced, 9/9 counterfactual passes repeated, six
 controls rejected, and zero residual workspaces**. Median scenario time was
-511.12 ms. See [`EXPERIMENT.md`](EXPERIMENT.md) and the machine-readable
+553.23 ms. See [`EXPERIMENT.md`](EXPERIMENT.md) and the machine-readable
 [`evidence/experiment-results.json`](evidence/experiment-results.json).
 
 ## Review package

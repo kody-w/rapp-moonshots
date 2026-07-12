@@ -2,13 +2,15 @@
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Mapping, Optional
 
 from .scenarios import BOUNDS, SCENARIOS, Intervention, Scenario
 
@@ -24,10 +26,19 @@ class FixtureExecutionError(RuntimeError):
     """Raised when the fixed fixture does not return valid evidence."""
 
 
+class ExperimentCancelled(RuntimeError):
+    """Raised after a shutdown request and verified workspace cleanup."""
+
+
+class WorkspaceCleanupError(RuntimeError):
+    """Raised when an isolated trial workspace cannot be proven deleted."""
+
+
 class ExperimentRunner:
     """Run fixed fixtures in disposable, track-local isolated workspaces."""
 
     repetitions = 3
+    windows_bootstrap_keys = ("SYSTEMROOT",)
 
     def __init__(self, runtime_root: Optional[Path] = None) -> None:
         track_root = Path(__file__).resolve().parent.parent
@@ -45,9 +56,11 @@ class ExperimentRunner:
         scenario_id: str,
         progress: ProgressCallback = None,
         experiment_id: Optional[str] = None,
+        cancel_event: Optional[threading.Event] = None,
     ) -> dict:
         if scenario_id not in SCENARIOS:
             raise UnknownScenarioError("Unknown seeded scenario: {0}".format(scenario_id))
+        self._raise_if_cancelled(cancel_event)
         scenario = SCENARIOS[scenario_id]
         run_id = experiment_id or uuid.uuid4().hex
         started = time.perf_counter()
@@ -64,9 +77,11 @@ class ExperimentRunner:
         baseline_environment = scenario.baseline_dict()
         baseline_trials: List[dict] = []
         for repetition in range(1, self.repetitions + 1):
+            self._raise_if_cancelled(cancel_event)
             trial = self._run_trial(
                 scenario, baseline_environment, "baseline", repetition, run_id
             )
+            self._raise_if_cancelled(cancel_event)
             baseline_trials.append(trial)
             completed += 1
             self._notify(
@@ -87,6 +102,7 @@ class ExperimentRunner:
         interventions: List[dict] = []
         first_flip: Optional[dict] = None
         for index, mutation in enumerate(scenario.interventions, start=1):
+            self._raise_if_cancelled(cancel_event)
             candidate = self._single_variable_candidate(
                 baseline_environment, mutation
             )
@@ -103,6 +119,7 @@ class ExperimentRunner:
             )
             trials = []
             for repetition in range(1, self.repetitions + 1):
+                self._raise_if_cancelled(cancel_event)
                 trial = self._run_trial(
                     scenario,
                     candidate,
@@ -110,6 +127,7 @@ class ExperimentRunner:
                     repetition,
                     run_id,
                 )
+                self._raise_if_cancelled(cancel_event)
                 trials.append(trial)
                 completed += 1
                 self._notify(
@@ -152,6 +170,20 @@ class ExperimentRunner:
             or first_flip["to"] != scenario.causal_value
         ):
             raise FixtureExecutionError("Seeded causal control produced an unexpected result")
+        self._raise_if_cancelled(cancel_event)
+
+        executed_trials = list(baseline_trials)
+        for intervention in interventions:
+            executed_trials.extend(intervention["trials"])
+        verified_cleanups = sum(
+            1
+            for trial in executed_trials
+            if trial.get("workspace_cleanup_verified") is True
+        )
+        if verified_cleanups != completed:
+            raise WorkspaceCleanupError(
+                "A completed receipt requires verified deletion of every workspace"
+            )
 
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
         baseline_label = "PASS" if baseline_passed else "FAIL"
@@ -193,6 +225,13 @@ class ExperimentRunner:
             ),
             "command": "python3 cli.py run {0} --json".format(scenario.id),
         }
+        bootstrap_keys = self._bootstrap_environment_key_names()
+        environment_boundary = {
+            "inherited_experiment_environment_keys": 0,
+            "inherited_secret_environment_keys": 0,
+            "windows_bootstrap_environment_keys": bootstrap_keys,
+            "bootstrap_values_recorded": False,
+        }
         result = {
             "schema": "counterfactual-repro-evidence/v1",
             "experiment_id": run_id,
@@ -211,7 +250,7 @@ class ExperimentRunner:
                 "repeatable": True,
                 "status": baseline_label,
                 "trials": baseline_trials,
-                "inherited_environment_keys": 0,
+                "environment_boundary": environment_boundary,
                 "private_data_fields_captured": 0,
             },
             "interventions": interventions,
@@ -238,8 +277,8 @@ class ExperimentRunner:
                 "shell": False,
                 "network_requests": 0,
                 "dependency_installs": 0,
-                "inherited_environment_keys": 0,
-                "workspace_cleanup": "completed after every trial",
+                "environment_boundary": environment_boundary,
+                "workspace_cleanup": "deletion verified after every trial",
             },
             "recipe": recipe,
             "copyable_recipe": json.dumps(recipe, indent=2, sort_keys=True),
@@ -247,7 +286,7 @@ class ExperimentRunner:
                 "duration_ms": duration_ms,
                 "trials_run": completed,
                 "variables_changed_per_trial": 1,
-                "workspaces_cleaned": completed,
+                "workspaces_cleaned": verified_cleanups,
             },
         }
         self._notify(
@@ -274,6 +313,7 @@ class ExperimentRunner:
         self._assert_workspace_path(workspace)
         workspace.mkdir(parents=True, exist_ok=False)
         started = time.perf_counter()
+        trial_result = None
         try:
             self._materialize(scenario.id, controlled_environment, workspace)
             manifest_sha256 = self._manifest_digest(workspace)
@@ -300,7 +340,7 @@ class ExperimentRunner:
             expected_exit = 0 if passed else 1
             if completed.returncode != expected_exit:
                 raise FixtureExecutionError("Fixture status and exit code disagree")
-            return {
+            trial_result = {
                 "repetition": repetition,
                 "workspace_id": workspace_id,
                 "passed": passed,
@@ -312,12 +352,16 @@ class ExperimentRunner:
                 "actual": observation["actual"],
                 "manifest_sha256": manifest_sha256,
                 "environment_sha256": self._environment_digest(controlled_environment),
-                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
             }
         except subprocess.TimeoutExpired as error:
             raise FixtureExecutionError("Fixed fixture exceeded its five-second limit") from error
         finally:
-            shutil.rmtree(workspace, ignore_errors=True)
+            self._remove_workspace_verified(workspace)
+        if trial_result is None:
+            raise FixtureExecutionError("Fixed fixture did not produce a trial result")
+        trial_result["workspace_cleanup_verified"] = True
+        trial_result["duration_ms"] = round((time.perf_counter() - started) * 1000, 2)
+        return trial_result
 
     @staticmethod
     def _single_variable_candidate(
@@ -336,8 +380,13 @@ class ExperimentRunner:
             raise FixtureExecutionError("Intervention did not change exactly one variable")
         return candidate
 
-    @staticmethod
-    def _fixture_environment(controlled: Dict[str, str]) -> Dict[str, str]:
+    @classmethod
+    def _fixture_environment(
+        cls,
+        controlled: Dict[str, str],
+        host_environment: Optional[Mapping[str, str]] = None,
+        platform_name: Optional[str] = None,
+    ) -> Dict[str, str]:
         key_map = {
             "checkout.lineEnding": "CFR_CHECKOUT_LINE_ENDING",
             "simulatedPath.order": "CFR_SIMULATED_PATH_ORDER",
@@ -345,7 +394,44 @@ class ExperimentRunner:
             "process.locale": "CFR_PROCESS_LOCALE",
             "runtime.validation": "CFR_RUNTIME_VALIDATION",
         }
-        return {key_map[key]: value for key, value in controlled.items()}
+        environment = {
+            key_map[key]: value for key, value in controlled.items()
+        }
+        environment.update(
+            cls._windows_bootstrap_environment(
+                host_environment=host_environment,
+                platform_name=platform_name,
+            )
+        )
+        return environment
+
+    @classmethod
+    def _windows_bootstrap_environment(
+        cls,
+        host_environment: Optional[Mapping[str, str]] = None,
+        platform_name: Optional[str] = None,
+    ) -> Dict[str, str]:
+        name = os.name if platform_name is None else platform_name
+        if name != "nt":
+            return {}
+        source = os.environ if host_environment is None else host_environment
+        bootstrap = {
+            key: source[key]
+            for key in cls.windows_bootstrap_keys
+            if source.get(key)
+        }
+        missing = [
+            key for key in cls.windows_bootstrap_keys if key not in bootstrap
+        ]
+        if missing:
+            raise FixtureExecutionError(
+                "Windows fixture bootstrap requires {0}".format(", ".join(missing))
+            )
+        return bootstrap
+
+    @classmethod
+    def _bootstrap_environment_key_names(cls) -> List[str]:
+        return sorted(cls._windows_bootstrap_environment())
 
     @staticmethod
     def _materialize(
@@ -384,6 +470,21 @@ class ExperimentRunner:
         if runtime != candidate.parent:
             raise FixtureExecutionError("Workspace escaped the local runtime root")
 
+    @staticmethod
+    def _remove_workspace_verified(workspace: Path) -> None:
+        try:
+            shutil.rmtree(workspace)
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            raise WorkspaceCleanupError(
+                "Trial workspace deletion failed; evidence receipt withheld"
+            ) from error
+        if workspace.exists() or workspace.is_symlink():
+            raise WorkspaceCleanupError(
+                "Trial workspace residue detected; evidence receipt withheld"
+            )
+
     def _fixture_digest(self) -> str:
         return hashlib.sha256(self.fixture_path.read_bytes()).hexdigest()
 
@@ -403,6 +504,15 @@ class ExperimentRunner:
             controlled, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
+
+    @staticmethod
+    def _raise_if_cancelled(
+        cancel_event: Optional[threading.Event],
+    ) -> None:
+        if cancel_event is not None and cancel_event.is_set():
+            raise ExperimentCancelled(
+                "Experiment cancelled after verified workspace cleanup"
+            )
 
     @staticmethod
     def _notify(

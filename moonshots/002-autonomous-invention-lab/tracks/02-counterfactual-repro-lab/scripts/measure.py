@@ -23,9 +23,16 @@ EXPECTED_CAUSES = {
 }
 
 
+def remove_tree_verified(path: Path) -> None:
+    if path.exists():
+        shutil.rmtree(path)
+    if path.exists() or path.is_symlink():
+        raise RuntimeError("Measurement workspace cleanup could not be verified")
+
+
 def measure() -> dict:
     runtime_root = TRACK_ROOT / ".runtime" / "measurement"
-    shutil.rmtree(runtime_root, ignore_errors=True)
+    remove_tree_verified(runtime_root)
     runner = ExperimentRunner(runtime_root=runtime_root)
     runs = []
     try:
@@ -47,6 +54,7 @@ def measure() -> dict:
                     "flip_passes": flip["pass_count"],
                     "controls_rejected": len(result["interventions"]) - 1,
                     "trials": result["metrics"]["trials_run"],
+                    "workspaces_cleaned": result["metrics"]["workspaces_cleaned"],
                     "duration_ms": result["metrics"]["duration_ms"],
                     "variables_changed_per_trial": result["metrics"][
                         "variables_changed_per_trial"
@@ -55,9 +63,10 @@ def measure() -> dict:
                 }
             )
     finally:
-        shutil.rmtree(runtime_root, ignore_errors=True)
+        remove_tree_verified(runtime_root)
 
     total_trials = sum(run["trials"] for run in runs)
+    verified_cleanups = sum(run["workspaces_cleaned"] for run in runs)
     report = {
         "schema": "counterfactual-repro-measurement/v1",
         "measured_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -71,6 +80,7 @@ def measure() -> dict:
             "baseline_reproducibility": "9/9 failures",
             "counterfactual_reproducibility": "9/9 passes",
             "variables_changed_per_trial": 1,
+            "verified_workspace_deletions": "36/36",
             "residual_workspaces": 0,
             "median_scenario_duration_under_ms": 3000,
         },
@@ -86,7 +96,7 @@ def measure() -> dict:
             "counterfactual_repeats": sum(run["flip_repeats"] for run in runs),
             "controls_rejected": sum(run["controls_rejected"] for run in runs),
             "total_trials": total_trials,
-            "workspaces_created_and_cleaned": total_trials,
+            "workspaces_created_and_cleaned": verified_cleanups,
             "residual_workspaces": sum(run["residual_workspaces"] for run in runs),
             "median_scenario_duration_ms": round(
                 statistics.median(run["duration_ms"] for run in runs), 2
@@ -99,6 +109,7 @@ def measure() -> dict:
         summary["scenarios_correct"] == summary["scenarios_total"]
         and summary["baseline_failures"] == summary["baseline_repeats"]
         and summary["counterfactual_passes"] == summary["counterfactual_repeats"]
+        and summary["workspaces_created_and_cleaned"] == summary["total_trials"]
         and summary["residual_workspaces"] == 0
         and all(run["variables_changed_per_trial"] == 1 for run in runs)
         and summary["median_scenario_duration_ms"] < 3000

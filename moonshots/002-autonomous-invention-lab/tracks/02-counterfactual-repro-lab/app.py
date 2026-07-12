@@ -14,7 +14,13 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlsplit
 
-from counterfactual_lab import ExperimentRunner, SCENARIOS, public_scenarios
+from counterfactual_lab import (
+    ExperimentCancelled,
+    ExperimentRunner,
+    SCENARIOS,
+    WorkspaceCleanupError,
+    public_scenarios,
+)
 
 
 TRACK_ROOT = Path(__file__).resolve().parent
@@ -33,16 +39,22 @@ class RunRegistry:
     def __init__(self, runner: Optional[ExperimentRunner] = None) -> None:
         self.runner = runner or ExperimentRunner()
         self._runs = {}
+        self._workers = {}
+        self._cancel_events = {}
         self._lock = threading.Lock()
+        self._closing = False
+        self._cleanup_failure_detected = False
 
     def create(self, scenario_id: str) -> dict:
         if scenario_id not in SCENARIOS:
             raise ValueError("Choose one of the seeded scenarios")
         with self._lock:
+            if self._closing:
+                raise RunCapacityError("The lab is shutting down")
             active = sum(
                 1
                 for run in self._runs.values()
-                if run["status"] in ("queued", "running")
+                if run["status"] in ("queued", "running", "cancelling")
             )
             if active >= 2:
                 raise RunCapacityError("Two experiments are already active")
@@ -60,16 +72,20 @@ class RunRegistry:
                 "events": [],
                 "result": None,
                 "error": None,
+                "cleanup_verified": None,
             }
             self._trim_completed()
             snapshot = copy.deepcopy(self._runs[run_id])
-        worker = threading.Thread(
-            target=self._execute,
-            args=(run_id, scenario_id),
-            name="counterfactual-{0}".format(run_id[:8]),
-            daemon=True,
-        )
-        worker.start()
+            cancel_event = threading.Event()
+            worker = threading.Thread(
+                target=self._execute,
+                args=(run_id, scenario_id, cancel_event),
+                name="counterfactual-{0}".format(run_id[:8]),
+                daemon=False,
+            )
+            self._workers[run_id] = worker
+            self._cancel_events[run_id] = cancel_event
+            worker.start()
         return snapshot
 
     def get(self, run_id: str) -> Optional[dict]:
@@ -77,9 +93,47 @@ class RunRegistry:
             run = self._runs.get(run_id)
             return copy.deepcopy(run) if run else None
 
-    def _execute(self, run_id: str, scenario_id: str) -> None:
+    def shutdown(self) -> bool:
+        """Cancel and join workers; report whether every cleanup was verified."""
         with self._lock:
-            self._runs[run_id]["status"] = "running"
+            self._closing = True
+            workers = list(self._workers.values())
+            for run_id, cancel_event in self._cancel_events.items():
+                cancel_event.set()
+                run = self._runs.get(run_id)
+                if run and run["status"] in ("queued", "running"):
+                    run["status"] = "cancelling"
+                    run["progress"] = {
+                        "stage": "cancelling",
+                        "completed": run["progress"]["completed"],
+                        "total": run["progress"]["total"],
+                        "message": (
+                            "Shutdown requested; waiting for verified workspace cleanup"
+                        ),
+                    }
+        for worker in workers:
+            if worker is not threading.current_thread():
+                worker.join()
+        if any(worker.is_alive() for worker in workers):
+            raise RuntimeError("An experiment worker survived shutdown")
+        with self._lock:
+            return not self._cleanup_failure_detected
+
+    def active_worker_count(self) -> int:
+        with self._lock:
+            return sum(1 for worker in self._workers.values() if worker.is_alive())
+
+    def _execute(
+        self,
+        run_id: str,
+        scenario_id: str,
+        cancel_event: threading.Event,
+    ) -> None:
+        with self._lock:
+            if cancel_event.is_set():
+                self._runs[run_id]["status"] = "cancelling"
+            else:
+                self._runs[run_id]["status"] = "running"
 
         def progress(event: dict) -> None:
             with self._lock:
@@ -90,12 +144,34 @@ class RunRegistry:
 
         try:
             result = self.runner.run(
-                scenario_id, progress=progress, experiment_id=run_id
+                scenario_id,
+                progress=progress,
+                experiment_id=run_id,
+                cancel_event=cancel_event,
             )
             with self._lock:
                 run = self._runs[run_id]
                 run["status"] = "complete"
                 run["result"] = result
+                run["cleanup_verified"] = True
+        except ExperimentCancelled:
+            with self._lock:
+                run = self._runs[run_id]
+                run["status"] = "cancelled"
+                run["error"] = (
+                    "Experiment cancelled during shutdown after verified cleanup."
+                )
+                run["cleanup_verified"] = True
+        except WorkspaceCleanupError:
+            with self._lock:
+                run = self._runs[run_id]
+                run["status"] = "failed"
+                run["error"] = (
+                    "Workspace deletion could not be verified; "
+                    "the evidence receipt was withheld."
+                )
+                run["cleanup_verified"] = False
+                self._cleanup_failure_detected = True
         except Exception:
             with self._lock:
                 run = self._runs[run_id]
@@ -104,12 +180,17 @@ class RunRegistry:
                     "The fixed local experiment could not complete. "
                     "No workspace evidence was retained."
                 )
+                run["cleanup_verified"] = True
+        finally:
+            with self._lock:
+                self._workers.pop(run_id, None)
+                self._cancel_events.pop(run_id, None)
 
     def _trim_completed(self) -> None:
         completed = [
             run_id
             for run_id, run in self._runs.items()
-            if run["status"] in ("complete", "failed")
+            if run["status"] in ("complete", "failed", "cancelled")
         ]
         for run_id in completed[:-18]:
             del self._runs[run_id]
@@ -266,12 +347,15 @@ def create_server(
     port: int = 8022,
     registry: Optional[RunRegistry] = None,
 ) -> ThreadingHTTPServer:
+    bound_registry = registry or RunRegistry()
     handler = type(
         "BoundReproLabHandler",
         (ReproLabHandler,),
-        {"registry": registry or RunRegistry()},
+        {"registry": bound_registry},
     )
-    return ThreadingHTTPServer((host, port), handler)
+    server = ThreadingHTTPServer((host, port), handler)
+    server.run_registry = bound_registry
+    return server
 
 
 def main() -> int:
@@ -294,10 +378,17 @@ def main() -> int:
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n  Lab stopped; trial workspaces were already cleaned.")
+        print("\n  Stopping lab; waiting for active workspace cleanup.")
     finally:
-        server.server_close()
-    return 0
+        try:
+            cleanup_verified = server.run_registry.shutdown()
+        finally:
+            server.server_close()
+    if cleanup_verified:
+        print("  Lab stopped; all started trial workspaces were verified clean.")
+    else:
+        print("  Lab stopped with workspace residue; no affected receipt was issued.")
+    return 0 if cleanup_verified else 1
 
 
 if __name__ == "__main__":

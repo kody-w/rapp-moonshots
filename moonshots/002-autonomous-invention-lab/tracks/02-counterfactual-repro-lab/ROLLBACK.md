@@ -5,15 +5,16 @@ change, remote state, or write outside this track.
 
 ## Stop the application
 
-Press `Ctrl+C` in the launch terminal. Every trial workspace is already removed
-in a `finally` block.
+Press `Ctrl+C` in the launch terminal. Shutdown cancels and joins every tracked
+experiment worker, then returns only after each started trial has verified its
+workspace deletion.
 
 ## Remove local runtime state
 
 From this directory:
 
 ```bash
-python3 -c "import shutil; shutil.rmtree('.runtime', ignore_errors=True)"
+python3 -c "from pathlib import Path; import shutil; p=Path('.runtime'); shutil.rmtree(p) if p.exists() else None; assert not p.exists()"
 ```
 
 `.runtime/` is ignored and contains no durable evidence. Downloaded receipts

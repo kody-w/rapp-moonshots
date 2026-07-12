@@ -7,8 +7,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from app import RunRegistry, create_server
-from counterfactual_lab import ExperimentRunner
+from app import RunCapacityError, RunRegistry, create_server
+from counterfactual_lab import (
+    ExperimentCancelled,
+    ExperimentRunner,
+    WorkspaceCleanupError,
+)
 
 
 TRACK_ROOT = Path(__file__).resolve().parent.parent
@@ -20,8 +24,8 @@ class ApplicationTests(unittest.TestCase):
     def setUpClass(cls):
         shutil.rmtree(TEST_ROOT, ignore_errors=True)
         TEST_ROOT.mkdir(parents=True)
-        registry = RunRegistry(ExperimentRunner(runtime_root=TEST_ROOT))
-        cls.server = create_server(port=0, registry=registry)
+        cls.registry = RunRegistry(ExperimentRunner(runtime_root=TEST_ROOT))
+        cls.server = create_server(port=0, registry=cls.registry)
         cls.base_url = "http://127.0.0.1:{0}".format(cls.server.server_port)
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -29,8 +33,9 @@ class ApplicationTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown()
-        cls.server.server_close()
         cls.thread.join(timeout=2)
+        cls.registry.shutdown()
+        cls.server.server_close()
         shutil.rmtree(TRACK_ROOT / ".test-runtime", ignore_errors=True)
 
     def request(self, path, method="GET", payload=None):
@@ -112,6 +117,67 @@ class ApplicationTests(unittest.TestCase):
                 response.headers["Content-Disposition"],
             )
         self.assertEqual(list(TEST_ROOT.iterdir()), [])
+
+
+class BlockingRunner:
+    def __init__(self):
+        self.started = threading.Event()
+        self.cleaned = threading.Event()
+
+    def run(
+        self,
+        scenario_id,
+        progress=None,
+        experiment_id=None,
+        cancel_event=None,
+    ):
+        self.started.set()
+        try:
+            cancel_event.wait()
+            raise ExperimentCancelled("shutdown")
+        finally:
+            self.cleaned.set()
+
+
+class RunRegistryShutdownTests(unittest.TestCase):
+    def test_shutdown_cancels_and_joins_non_daemon_workers(self):
+        runner = BlockingRunner()
+        registry = RunRegistry(runner)
+        run = registry.create("line-endings")
+        self.assertTrue(runner.started.wait(timeout=1))
+        with registry._lock:
+            workers = list(registry._workers.values())
+        self.assertEqual(len(workers), 1)
+        self.assertFalse(workers[0].daemon)
+
+        self.assertTrue(registry.shutdown())
+
+        self.assertTrue(runner.cleaned.is_set())
+        self.assertEqual(registry.active_worker_count(), 0)
+        snapshot = registry.get(run["id"])
+        self.assertEqual(snapshot["status"], "cancelled")
+        self.assertIsNone(snapshot["result"])
+        self.assertTrue(snapshot["cleanup_verified"])
+        with self.assertRaisesRegex(RunCapacityError, "shutting down"):
+            registry.create("line-endings")
+
+    def test_cleanup_failure_is_not_reported_as_success(self):
+        class CleanupFailingRunner:
+            def run(self, *args, **kwargs):
+                raise WorkspaceCleanupError("residue")
+
+        registry = RunRegistry(CleanupFailingRunner())
+        run = registry.create("line-endings")
+        for _ in range(100):
+            if registry.active_worker_count() == 0:
+                break
+            time.sleep(0.01)
+
+        snapshot = registry.get(run["id"])
+        self.assertEqual(snapshot["status"], "failed")
+        self.assertIsNone(snapshot["result"])
+        self.assertFalse(snapshot["cleanup_verified"])
+        self.assertFalse(registry.shutdown())
 
 
 if __name__ == "__main__":

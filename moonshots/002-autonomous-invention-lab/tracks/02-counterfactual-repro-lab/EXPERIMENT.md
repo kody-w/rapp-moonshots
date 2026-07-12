@@ -27,8 +27,10 @@ For each scenario, the runner:
 4. stops at the first unanimous opposite result; and
 5. verifies workspace cleanup before moving to the next scenario.
 
-The same fixed Python fixture runs in every trial. It receives no inherited
-host environment and cannot accept a user command.
+The same fixed Python fixture runs in every trial. It inherits zero experiment
+or secret host keys and cannot accept a user command. Windows preserves only
+the required `SYSTEMROOT` process-bootstrap value; receipts record its key name,
+never its value.
 
 ## Observed result
 
@@ -44,7 +46,7 @@ Measurement captured in
 | Variables changed per trial | 1 | **1** |
 | Trial workspaces cleaned | 36/36 | **36/36** |
 | Residual workspaces | 0 | **0** |
-| Median scenario duration | <3,000 ms | **511.12 ms** |
+| Median scenario duration | <3,000 ms | **553.23 ms** |
 
 **Result: PASS.**
 

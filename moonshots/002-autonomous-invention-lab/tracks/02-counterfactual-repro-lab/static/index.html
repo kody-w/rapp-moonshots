@@ -973,7 +973,7 @@
       <aside class="method-card" aria-label="Experiment method">
         <h2>The controlled method</h2>
         <div class="formula">same fixture + one Δ + 3 reruns → causal evidence</div>
-        <p>Every trial gets a fresh local workspace. Host environment variables are never inherited or recorded.</p>
+        <p>No experiment or secret host variables cross the boundary. On Windows, only SYSTEMROOT bootstraps Python; its value is never recorded.</p>
       </aside>
     </section>
 
@@ -981,7 +981,7 @@
       <div class="metric"><strong>3</strong><span>Seeded failures</span></div>
       <div class="metric"><strong>1</strong><span>Variable per trial</span></div>
       <div class="metric"><strong>3×</strong><span>Repeat verification</span></div>
-      <div class="metric"><strong>0</strong><span>Inherited env keys</span></div>
+      <div class="metric"><strong>0</strong><span>Secret env keys</span></div>
     </section>
 
     <section class="lab-grid" aria-label="Experiment workbench">
