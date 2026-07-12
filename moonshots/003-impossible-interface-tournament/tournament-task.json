@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "cobalt-beacon-route",
+  "instruction": "Route three cobalt beacons at 14:30, mark them fragile, send them to ORION-7 through North Gate, confirm, then return home.",
+  "steps": [
+    {"field": "quantity", "expected": 3, "modality": "voice"},
+    {"field": "time", "expected": "14:30", "modality": "voice"},
+    {"field": "handling", "expected": "fragile", "modality": "voice-or-radial"},
+    {"field": "destination", "expected": "ORION-7", "modality": "gaze-radial"},
+    {"field": "gate", "expected": "North Gate", "modality": "gaze-or-gesture"},
+    {"field": "confirm", "expected": true, "modality": "voice-or-gesture"},
+    {"field": "home", "expected": true, "modality": "voice-or-gesture"}
+  ],
+  "safety": {
+    "gaze_can_execute": false,
+    "center_cancels": true,
+    "sensor_loss_freezes": true,
+    "undo_required": true,
+    "fallback_parity_required": true
+  }
+}
+

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "gates": [
+    "Zero unintended commits",
+    "Gaze never executes alone",
+    "Stop/cancel works from every state",
+    "Sensor loss freezes armed input",
+    "Task remains possible with sensors denied",
+    "No raw camera or audio persistence"
+  ],
+  "weighted_score": [
+    {"id": "completion", "label": "Exact task completion", "weight": 0.3},
+    {"id": "speed", "label": "Completion time", "weight": 0.2},
+    {"id": "errors", "label": "False/incorrect activations", "weight": 0.15},
+    {"id": "recovery", "label": "Recovery from injected failure", "weight": 0.15},
+    {"id": "calibration", "label": "Calibration resilience", "weight": 0.1},
+    {"id": "workload", "label": "Fatigue and confidence", "weight": 0.1}
+  ],
+  "winner_rule": "All gates pass and weighted score leads second place by at least 0.5 points."
+}
+
