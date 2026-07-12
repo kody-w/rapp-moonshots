@@ -185,12 +185,42 @@ export class MediaFrameGate {
   }
 }
 
+export class LifecycleGate {
+  constructor() {
+    this.generation = 0;
+    this.active = false;
+  }
+
+  start() {
+    this.generation += 1;
+    this.active = true;
+    return this.generation;
+  }
+
+  stop() {
+    this.generation += 1;
+    this.active = false;
+  }
+
+  capture() {
+    return this.generation;
+  }
+
+  isCurrent(generation) {
+    return this.active && generation === this.generation;
+  }
+}
+
 export function isCameraFrameStale(lastFreshFrameAt, now, thresholdMs = 2500) {
   return (
     Number.isFinite(lastFreshFrameAt) &&
     Number.isFinite(now) &&
     now - lastFreshFrameAt > thresholdMs
   );
+}
+
+export function shouldReloadAfterPageShow(event) {
+  return event?.persisted === true;
 }
 
 export function normalizeSpeechConfidence(value, fallback = 0) {

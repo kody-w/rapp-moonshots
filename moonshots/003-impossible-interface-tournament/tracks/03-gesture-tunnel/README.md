@@ -38,7 +38,8 @@ camera-motion sweep, dip to open its threshold, then say **“choose.”** Say
   hands, identity, emotion, or precise eye direction.
 - When `FaceDetector` exists, the face bounding-box center can provide a coarse
   head-position preview. This is still labeled a **coarse webcam gaze
-  estimate**, never eye tracking.
+  estimate**, never eye tracking. Detection results carry a tracker generation;
+  any result resolving after stop or sensor replacement is discarded.
 - Returning the head-position proxy to center, or holding motion neutral for
   1.2 seconds, cancels camera preview and resets dwell.
 - This app makes no network request and uses no persistence API. It never
@@ -59,6 +60,10 @@ recognition errors—including permission, audio capture, service, and language
 failures—disable restart until explicit keyboard recovery; transient failures
 use exponential backoff capped at four seconds. Evidence appears only for a
 completed route and labels exact and mismatched results differently.
+
+If the browser restores the page from back/forward cache, a persisted
+`pageshow` forces a same-URL reload. This resets torn-down media, recognition,
+launch, and simulation state in live, accessible, and deterministic modes.
 
 ## Deterministic proof
 

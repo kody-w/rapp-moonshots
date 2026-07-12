@@ -1,5 +1,6 @@
 import {
   DETERMINISTIC_ACTIONS,
+  LifecycleGate,
   MediaFrameGate,
   TASK_LAYERS,
   TunnelEngine,
@@ -17,6 +18,7 @@ import {
   recognitionBackoffMs,
   releaseMediaResources,
   shouldRestartRecognition,
+  shouldReloadAfterPageShow,
   shouldHandleTunnelShortcut,
 } from "./core.mjs";
 
@@ -281,6 +283,7 @@ class LocalMotionTracker {
     this.usesVideoFrameCallback =
       typeof this.video.requestVideoFrameCallback === "function";
     this.frameGate = new MediaFrameGate();
+    this.lifecycle = new LifecycleGate();
     this.neutralSince = performance.now();
     this.neutralReady = false;
     this.gestureWindow = null;
@@ -300,12 +303,15 @@ class LocalMotionTracker {
   }
 
   start() {
+    this.lifecycle.start();
     this.running = true;
     this.scheduleFrame();
   }
 
   stop() {
     this.running = false;
+    this.lifecycle.stop();
+    this.faceDetectionPending = false;
     if (
       this.usesVideoFrameCallback &&
       typeof this.video.cancelVideoFrameCallback === "function"
@@ -443,8 +449,16 @@ class LocalMotionTracker {
     if (this.faceDetectionPending) return;
     this.faceDetectionPending = true;
     this.lastFaceAt = now;
+    const detectionGeneration = this.lifecycle.capture();
+    const detector = this.faceDetector;
     try {
-      const faces = await this.faceDetector.detect(this.video);
+      const faces = await detector.detect(this.video);
+      if (
+        !this.lifecycle.isCurrent(detectionGeneration) ||
+        detector !== this.faceDetector
+      ) {
+        return;
+      }
       const box = faces[0]?.boundingBox;
       if (box && this.video.videoWidth && this.video.videoHeight) {
         const point = {
@@ -459,9 +473,16 @@ class LocalMotionTracker {
         }
       }
     } catch {
-      this.faceDetector = null;
+      if (
+        this.lifecycle.isCurrent(detectionGeneration) &&
+        detector === this.faceDetector
+      ) {
+        this.faceDetector = null;
+      }
     } finally {
-      this.faceDetectionPending = false;
+      if (this.lifecycle.isCurrent(detectionGeneration)) {
+        this.faceDetectionPending = false;
+      }
     }
   }
 }
@@ -1080,6 +1101,10 @@ frameWatchdog = window.setInterval(() => {
     handleSensorLoss("camera");
   }
 }, 1000);
+
+window.addEventListener("pageshow", (event) => {
+  if (shouldReloadAfterPageShow(event)) window.location.reload();
+});
 
 window.addEventListener(
   "pagehide",

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   DETERMINISTIC_ACTIONS,
+  LifecycleGate,
   MediaFrameGate,
   OPTION_COUNT,
   TASK_LAYERS,
@@ -20,6 +21,7 @@ import {
   recognitionBackoffMs,
   runDeterministicSimulation,
   shouldRestartRecognition,
+  shouldReloadAfterPageShow,
   shouldHandleTunnelShortcut,
 } from "../src/core.mjs";
 
@@ -189,6 +191,20 @@ gate("live sensor invariants", () => {
   assert.match(app, /if \(!fresh\) return/);
   assert.match(app, /recognitionRecoveryOnly/);
   assert.match(app, /const delay = recognitionBackoffMs\(recognitionTransientFailures\)/);
+});
+
+gate("final lifecycle invariants", () => {
+  const lifecycle = new LifecycleGate();
+  lifecycle.start();
+  const detectionGeneration = lifecycle.capture();
+  lifecycle.stop();
+  assert.equal(lifecycle.isCurrent(detectionGeneration), false);
+  assert.equal(shouldReloadAfterPageShow({ persisted: true }), true);
+  assert.equal(shouldReloadAfterPageShow({ persisted: false }), false);
+  assert.match(app, /await detector\.detect\(this\.video\)/);
+  assert.match(app, /!this\.lifecycle\.isCurrent\(detectionGeneration\)/);
+  assert.match(app, /window\.addEventListener\("pageshow"/);
+  assert.match(app, /if \(shouldReloadAfterPageShow\(event\)\) window\.location\.reload\(\)/);
 });
 
 gate("evidence and rollback docs", () => {
