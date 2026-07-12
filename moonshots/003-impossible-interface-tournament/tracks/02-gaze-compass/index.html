@@ -1,0 +1,1190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'none'; img-src 'self' data:; media-src 'self' blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    >
+    <meta name="referrer" content="no-referrer">
+    <title>Gaze Compass — private coarse gaze routing</title>
+    <script>
+      (() => {
+        const param = new URLSearchParams(window.location.search).get("scoutTheme");
+        const theme =
+          param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
+    <style>
+      :root {
+        color-scheme: light;
+        --cp-bg: #f7f4ef;
+        --cp-bg-elevated: #fcfbf8;
+        --cp-surface: #ffffff;
+        --cp-surface-soft: #f5f5f5;
+        --cp-border: #dedede;
+        --cp-border-strong: #919191;
+        --cp-text: #242424;
+        --cp-text-muted: #5c5c5c;
+        --cp-text-soft: #6f6f6f;
+        --cp-accent: #b11f4b;
+        --cp-accent-hover: #9a1a41;
+        --cp-accent-soft: rgba(177, 31, 75, 0.08);
+        --cp-accent-fg: #ffffff;
+        --cp-success: #16a34a;
+        --cp-danger: #dc2626;
+        --cp-warning: #f59e0b;
+        --cp-link: #0078d4;
+        --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+        --cp-overlay: rgba(255, 255, 255, 0.8);
+        --cp-panel: rgba(255, 255, 255, 0.86);
+        --cp-panel-strong: rgba(255, 255, 255, 0.96);
+        --cp-sheen: rgba(255, 255, 255, 0.55);
+        --cp-highlight: rgba(177, 31, 75, 0.12);
+      }
+      html[data-theme="dark"] {
+        color-scheme: dark;
+        --cp-bg: #3d3b3a;
+        --cp-bg-elevated: #343231;
+        --cp-surface: #292929;
+        --cp-surface-soft: #2e2e2e;
+        --cp-border: #474747;
+        --cp-border-strong: #5f5f5f;
+        --cp-text: #dedede;
+        --cp-text-muted: #919191;
+        --cp-text-soft: #b0b0b0;
+        --cp-accent: #fd8ea1;
+        --cp-accent-hover: #fb7b91;
+        --cp-accent-soft: rgba(253, 142, 161, 0.14);
+        --cp-accent-fg: #1a1a1a;
+        --cp-success: #4ade80;
+        --cp-danger: #f87171;
+        --cp-warning: #fbbf24;
+        --cp-link: #4da6ff;
+        --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+        --cp-overlay: rgba(41, 41, 41, 0.88);
+        --cp-panel: rgba(41, 41, 41, 0.72);
+        --cp-panel-strong: rgba(41, 41, 41, 0.96);
+        --cp-sheen: rgba(255, 255, 255, 0.04);
+        --cp-highlight: rgba(253, 142, 161, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-height: 100%;
+        background: var(--cp-bg);
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        overflow-x: hidden;
+        background: var(--cp-bg);
+        color: var(--cp-text);
+        font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        color: var(--cp-text);
+      }
+
+      button:focus-visible,
+      input:focus-visible,
+      a:focus-visible {
+        outline: 3px solid var(--cp-accent);
+        outline-offset: 3px;
+      }
+
+      .skip-link {
+        position: fixed;
+        z-index: 100;
+        top: 8px;
+        left: 8px;
+        padding: 8px 12px;
+        border-radius: 0.625rem;
+        background: var(--cp-accent);
+        color: var(--cp-accent-fg);
+        transform: translateY(-160%);
+      }
+
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      .is-hidden {
+        display: none !important;
+      }
+
+      .activation {
+        position: fixed;
+        z-index: 50;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        overflow: auto;
+        padding: 24px;
+        background: var(--cp-bg);
+      }
+
+      .activation-card {
+        width: min(720px, 100%);
+        padding: clamp(24px, 5vw, 48px);
+        border: 1px solid var(--cp-border);
+        border-radius: 16px;
+        background: var(--cp-surface);
+        box-shadow: 0 2px 8px var(--cp-border);
+      }
+
+      .activation-mark {
+        display: grid;
+        width: 76px;
+        height: 76px;
+        margin-bottom: 24px;
+        place-items: center;
+        border: 1px solid var(--cp-accent);
+        border-radius: 50%;
+        background: var(--cp-accent-soft);
+        color: var(--cp-accent);
+        font-size: 30px;
+        font-weight: 700;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--cp-accent);
+        font-size: 0.76rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      .activation h1 {
+        max-width: 14ch;
+        margin-bottom: 16px;
+        font-size: clamp(2.1rem, 7vw, 4rem);
+        line-height: 0.98;
+        letter-spacing: -0.045em;
+      }
+
+      .activation-copy {
+        max-width: 62ch;
+        margin-bottom: 24px;
+        color: var(--cp-text-muted);
+        font-size: 1.05rem;
+        line-height: 1.58;
+      }
+
+      .permission-list {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin: 0 0 28px;
+        padding: 0;
+        list-style: none;
+      }
+
+      .permission-list li {
+        min-height: 84px;
+        padding: 14px;
+        border: 1px solid var(--cp-border);
+        border-radius: 0.625rem;
+        background: var(--cp-bg-elevated);
+        color: var(--cp-text-muted);
+        font-size: 0.84rem;
+        line-height: 1.35;
+      }
+
+      .permission-list strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--cp-text);
+      }
+
+      .activation-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .primary-button,
+      .secondary-button,
+      .control-button {
+        min-height: 44px;
+        border: 1px solid var(--cp-border-strong);
+        border-radius: 0.625rem;
+        padding: 10px 16px;
+        background: var(--cp-surface);
+        cursor: pointer;
+      }
+
+      .primary-button {
+        border-color: var(--cp-accent);
+        background: var(--cp-accent);
+        color: var(--cp-accent-fg);
+        font-weight: 700;
+      }
+
+      .primary-button:hover {
+        border-color: var(--cp-accent-hover);
+        background: var(--cp-accent-hover);
+      }
+
+      .secondary-button:hover,
+      .control-button:hover {
+        border-color: var(--cp-accent);
+        background: var(--cp-accent-soft);
+      }
+
+      .activation-footnote {
+        margin: 16px 0 0;
+        color: var(--cp-text-muted);
+        font-size: 0.8rem;
+      }
+
+      .app-shell {
+        width: min(1440px, 100%);
+        min-height: 100vh;
+        margin: 0 auto;
+        padding: 16px clamp(12px, 2vw, 28px) 24px;
+      }
+
+      .topbar {
+        display: flex;
+        min-height: 60px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border-bottom: 1px solid var(--cp-border);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border: 1px solid var(--cp-accent);
+        border-radius: 50%;
+        background: var(--cp-accent-soft);
+        color: var(--cp-accent);
+      }
+
+      .privacy-indicators {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+
+      .indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 28px;
+        padding: 4px 9px;
+        border: 1px solid var(--cp-border);
+        border-radius: 999px;
+        background: var(--cp-surface);
+        color: var(--cp-text-muted);
+        font-family: Consolas, "Courier New", Courier, monospace;
+        font-size: 0.68rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .indicator-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--cp-border-strong);
+      }
+
+      .indicator[data-state="on"] .indicator-dot {
+        background: var(--cp-success);
+      }
+
+      .indicator[data-state="paused"] .indicator-dot {
+        background: var(--cp-warning);
+      }
+
+      .indicator[data-state="off"] .indicator-dot {
+        background: var(--cp-border-strong);
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(520px, 1fr) minmax(280px, 360px);
+        gap: clamp(16px, 3vw, 36px);
+        align-items: center;
+        padding: clamp(20px, 3vh, 36px) 0 20px;
+      }
+
+      .compass-panel {
+        position: relative;
+        min-width: 0;
+      }
+
+      .stage-heading {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 16px;
+        width: min(680px, 100%);
+        margin: 0 auto 12px;
+      }
+
+      .stage-heading h2 {
+        margin-bottom: 2px;
+        font-size: clamp(1.1rem, 2vw, 1.55rem);
+        letter-spacing: -0.02em;
+      }
+
+      .stage-heading p {
+        margin: 0;
+        color: var(--cp-text-muted);
+        font-size: 0.82rem;
+      }
+
+      .confidence {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--cp-text-muted);
+        font-family: Consolas, "Courier New", Courier, monospace;
+        font-size: 0.72rem;
+      }
+
+      .confidence-meter {
+        width: 84px;
+        height: 6px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: var(--cp-surface-soft);
+      }
+
+      .confidence-fill {
+        width: 0;
+        height: 100%;
+        background: var(--cp-accent);
+        transition: width 120ms linear;
+      }
+
+      .compass {
+        position: relative;
+        width: min(680px, 100%);
+        aspect-ratio: 1;
+        margin: 0 auto;
+        isolation: isolate;
+      }
+
+      .compass-svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+
+      .sector-shape {
+        fill: var(--cp-surface);
+        stroke: var(--cp-border);
+        stroke-width: 2;
+        transition: fill 160ms ease, stroke 160ms ease;
+      }
+
+      .sector-shape.is-focused {
+        fill: var(--cp-accent-soft);
+        stroke: var(--cp-accent);
+        stroke-width: 4;
+      }
+
+      .sector-shape.is-armed {
+        fill: var(--cp-highlight);
+        stroke: var(--cp-success);
+        stroke-width: 5;
+      }
+
+      .guide-ring {
+        fill: none;
+        stroke: var(--cp-border);
+        stroke-width: 1;
+        stroke-dasharray: 4 9;
+      }
+
+      .sector-target {
+        position: absolute;
+        z-index: 3;
+        display: grid;
+        width: 30%;
+        min-height: 74px;
+        place-items: center;
+        border: 1px solid var(--cp-border);
+        border-radius: 0.625rem;
+        padding: 8px;
+        background: var(--cp-panel-strong);
+        color: var(--cp-text);
+        cursor: pointer;
+        text-align: center;
+        transition: border 160ms ease, transform 160ms ease, background 160ms ease;
+      }
+
+      .sector-target:hover,
+      .sector-target.is-focused {
+        border-color: var(--cp-accent);
+        background: var(--cp-surface);
+        transform: scale(1.025);
+      }
+
+      .sector-target.is-armed {
+        border-color: var(--cp-success);
+        background: var(--cp-highlight);
+      }
+
+      .sector-target[data-direction="north"] {
+        top: 8%;
+        left: 35%;
+      }
+
+      .sector-target[data-direction="east"] {
+        top: 42%;
+        right: 2.5%;
+      }
+
+      .sector-target[data-direction="south"] {
+        bottom: 8%;
+        left: 35%;
+      }
+
+      .sector-target[data-direction="west"] {
+        top: 42%;
+        left: 2.5%;
+      }
+
+      .direction-name {
+        display: block;
+        color: var(--cp-accent);
+        font-family: Consolas, "Courier New", Courier, monospace;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .option-label {
+        display: block;
+        max-width: 18ch;
+        margin-top: 2px;
+        overflow: hidden;
+        font-size: clamp(0.76rem, 1.7vw, 0.98rem);
+        font-weight: 650;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+      }
+
+      .safe-center {
+        position: absolute;
+        z-index: 6;
+        top: 50%;
+        left: 50%;
+        display: grid;
+        width: 25%;
+        aspect-ratio: 1;
+        place-items: center;
+        border: 2px solid var(--cp-border-strong);
+        border-radius: 50%;
+        background: var(--cp-surface);
+        color: var(--cp-text);
+        cursor: pointer;
+        transform: translate(-50%, -50%);
+        transition: border 160ms ease, background 160ms ease, transform 160ms ease;
+      }
+
+      .safe-center:hover,
+      .safe-center.is-active {
+        border-color: var(--cp-accent);
+        background: var(--cp-accent-soft);
+        transform: translate(-50%, -50%) scale(1.035);
+      }
+
+      .safe-center.is-recovery {
+        border-color: var(--cp-warning);
+      }
+
+      .center-copy {
+        display: grid;
+        gap: 3px;
+        place-items: center;
+        text-align: center;
+      }
+
+      .center-symbol {
+        color: var(--cp-accent);
+        font-size: clamp(1.1rem, 3vw, 1.7rem);
+        line-height: 1;
+      }
+
+      .center-copy strong {
+        font-size: clamp(0.66rem, 1.6vw, 0.9rem);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .center-copy span {
+        color: var(--cp-text-muted);
+        font-size: clamp(0.58rem, 1.4vw, 0.74rem);
+      }
+
+      .gaze-cursor {
+        position: absolute;
+        z-index: 8;
+        top: 50%;
+        left: 50%;
+        width: 18px;
+        height: 18px;
+        border: 3px solid var(--cp-accent);
+        border-radius: 50%;
+        background: var(--cp-panel);
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+        transition: left 90ms linear, top 90ms linear;
+      }
+
+      .gaze-cursor[data-confidence="low"] {
+        border-color: var(--cp-warning);
+        opacity: 0.58;
+      }
+
+      .dwell-progress {
+        position: absolute;
+        z-index: 5;
+        top: 50%;
+        left: 50%;
+        width: 29%;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: conic-gradient(
+          var(--cp-accent) var(--dwell-progress, 0%),
+          var(--cp-surface-soft) 0
+        );
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+      }
+
+      .dwell-progress::after {
+        position: absolute;
+        inset: 9px;
+        border-radius: 50%;
+        background: var(--cp-bg);
+        content: "";
+      }
+
+      .calibration-layer {
+        position: absolute;
+        z-index: 20;
+        inset: 4%;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--cp-border);
+        border-radius: 50%;
+        background: var(--cp-overlay);
+      }
+
+      .calibration-target {
+        position: absolute;
+        width: 56px;
+        height: 56px;
+        border: 2px solid var(--cp-accent);
+        border-radius: 50%;
+        background: var(--cp-accent-soft);
+        transition: top 280ms ease, left 280ms ease;
+      }
+
+      .calibration-target::after {
+        position: absolute;
+        inset: 18px;
+        border-radius: 50%;
+        background: var(--cp-accent);
+        content: "";
+      }
+
+      .calibration-copy {
+        position: absolute;
+        top: 64%;
+        width: min(76%, 390px);
+        padding: 14px 18px;
+        border: 1px solid var(--cp-border);
+        border-radius: 0.625rem;
+        background: var(--cp-panel-strong);
+        text-align: center;
+      }
+
+      .calibration-copy strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 1rem;
+      }
+
+      .calibration-copy span {
+        color: var(--cp-text-muted);
+        font-size: 0.78rem;
+      }
+
+      .calibration-bar {
+        position: absolute;
+        right: 18%;
+        bottom: 12%;
+        left: 18%;
+        height: 7px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: var(--cp-surface-soft);
+      }
+
+      .calibration-fill {
+        width: 0;
+        height: 100%;
+        background: var(--cp-accent);
+      }
+
+      .sensor-overlay {
+        position: absolute;
+        z-index: 18;
+        inset: 28% 20%;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--cp-warning);
+        border-radius: 16px;
+        padding: 24px;
+        background: var(--cp-panel-strong);
+        pointer-events: none;
+        text-align: center;
+      }
+
+      .sensor-overlay strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      .sensor-overlay p {
+        margin: 0;
+        color: var(--cp-text-muted);
+        font-size: 0.84rem;
+        line-height: 1.45;
+      }
+
+      .flight-strip {
+        align-self: stretch;
+        display: flex;
+        min-height: 520px;
+        flex-direction: column;
+        justify-content: center;
+        gap: 14px;
+        padding: clamp(18px, 3vw, 28px);
+        border: 1px solid var(--cp-border);
+        border-radius: 16px;
+        background: var(--cp-surface);
+        box-shadow: 0 2px 8px var(--cp-border);
+      }
+
+      .step-line {
+        display: flex;
+        gap: 5px;
+      }
+
+      .step-dot {
+        height: 5px;
+        flex: 1;
+        border-radius: 999px;
+        background: var(--cp-border);
+      }
+
+      .step-dot.is-complete {
+        background: var(--cp-accent);
+      }
+
+      .step-dot.is-current {
+        background: var(--cp-warning);
+      }
+
+      .step-count {
+        color: var(--cp-text-muted);
+        font-family: Consolas, "Courier New", Courier, monospace;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+      }
+
+      .flight-strip h2 {
+        margin-bottom: 0;
+        font-size: clamp(1.35rem, 3vw, 2rem);
+        line-height: 1.08;
+        letter-spacing: -0.035em;
+      }
+
+      .spoken-guide {
+        min-height: 44px;
+        margin: 0;
+        color: var(--cp-text-muted);
+        line-height: 1.45;
+      }
+
+      .status-callout {
+        padding: 12px;
+        border-left: 3px solid var(--cp-accent);
+        border-radius: 0 0.625rem 0.625rem 0;
+        background: var(--cp-accent-soft);
+        font-size: 0.84rem;
+        line-height: 1.45;
+      }
+
+      .route-readback {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        min-height: 62px;
+        align-content: start;
+      }
+
+      .route-token {
+        display: inline-flex;
+        min-height: 28px;
+        align-items: center;
+        padding: 4px 8px;
+        border: 1px solid var(--cp-border);
+        border-radius: 999px;
+        background: var(--cp-bg-elevated);
+        color: var(--cp-text-muted);
+        font-size: 0.72rem;
+      }
+
+      .route-token.is-set {
+        border-color: var(--cp-accent);
+        color: var(--cp-text);
+      }
+
+      .signal-note {
+        margin-top: auto;
+        padding-top: 14px;
+        border-top: 1px solid var(--cp-border);
+        color: var(--cp-text-muted);
+        font-size: 0.75rem;
+        line-height: 1.45;
+      }
+
+      .sensor-mode {
+        display: block;
+        margin-top: 5px;
+        color: var(--cp-text);
+        font-family: Consolas, "Courier New", Courier, monospace;
+        font-size: 0.68rem;
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: minmax(180px, 1fr) auto auto;
+        gap: 12px;
+        align-items: center;
+        padding: 12px;
+        border: 1px solid var(--cp-border);
+        border-radius: 16px;
+        background: var(--cp-surface);
+      }
+
+      .dwell-control {
+        display: grid;
+        grid-template-columns: auto minmax(100px, 1fr) auto;
+        gap: 9px;
+        align-items: center;
+      }
+
+      .dwell-control label,
+      .dwell-value {
+        color: var(--cp-text-muted);
+        font-size: 0.75rem;
+      }
+
+      .dwell-control input {
+        width: 100%;
+        accent-color: var(--cp-accent);
+      }
+
+      .switch-controls {
+        display: flex;
+        gap: 6px;
+      }
+
+      .control-button {
+        min-width: 44px;
+        padding: 8px 11px;
+        font-size: 0.78rem;
+      }
+
+      .control-button[data-action="confirm"] {
+        border-color: var(--cp-accent);
+        color: var(--cp-accent);
+        font-weight: 700;
+      }
+
+      .session-actions {
+        display: flex;
+        gap: 6px;
+        justify-content: flex-end;
+      }
+
+      .camera-preview {
+        position: fixed;
+        z-index: 2;
+        right: 14px;
+        bottom: 14px;
+        width: 112px;
+        aspect-ratio: 4 / 3;
+        border: 2px solid var(--cp-border);
+        border-radius: 0.625rem;
+        background: var(--cp-surface-soft);
+        object-fit: cover;
+        opacity: 0.2;
+        transform: scaleX(-1);
+      }
+
+      .completion-banner {
+        position: fixed;
+        z-index: 30;
+        right: 20px;
+        bottom: 20px;
+        width: min(420px, calc(100% - 40px));
+        padding: 20px;
+        border: 1px solid var(--cp-success);
+        border-radius: 16px;
+        background: var(--cp-panel-strong);
+        box-shadow: var(--cp-shadow);
+      }
+
+      .completion-banner h2 {
+        margin-bottom: 7px;
+        font-size: 1.25rem;
+      }
+
+      .completion-banner p {
+        margin-bottom: 14px;
+        color: var(--cp-text-muted);
+        font-size: 0.84rem;
+        line-height: 1.4;
+      }
+
+      .live-region {
+        position: fixed;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+      }
+
+      @media (max-width: 900px) {
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+
+        .flight-strip {
+          min-height: 0;
+        }
+
+        .controls {
+          grid-template-columns: 1fr;
+        }
+
+        .session-actions,
+        .switch-controls {
+          justify-content: stretch;
+        }
+
+        .session-actions .control-button,
+        .switch-controls .control-button {
+          flex: 1;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .permission-list {
+          grid-template-columns: 1fr;
+        }
+
+        .permission-list li {
+          min-height: 0;
+        }
+
+        .topbar {
+          align-items: flex-start;
+          padding: 10px 0;
+        }
+
+        .privacy-indicators {
+          max-width: 190px;
+        }
+
+        .workspace {
+          padding-top: 14px;
+        }
+
+        .sector-target {
+          min-height: 54px;
+          padding: 5px;
+        }
+
+        .option-label {
+          font-size: 0.66rem;
+        }
+
+        .direction-name {
+          font-size: 0.56rem;
+        }
+
+        .calibration-copy {
+          top: 62%;
+        }
+
+        .sensor-overlay {
+          inset: 25% 12%;
+        }
+
+        .camera-preview {
+          display: none;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#controls">Skip to switch controls</a>
+
+    <section id="activation" class="activation" aria-labelledby="activation-title">
+      <div class="activation-card">
+        <div class="activation-mark" aria-hidden="true">✦</div>
+        <p class="eyebrow">Impossible Interface · Track 02</p>
+        <h1 id="activation-title">Gaze Compass</h1>
+        <p class="activation-copy">
+          Route by voice and a calibrated <strong>coarse webcam gaze estimate</strong>.
+          One activation requests camera and microphone together; timed calibration then
+          runs clicklessly. Gaze may arm a choice, but it can never execute one.
+        </p>
+        <ul class="permission-list">
+          <li><strong>Local vision</strong>Frames are processed in memory, then discarded.</li>
+          <li><strong>Explicit commit</strong>Say “confirm” or make a deliberate nod after arming.</li>
+          <li><strong>Safe center</strong>Return to the center circle to cancel at any time.</li>
+        </ul>
+        <div class="activation-actions">
+          <button id="start-live" class="primary-button" type="button">
+            Allow camera + microphone
+          </button>
+          <button id="start-simulation" class="secondary-button" type="button">
+            Run deterministic simulation
+          </button>
+        </div>
+        <p class="activation-footnote">
+          No account, upload, recording, analytics, or application network client.
+          Browser speech recognition availability and processing vary by browser.
+        </p>
+      </div>
+    </section>
+
+    <div id="app" class="app-shell is-hidden">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">✦</span>
+          <span>Gaze Compass</span>
+        </div>
+        <div class="privacy-indicators" aria-label="Privacy and sensor status">
+          <span id="camera-indicator" class="indicator" data-state="off">
+            <span class="indicator-dot" aria-hidden="true"></span>
+            <span>Camera off</span>
+          </span>
+          <span id="mic-indicator" class="indicator" data-state="off">
+            <span class="indicator-dot" aria-hidden="true"></span>
+            <span>Mic off</span>
+          </span>
+          <span class="indicator" data-state="on">
+            <span class="indicator-dot" aria-hidden="true"></span>
+            <span>Network none</span>
+          </span>
+          <span class="indicator" data-state="on">
+            <span class="indicator-dot" aria-hidden="true"></span>
+            <span>Frames ephemeral</span>
+          </span>
+        </div>
+      </header>
+
+      <main id="main" class="workspace">
+        <section class="compass-panel" aria-labelledby="compass-title">
+          <div class="stage-heading">
+            <div>
+              <p class="eyebrow">Stable four-sector field</p>
+              <h2 id="compass-title">Rest center · dwell direction · confirm</h2>
+              <p>400 ms announces · sustained stability arms · gaze never commits</p>
+            </div>
+            <div class="confidence" aria-label="Current estimate confidence">
+              <span id="confidence-label">0%</span>
+              <span class="confidence-meter" aria-hidden="true">
+                <span id="confidence-fill" class="confidence-fill"></span>
+              </span>
+            </div>
+          </div>
+
+          <div id="compass" class="compass">
+            <svg
+              class="compass-svg"
+              viewBox="0 0 600 600"
+              role="img"
+              aria-label="Four compass sectors around a permanent safe center"
+            >
+              <circle class="guide-ring" cx="300" cy="300" r="274"></circle>
+              <circle class="guide-ring" cx="300" cy="300" r="196"></circle>
+              <g id="sector-shapes" aria-hidden="true"></g>
+            </svg>
+
+            <div id="dwell-progress" class="dwell-progress" aria-hidden="true"></div>
+
+            <button class="sector-target" data-direction="north" type="button">
+              <span>
+                <span class="direction-name">North</span>
+                <span class="option-label">Route</span>
+              </span>
+            </button>
+            <button class="sector-target" data-direction="east" type="button">
+              <span>
+                <span class="direction-name">East</span>
+                <span class="option-label">Inspect</span>
+              </span>
+            </button>
+            <button class="sector-target" data-direction="south" type="button">
+              <span>
+                <span class="direction-name">South</span>
+                <span class="option-label">Hold</span>
+              </span>
+            </button>
+            <button class="sector-target" data-direction="west" type="button">
+              <span>
+                <span class="direction-name">West</span>
+                <span class="option-label">Recall</span>
+              </span>
+            </button>
+
+            <button id="safe-center" class="safe-center is-active" type="button">
+              <span class="center-copy">
+                <span class="center-symbol" aria-hidden="true">◎</span>
+                <strong>Safe rest</strong>
+                <span>cancel / home</span>
+              </span>
+            </button>
+
+            <span id="gaze-cursor" class="gaze-cursor" data-confidence="low" aria-hidden="true"></span>
+
+            <div id="calibration-layer" class="calibration-layer is-hidden">
+              <span id="calibration-target" class="calibration-target" aria-hidden="true"></span>
+              <div class="calibration-copy">
+                <strong id="calibration-title">Look at center</strong>
+                <span id="calibration-detail">Hold naturally. No click needed.</span>
+              </div>
+              <div class="calibration-bar" aria-hidden="true">
+                <div id="calibration-fill" class="calibration-fill"></div>
+              </div>
+            </div>
+
+            <div id="sensor-overlay" class="sensor-overlay is-hidden" role="status">
+              <div>
+                <strong>Signal paused safely</strong>
+                <p id="sensor-overlay-copy">
+                  No choice can arm or execute. Reacquire the camera, then return to center.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="flight-strip" aria-labelledby="mission-title">
+          <div id="step-line" class="step-line" aria-hidden="true"></div>
+          <div id="step-count" class="step-count">Step 1 of 7</div>
+          <p class="eyebrow">Cobalt beacon route</p>
+          <h2 id="mission-title">Choose the mission verb</h2>
+          <p id="spoken-guide" class="spoken-guide">
+            Say “route,” then look toward the spoken direction.
+          </p>
+          <div id="status-callout" class="status-callout" role="status">
+            Center is safe. Look north for Route.
+          </div>
+          <div id="route-readback" class="route-readback" aria-label="Current route selections"></div>
+          <div class="signal-note">
+            This is a coarse webcam gaze estimate, not eye tracking and not a medical device.
+            Confidence loss pauses dwell; sensor loss clears every armed choice.
+            <span id="sensor-mode" class="sensor-mode">Sensor: not started</span>
+          </div>
+        </aside>
+      </main>
+
+      <footer id="controls" class="controls" aria-label="Accessible parity controls">
+        <div class="dwell-control">
+          <label for="dwell-range">Arm dwell</label>
+          <input id="dwell-range" type="range" min="800" max="2200" step="100" value="1200">
+          <output id="dwell-value" class="dwell-value" for="dwell-range">1.2 s</output>
+        </div>
+        <div class="switch-controls" aria-label="Single-switch parity">
+          <button class="control-button" data-action="cycle" type="button">Cycle</button>
+          <button class="control-button" data-action="center" type="button">Center</button>
+          <button class="control-button" data-action="confirm" type="button">Confirm</button>
+        </div>
+        <div class="session-actions">
+          <button id="export-metrics" class="control-button" type="button" disabled>Export metrics</button>
+          <button id="end-session" class="control-button" type="button">End sensors</button>
+        </div>
+      </footer>
+    </div>
+
+    <video id="camera-preview" class="camera-preview is-hidden" muted playsinline aria-label="Mirrored local camera preview"></video>
+    <canvas id="vision-canvas" class="is-hidden" width="64" height="48" aria-hidden="true"></canvas>
+
+    <section id="completion-banner" class="completion-banner is-hidden" aria-labelledby="completion-title">
+      <h2 id="completion-title">Route complete · home safe</h2>
+      <p id="completion-copy">
+        Three cobalt beacons will route at 14:30, fragile, to ORION-7 through North Gate.
+      </p>
+      <button id="completion-export" class="primary-button" type="button">Export privacy-safe metrics</button>
+    </section>
+
+    <div id="polite-live" class="live-region" aria-live="polite" aria-atomic="true"></div>
+    <div id="assertive-live" class="live-region" aria-live="assertive" aria-atomic="true"></div>
+
+    <script src="./core.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

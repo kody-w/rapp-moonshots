@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "validator": "gaze-compass-track-02",
+  "passed": true,
+  "tests": {
+    "total": 25,
+    "passed": 25
+  },
+  "gates": {
+    "exactTaskCompletion": true,
+    "deterministicReplay": true,
+    "falseCommits": 0,
+    "gazeOnlyExecutions": 0,
+    "centerCancellationObserved": true,
+    "confidenceArmRevoked": true,
+    "staleSensorArmRejected": true,
+    "processedGazeFreshnessRequired": true,
+    "identicalFrameContentRejected": true,
+    "occludedFrameContentRejected": true,
+    "deferredDetectorResultRejected": true,
+    "controllerEpochMetricsAggregated": true,
+    "armScopedNodGesture": true,
+    "lifecycleGenerationSafe": true,
+    "parityPauseRecovery": true,
+    "calibrationLifecycleClosed": true,
+    "fixedCompletionTiming": true,
+    "frozenFramesRejected": true,
+    "strictConfirmGrammar": true,
+    "sensorLossRecovered": true,
+    "localEphemeralProcessing": true,
+    "clawpilotTheme": true,
+    "keyboardTouchSwitchParity": true
+  },
+  "deterministicFingerprint": "8bc2720d"
+}
