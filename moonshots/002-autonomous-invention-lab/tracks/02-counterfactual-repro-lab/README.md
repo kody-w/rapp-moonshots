@@ -84,9 +84,12 @@ Exported recipes automatically use `python3` with `./launch.sh` on POSIX and
 The committed experiment ran 36 isolated trials: **3/3 causes identified,
 9/9 baseline failures, 18/18 control failures, and 9/9 causal passes reproduced;
 six controls rejected; 3/3 fixture sources verified before receipt; and zero
-residual workspaces**. Median scenario time was 586.03 ms. See
+residual workspaces**. Median scenario time was 615.08 ms. See
 [`EXPERIMENT.md`](EXPERIMENT.md) and the machine-readable
 [`evidence/experiment-results.json`](evidence/experiment-results.json).
+The measurement compares against these exact declared totals—not merely
+internally matching denominators—and emits an explicit reason for every failed
+gate.
 
 ## Review package
 

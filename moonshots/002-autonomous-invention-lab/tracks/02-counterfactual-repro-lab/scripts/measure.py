@@ -22,6 +22,24 @@ EXPECTED_CAUSES = {
     "environment-flag": "feature.safeParser",
 }
 
+EXPECTED_TOTALS = {
+    "scenarios_total": 3,
+    "scenarios_correct": 3,
+    "baseline_failures": 9,
+    "baseline_repeats": 9,
+    "control_failures": 18,
+    "control_repeats": 18,
+    "counterfactual_passes": 9,
+    "counterfactual_repeats": 9,
+    "controls_rejected": 6,
+    "fixture_sources_verified": 3,
+    "total_trials": 36,
+    "workspaces_created_and_cleaned": 36,
+    "variables_changed_per_trial": 1,
+    "residual_workspaces": 0,
+    "cause_accuracy_percent": 100.0,
+}
+
 
 def remove_tree_verified(path: Path) -> None:
     try:
@@ -116,16 +134,20 @@ def measure() -> dict:
         "measured_at_utc": datetime.now(timezone.utc).isoformat(),
         "hypothesis": (
             "The lab identifies the seeded environmental cause in every scenario, "
-            "with repeatable baseline and counterfactual outcomes, while changing "
+            "with repeatable baseline, control, and causal outcomes, while changing "
             "one variable per trial and leaving no workspace residue."
         ),
+        "expected_totals": EXPECTED_TOTALS,
         "pass_gates": {
+            "scenarios": 3,
             "cause_accuracy": "3/3",
             "baseline_reproducibility": "9/9 failures",
             "control_reproducibility": "18/18 failures",
             "counterfactual_reproducibility": "9/9 passes",
+            "controls_rejected": 6,
             "fixture_source_integrity": "3/3 verified before receipt",
             "variables_changed_per_trial": 1,
+            "total_trials": 36,
             "verified_workspace_deletions": "36/36",
             "residual_workspaces": 0,
             "median_scenario_duration_under_ms": 3000,
@@ -156,18 +178,135 @@ def measure() -> dict:
         "runs": runs,
     }
     summary = report["summary"]
-    report["passed"] = (
-        summary["scenarios_correct"] == summary["scenarios_total"]
-        and summary["baseline_failures"] == summary["baseline_repeats"]
-        and summary["control_failures"] == summary["control_repeats"]
-        and summary["counterfactual_passes"] == summary["counterfactual_repeats"]
-        and summary["fixture_sources_verified"] == summary["scenarios_total"]
-        and all(len(run["fixture_snapshot_sha256"]) == 64 for run in runs)
-        and summary["workspaces_created_and_cleaned"] == summary["total_trials"]
-        and summary["residual_workspaces"] == 0
-        and all(run["variables_changed_per_trial"] == 1 for run in runs)
-        and summary["median_scenario_duration_ms"] < 3000
-    )
+    expected = EXPECTED_TOTALS
+    gate_checks = [
+        (
+            "scenario_totals",
+            summary["scenarios_total"] == expected["scenarios_total"]
+            and summary["scenarios_correct"] == expected["scenarios_correct"],
+            "Scenarios: expected exactly {0}/{1} correct, observed {2}/{3}".format(
+                expected["scenarios_correct"],
+                expected["scenarios_total"],
+                summary["scenarios_correct"], summary["scenarios_total"]
+            ),
+        ),
+        (
+            "baseline_reproducibility",
+            summary["baseline_failures"] == expected["baseline_failures"]
+            and summary["baseline_repeats"] == expected["baseline_repeats"],
+            "Baseline FAIL observations: expected exactly {0}/{1}, "
+            "observed {2}/{3}".format(
+                expected["baseline_failures"],
+                expected["baseline_repeats"],
+                summary["baseline_failures"], summary["baseline_repeats"]
+            ),
+        ),
+        (
+            "control_reproducibility",
+            summary["control_failures"] == expected["control_failures"]
+            and summary["control_repeats"] == expected["control_repeats"],
+            "Control FAIL observations: expected exactly {0}/{1}, "
+            "observed {2}/{3}".format(
+                expected["control_failures"],
+                expected["control_repeats"],
+                summary["control_failures"], summary["control_repeats"]
+            ),
+        ),
+        (
+            "causal_reproducibility",
+            summary["counterfactual_passes"] == expected["counterfactual_passes"]
+            and summary["counterfactual_repeats"]
+            == expected["counterfactual_repeats"],
+            "Causal PASS observations: expected exactly {0}/{1}, "
+            "observed {2}/{3}".format(
+                expected["counterfactual_passes"],
+                expected["counterfactual_repeats"],
+                summary["counterfactual_passes"],
+                summary["counterfactual_repeats"],
+            ),
+        ),
+        (
+            "controls_rejected",
+            summary["controls_rejected"] == expected["controls_rejected"],
+            "Rejected controls: expected exactly {0}, observed {1}".format(
+                expected["controls_rejected"],
+                summary["controls_rejected"]
+            ),
+        ),
+        (
+            "trial_total",
+            summary["total_trials"] == expected["total_trials"],
+            "Total trials: expected exactly {0}, observed {1}".format(
+                expected["total_trials"],
+                summary["total_trials"]
+            ),
+        ),
+        (
+            "cleanup_total",
+            summary["workspaces_created_and_cleaned"]
+            == expected["workspaces_created_and_cleaned"],
+            "Verified cleanups: expected exactly {0}, observed {1}".format(
+                expected["workspaces_created_and_cleaned"],
+                summary["workspaces_created_and_cleaned"]
+            ),
+        ),
+        (
+            "fixture_source_integrity",
+            summary["fixture_sources_verified"]
+            == expected["fixture_sources_verified"]
+            and all(len(run["fixture_snapshot_sha256"]) == 64 for run in runs),
+            "Fixture sources: expected exactly {0}/{1} verified with snapshot "
+            "hashes, observed {2}/{1}".format(
+                expected["fixture_sources_verified"],
+                expected["scenarios_total"],
+                summary["fixture_sources_verified"],
+            ),
+        ),
+        (
+            "variables_changed_per_trial",
+            len(runs) == expected["scenarios_total"]
+            and all(
+                run["variables_changed_per_trial"]
+                == expected["variables_changed_per_trial"]
+                for run in runs
+            ),
+            "Variables changed per trial: expected exactly {0} for all {1} "
+            "scenarios".format(
+                expected["variables_changed_per_trial"],
+                expected["scenarios_total"],
+            ),
+        ),
+        (
+            "workspace_residue",
+            summary["residual_workspaces"] == expected["residual_workspaces"],
+            "Residual workspaces: expected exactly {0}, observed {1}".format(
+                expected["residual_workspaces"],
+                summary["residual_workspaces"]
+            ),
+        ),
+        (
+            "cause_accuracy",
+            summary["cause_accuracy_percent"] == expected["cause_accuracy_percent"],
+            "Cause accuracy: expected exactly {0}%, observed {1}%".format(
+                expected["cause_accuracy_percent"],
+                summary["cause_accuracy_percent"]
+            ),
+        ),
+        (
+            "duration",
+            summary["median_scenario_duration_ms"] < 3000,
+            "Median duration: expected under 3000 ms, observed {0} ms".format(
+                summary["median_scenario_duration_ms"]
+            ),
+        ),
+    ]
+    report["gate_results"] = {
+        name: passed for name, passed, _reason in gate_checks
+    }
+    report["failure_reasons"] = [
+        reason for _name, passed, reason in gate_checks if not passed
+    ]
+    report["passed"] = not report["failure_reasons"]
     return report
 
 

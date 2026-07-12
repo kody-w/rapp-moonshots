@@ -22,6 +22,11 @@ prototype's value claim.
 
 `python3 scripts/measure.py --write-evidence`
 
+Pass/fail is evaluated against the exact totals below. A shortened run that is
+internally perfect—for example, 3/3 baseline failures after reducing repeats to
+one—still fails the declared 9/9 gate and reports the discrepancy in
+`failure_reasons`.
+
 For each scenario, the runner:
 
 1. snapshots and hashes fixture bytes, then executes the failing baseline three times;
@@ -53,7 +58,7 @@ Measurement captured in
 | Variables changed per trial | 1 | **1** |
 | Trial workspaces cleaned | 36/36 | **36/36** |
 | Residual workspaces | 0 | **0** |
-| Median scenario duration | <3,000 ms | **586.03 ms** |
+| Median scenario duration | <3,000 ms | **615.08 ms** |
 
 **Result: PASS.**
 

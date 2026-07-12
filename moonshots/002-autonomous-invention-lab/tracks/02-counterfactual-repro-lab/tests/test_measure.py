@@ -2,7 +2,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from scripts.measure import remove_tree_verified
+from counterfactual_lab import ExperimentRunner
+from scripts.measure import measure, remove_tree_verified
 
 
 class MeasurementCleanupTests(unittest.TestCase):
@@ -20,6 +21,25 @@ class MeasurementCleanupTests(unittest.TestCase):
         remove_tree.assert_called_once_with(workspace)
         self.assertEqual(workspace.lstat.call_count, 2)
         self.assertIsInstance(context.exception.__cause__, PermissionError)
+
+    def test_reduced_repetitions_fail_exact_declared_totals(self):
+        with patch.object(ExperimentRunner, "repetitions", 1):
+            report = measure()
+
+        self.assertFalse(report["passed"])
+        self.assertFalse(report["gate_results"]["baseline_reproducibility"])
+        self.assertFalse(report["gate_results"]["control_reproducibility"])
+        self.assertFalse(report["gate_results"]["causal_reproducibility"])
+        self.assertFalse(report["gate_results"]["trial_total"])
+        reasons = "\n".join(report["failure_reasons"])
+        self.assertIn(
+            "Baseline FAIL observations: expected exactly 9/9, observed 3/3",
+            reasons,
+        )
+        self.assertIn(
+            "Total trials: expected exactly 36, observed 12",
+            reasons,
+        )
 
 
 if __name__ == "__main__":
