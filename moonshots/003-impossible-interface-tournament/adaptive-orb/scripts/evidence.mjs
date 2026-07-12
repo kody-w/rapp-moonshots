@@ -1,17 +1,26 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runDeterministicSimulation } from "../src/core.mjs";
+import {
+  EXPECTED_DETERMINISTIC_FINGERPRINT,
+  runDeterministicSimulation,
+  verifyDeterministicRecord,
+} from "../src/core.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const evidenceDirectory = resolve(root, "evidence");
-const { record } = runDeterministicSimulation();
+const { machine, record } = runDeterministicSimulation();
 
 const metrics = {
   schemaVersion: record.schemaVersion,
   product: record.product,
   taskId: record.taskId,
   deterministicFingerprint: record.deterministicFingerprint,
+  verification: {
+    expectedFingerprint: EXPECTED_DETERMINISTIC_FINGERPRINT,
+    exactStateVerified: verifyDeterministicRecord(record),
+    externalInputLocked: machine.state.replayLocked,
+  },
   exactTaskVerdict: record.exactTaskVerdict,
   complete: record.complete,
   noIrreversibleAction: record.noIrreversibleAction,
@@ -38,6 +47,9 @@ const replay = {
   schemaVersion: 1,
   taskId: record.taskId,
   deterministicFingerprint: record.deterministicFingerprint,
+  expectedFingerprint: EXPECTED_DETERMINISTIC_FINGERPRINT,
+  exactStateVerified: verifyDeterministicRecord(record),
+  externalInputLocked: machine.state.replayLocked,
   eventCount: record.events.length,
   events: record.events,
 };

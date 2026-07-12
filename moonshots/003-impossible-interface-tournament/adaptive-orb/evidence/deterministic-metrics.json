@@ -3,6 +3,11 @@
   "product": "Adaptive Orb",
   "taskId": "cobalt-beacon-route",
   "deterministicFingerprint": "c1b6e39f",
+  "verification": {
+    "expectedFingerprint": "c1b6e39f",
+    "exactStateVerified": true,
+    "externalInputLocked": true
+  },
   "exactTaskVerdict": true,
   "complete": true,
   "noIrreversibleAction": true,

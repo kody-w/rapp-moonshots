@@ -6,13 +6,14 @@ import { runDeterministicSimulation } from "../src/core.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFile(resolve(root, path), "utf8");
-const [html, template, styles, app, sensors, core, packageText, build] =
+const [html, template, styles, app, sensors, session, core, packageText, build] =
   await Promise.all([
     read("index.html"),
     read("src/index.template.html"),
     read("src/styles.css"),
     read("src/app.mjs"),
     read("src/sensors.mjs"),
+    read("src/session.mjs"),
     read("src/core.mjs"),
     read("package.json"),
     read("scripts/build.mjs"),
@@ -183,8 +184,70 @@ check("fresh frame content and delayed detector results are independently guarde
   assert.match(sensors, /class DetectorEpochGuard/);
   assert.match(sensors, /contentEpoch/);
   assert.match(sensors, /detectorGuard\.accept/);
+  assert.match(sensors, /detectorTokenMatches/);
+  assert.match(sensors, /freshness\.isFresh/);
+  assert.match(sensors, /invalidateContent/);
+  assert.match(sensors, /content-invalid/);
   assert.match(sensors, /pixels\.data\.fill\(0\)/);
   assert.match(sensors, /analysisContext\.clearRect/);
+});
+
+check("sensor-free transitions tear down before accessible render", () => {
+  const stopAt = session.indexOf('controller.stop("sensor-free transition")');
+  const commitAt = session.indexOf("const result = commitSensorFreeAfterTeardown");
+  const renderAt = session.indexOf("render();");
+  assert.ok(stopAt >= 0 && commitAt > stopAt && renderAt > commitAt);
+  assert.match(core, /access-request/);
+  assert.match(core, /SENSOR_FREE_AUTHORITY/);
+  assert.match(app, /sensorTransitioning/);
+  assert.match(app, /transitionToSensorFree/);
+});
+
+check("sensor-free semantic UI entry covers every broad task field", () => {
+  for (const marker of [
+    "entry-action",
+    "entry-quantity",
+    "entry-color",
+    "entry-time",
+    "entry-handling",
+    "entry-review",
+  ]) {
+    assert.match(core, new RegExp(marker));
+  }
+  assert.match(app, /state\.entryStep/);
+  assert.match(html, /Begin semantic quantity, color, time, and handling entry/);
+});
+
+check("aim cache gaps and gesture identity fail closed", () => {
+  assert.match(session, /class RadialAimCoordinator/);
+  assert.match(session, /durationMs > this\.maximumGapMs/);
+  assert.match(session, /machine\.state\.highlight !== id/);
+  assert.match(sensors, /armedChoiceId/);
+  assert.match(sensors, /choiceId: this\.armedChoiceId/);
+  assert.match(app, /gesture\.choiceId === machine\.state\.highlight/);
+});
+
+check("all detector-derived buffers are registered and zeroed", () => {
+  assert.match(sensors, /pendingDetectorBuffers = new Set/);
+  assert.match(sensors, /trackDetectorBuffer/);
+  assert.match(sensors, /releaseDetectorBuffer/);
+  assert.match(sensors, /releasePendingDetectorBuffers/);
+  assert.match(
+    html,
+    /at most one tracked detector working copy may\s+exist; each is zeroed/,
+  );
+});
+
+check("deterministic replay is input-locked and exact before success", () => {
+  assert.match(core, /REPLAY_AUTHORITY/);
+  assert.match(core, /replay-rejected/);
+  assert.match(core, /EXPECTED_DETERMINISTIC_FINGERPRINT = "c1b6e39f"/);
+  assert.match(core, /verifyDeterministicRecord/);
+  assert.match(app, /replayLocked = true/);
+  assert.match(app, /verifyDeterministicRecord\(record\)/);
+  const verificationAt = app.indexOf("verifyDeterministicRecord(record)");
+  const successAt = app.indexOf("Verified exact replay");
+  assert.ok(verificationAt >= 0 && successAt > verificationAt);
 });
 
 check("honest FaceDetector fallback and vendor speech disclosure are visible", () => {
@@ -243,6 +306,7 @@ check("fallback parity and safety controls remain available", () => {
   assert.match(app, /event\.key === "Enter"/);
   assert.match(app, /event\.key === "Escape"/);
   assert.match(app, /key === "u"/);
+  assert.match(app, /type: "RESUME", source: "touch"/);
   assert.match(core, /hasWord\(text, "stop"\)/);
   assert.match(core, /hasWord\(text, "cancel"\)/);
   assert.match(core, /hasWord\(text, "undo"\)/);
@@ -261,11 +325,19 @@ if (process.argv.includes("--check-evidence")) {
     const metrics = JSON.parse(evidenceFiles[0]);
     const replay = JSON.parse(evidenceFiles[1]);
     assert.equal(metrics.deterministicFingerprint, record.deterministicFingerprint);
+    assert.deepEqual(metrics.verification, {
+      expectedFingerprint: "c1b6e39f",
+      exactStateVerified: true,
+      externalInputLocked: true,
+    });
     assert.equal(metrics.exactTaskVerdict, record.exactTaskVerdict);
     assert.deepEqual(metrics.task, record.task);
     assert.deepEqual(metrics.modeTransitions, record.metrics.modeTransitions);
     assert.deepEqual(metrics.perMode, record.metrics.perMode);
     assert.equal(replay.deterministicFingerprint, record.deterministicFingerprint);
+    assert.equal(replay.expectedFingerprint, "c1b6e39f");
+    assert.equal(replay.exactStateVerified, true);
+    assert.equal(replay.externalInputLocked, true);
     assert.equal(replay.eventCount, record.events.length);
     assert.deepEqual(replay.events, record.events);
   });

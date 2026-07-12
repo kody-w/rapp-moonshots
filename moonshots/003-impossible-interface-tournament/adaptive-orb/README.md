@@ -31,6 +31,11 @@ Open:
 The launch screen also offers **Start sensor-free access**, which requests no
 camera or microphone and does not create Web Speech recognition.
 
+Sensor-free task entry is fully semantic and UI-exposed: choose Route beacons,
+then quantity, color, time, handling, the predicted intent, destination, gate,
+review confirmation, and home. Keyboard, touch, and single-switch controls can
+complete this entire path without a synthetic voice event.
+
 ## Normal flow
 
 1. Select **Start voice + camera** once.
@@ -77,9 +82,10 @@ and **not eye tracking**.
 Every new media frame is identity-gated. Uniform, dark, overexposed,
 low-detail, or nearly unchanged content cannot refresh the content gate.
 Raw `ImageData` bytes are zeroed and the analysis canvas is cleared every turn.
-Only one derived grayscale comparison survives to the next turn and is zeroed
-on replacement or shutdown. Delayed detector results carry lifecycle,
-content, and detector-identity epochs.
+One rolling derived grayscale comparison and at most one registered detector
+working copy may coexist. Every registered copy is zeroed on result, detector
+replacement, invalid content, or shutdown. Delayed detector results carry
+lifecycle, content, and detector-identity epochs.
 
 The app has no network client, recorder, persistence API, analytics, service
 worker, external asset, or raw transcript export. Browser Web Speech API
@@ -95,6 +101,10 @@ visible before permission and during use. Sensor-free access avoids it.
   recovers, then selects ORION-7 and North Gate;
 - Tunnel intentionally enters the wrong Amend branch, undoes it, confirms the
   route, and returns home.
+
+Replay mode rejects pointer, voice, keyboard, switch, and programmatic state
+actions. It claims success only after exact state and fingerprint `c1b6e39f`
+both match.
 
 Checked-in evidence reports exact completion in 8,700 ms scripted time, all
 three modes, zero false commits, one blocked gaze attempt, one center cancel,

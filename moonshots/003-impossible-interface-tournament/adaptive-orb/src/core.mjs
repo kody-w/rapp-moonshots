@@ -1,4 +1,7 @@
 const MODE_NAMES = Object.freeze(["orbit", "compass", "tunnel"]);
+const EXPECTED_DETERMINISTIC_FINGERPRINT = "c1b6e39f";
+const REPLAY_AUTHORITY = Symbol("adaptive-orb-deterministic-replay");
+const SENSOR_FREE_AUTHORITY = Symbol("adaptive-orb-sensors-stopped");
 const DWELL_TARGET_MS = Object.freeze({
   orbit: 700,
   compass: 800,
@@ -151,18 +154,104 @@ function optionsForState(state) {
         option("privacy", "Privacy boundary", "Show sensor disclosure", "privacy"),
       ];
     }
+    if (state.entryStep === "quantity") {
+      return [1, 2, 3, 4, 5].map((value) =>
+        option(
+          `entry-quantity-${value}`,
+          `${value} ${value === 1 ? "beacon" : "beacons"}`,
+          "Semantic quantity value",
+          "entry-quantity",
+          [String(value)],
+          { value },
+        ),
+      );
+    }
+    if (state.entryStep === "color") {
+      return [
+        option("entry-color-cobalt", "Cobalt", "Tournament load", "entry-color", ["cobalt"], {
+          value: "cobalt",
+        }),
+        option("entry-color-amber", "Amber", "Alternate load", "entry-color", ["amber"], {
+          value: "amber",
+        }),
+        option("entry-color-silver", "Silver", "Alternate load", "entry-color", ["silver"], {
+          value: "silver",
+        }),
+        option("entry-color-white", "White", "Alternate load", "entry-color", ["white"], {
+          value: "white",
+        }),
+      ];
+    }
+    if (state.entryStep === "time") {
+      return [
+        option("entry-time-1430", "14:30", "Tournament schedule", "entry-time", ["14:30"], {
+          value: "14:30",
+        }),
+        option("entry-time-1200", "12:00", "Alternate schedule", "entry-time", ["12:00"], {
+          value: "12:00",
+        }),
+        option("entry-time-1500", "15:00", "Alternate schedule", "entry-time", ["15:00"], {
+          value: "15:00",
+        }),
+        option("entry-time-1630", "16:30", "Alternate schedule", "entry-time", ["16:30"], {
+          value: "16:30",
+        }),
+      ];
+    }
+    if (state.entryStep === "handling") {
+      return [
+        option(
+          "entry-handling-fragile",
+          "Fragile",
+          "Handle with care",
+          "entry-handling",
+          ["fragile"],
+          { value: "fragile" },
+        ),
+        option(
+          "entry-handling-standard",
+          "Standard",
+          "Normal handling",
+          "entry-handling",
+          ["standard"],
+          { value: "standard" },
+        ),
+        option(
+          "entry-handling-chilled",
+          "Chilled",
+          "Temperature handling",
+          "entry-handling",
+          ["chilled"],
+          { value: "chilled" },
+        ),
+        option(
+          "entry-handling-priority",
+          "Priority",
+          "Expedited handling",
+          "entry-handling",
+          ["priority"],
+          { value: "priority" },
+        ),
+      ];
+    }
     return [
       option(
         "route-beacons",
         "Route beacons",
-        "Speak quantity, color, time, and handling",
-        "prompt",
+        "Begin semantic quantity, color, time, and handling entry",
+        "entry-action",
         ["route beacons"],
       ),
       option("schedule-load", "Schedule a load", "Describe a future route", "prompt"),
       option("inspect-route", "Inspect a route", "No route is active yet", "prompt"),
       option("privacy", "Privacy boundary", "Review local sensing", "privacy"),
-      option("sensor-free", "Sensor-free access", "Keyboard, touch, or switch", "access"),
+      option(
+        "sensor-free",
+        "Sensor-free access",
+        "Keyboard, touch, or switch",
+        "access",
+        ["sensor free", "sensor-free", "accessible mode"],
+      ),
     ];
   }
 
@@ -421,6 +510,7 @@ class AdaptiveOrbMachine {
       completedAt: null,
       stage: "intent",
       broadReady: false,
+      entryStep: null,
       task: createTask(),
       tunnelPath: [],
       mode: "orbit",
@@ -438,11 +528,24 @@ class AdaptiveOrbMachine {
       metrics: initialMetrics(),
       lastAction: "idle",
       announcement: "Ready to start",
+      replayLocked: false,
     };
     this.state.options = optionsForState(this.state);
   }
 
   dispatch(action) {
+    const requestsReplay =
+      action.type === "START" && (action.kind || "live") === "simulation";
+    if (
+      (this.state.replayLocked || requestsReplay) &&
+      action[REPLAY_AUTHORITY] !== true
+    ) {
+      return {
+        ok: false,
+        effect: "replay-rejected",
+        reason: "deterministic-replay-locked",
+      };
+    }
     const now = Number.isFinite(action.at) ? action.at : this.clock();
     if (action.type === "VOICE") {
       return this.handleVoice(action.text, action.source || "voice", now);
@@ -484,6 +587,13 @@ class AdaptiveOrbMachine {
       case "TICK":
         return this.tick(now);
       case "ACCESSIBLE":
+        if (action[SENSOR_FREE_AUTHORITY] !== true) {
+          this.clearAim();
+          this.state.announcement =
+            "Sensor-free access is waiting for camera, microphone, and speech teardown.";
+          this.record("access.requested", { source: action.source || "external" }, now);
+          return { ok: true, effect: "access-request" };
+        }
         return this.enterAccessibleMode(action.source || "manual", now);
       case "PAGEHIDE":
         this.addFreezeCause("page-hidden", now, false);
@@ -503,6 +613,7 @@ class AdaptiveOrbMachine {
     this.state.modeEnteredAt = now;
     this.state.sessionKind = kind;
     this.state.status = "active";
+    this.state.replayLocked = kind === "simulation";
     this.state.sensors.generation = generation;
 
     if (kind === "accessible") {
@@ -581,6 +692,16 @@ class AdaptiveOrbMachine {
     if (text === "center" || text === "rest" || text === "relax") {
       return this.center(source, now);
     }
+    if (
+      text === "sensor free" ||
+      text === "sensor-free" ||
+      text === "accessible mode"
+    ) {
+      this.clearAim();
+      this.state.announcement = "Ending camera, microphone, and speech before sensor-free access.";
+      this.record("access.requested", { source: "voice" }, now);
+      return { ok: true, effect: "access-request" };
+    }
     if (text === "export" || text === "export metrics") {
       this.state.lastAction = "export-request";
       this.record("export.requested", { source: "voice" }, now);
@@ -606,6 +727,7 @@ class AdaptiveOrbMachine {
       }
       this.pushHistory("voice-draft");
       Object.assign(this.state.task, parsed);
+      this.state.entryStep = null;
       this.state.broadReady = broadIntentComplete(this.state.task);
       this.refreshOptionsAndMode("voice-draft", now);
       if (this.state.broadReady) {
@@ -673,13 +795,14 @@ class AdaptiveOrbMachine {
     }
     const duration = Number(durationMs);
     if (!Number.isFinite(duration) || duration <= 0) {
-      return this.block("invalid-dwell", "sensor", now, false);
+      return { ok: false, effect: "ignored", reason: "invalid-dwell" };
     }
     if (duration > 350) {
-      this.state.dwellMs = 0;
-      this.state.armed = false;
+      const id = this.state.highlight;
+      this.clearAim();
       this.state.lastAction = "dwell-gap-reset";
-      this.record("dwell.reset", { reason: "sample-gap" }, now);
+      this.state.announcement = "Sensor gap reset dwell. Reacquire the choice.";
+      this.record("dwell.reset", { reason: "sample-gap", id, reacquire: true }, now);
       return { ok: false, effect: "reset" };
     }
     const credited = Math.min(duration, 250);
@@ -755,7 +878,10 @@ class AdaptiveOrbMachine {
       return this.undo(source, now);
     }
     if (candidate.effect === "access") {
-      return this.enterAccessibleMode(source, now);
+      this.clearAim();
+      this.state.announcement = "Ending camera, microphone, and speech before sensor-free access.";
+      this.record("access.requested", { source }, now);
+      return { ok: true, effect: "access-request" };
     }
 
     this.pushHistory(`confirm:${candidate.id}`);
@@ -785,17 +911,45 @@ class AdaptiveOrbMachine {
 
   applyOption(candidate, now) {
     switch (candidate.effect) {
+      case "entry-action":
+        this.state.task.action = "route";
+        this.state.entryStep = "quantity";
+        this.state.announcement = "Route selected. Choose beacon quantity.";
+        return { ok: true, effect: "entry" };
+      case "entry-quantity":
+        this.state.task.quantity = candidate.value;
+        this.state.entryStep = "color";
+        this.state.announcement = `${candidate.value} selected. Choose beacon color.`;
+        return { ok: true, effect: "entry" };
+      case "entry-color":
+        this.state.task.color = candidate.value;
+        this.state.entryStep = "time";
+        this.state.announcement = `${candidate.label} selected. Choose route time.`;
+        return { ok: true, effect: "entry" };
+      case "entry-time":
+        this.state.task.time = candidate.value;
+        this.state.entryStep = "handling";
+        this.state.announcement = `${candidate.label} selected. Choose handling.`;
+        return { ok: true, effect: "entry" };
+      case "entry-handling":
+        this.state.task.handling = candidate.value;
+        this.state.entryStep = null;
+        this.state.broadReady = broadIntentComplete(this.state.task);
+        this.state.announcement = `${candidate.label} selected. Review the broad intent.`;
+        return { ok: true, effect: "entry-review" };
       case "accept-broad":
         if (!broadIntentComplete(this.state.task)) {
           return { ok: false, reason: "broad-intent-incomplete" };
         }
         this.state.broadReady = false;
+        this.state.entryStep = null;
         this.state.stage = "destination";
         this.state.announcement = "Broad intent confirmed. Compass is choosing destination.";
         return { ok: true, effect: "destination" };
       case "reset-draft":
         this.state.task = createTask();
         this.state.broadReady = false;
+        this.state.entryStep = null;
         this.state.announcement = "Draft cleared. Nothing was sent.";
         return { ok: true, effect: "reset" };
       case "destination":
@@ -854,6 +1008,7 @@ class AdaptiveOrbMachine {
         this.state.task = createTask();
         this.state.stage = "intent";
         this.state.broadReady = false;
+        this.state.entryStep = null;
         this.state.tunnelPath = [];
         this.state.announcement = "Draft canceled locally. Undo can restore it.";
         return { ok: true, effect: "intent" };
@@ -873,6 +1028,7 @@ class AdaptiveOrbMachine {
     this.state.task = previous.task;
     this.state.stage = previous.stage;
     this.state.broadReady = previous.broadReady;
+    this.state.entryStep = previous.entryStep;
     this.state.tunnelPath = previous.tunnelPath;
     this.state.completedAt = previous.completedAt;
     this.state.metrics.completionTimeMs = previous.completionTimeMs;
@@ -1155,6 +1311,7 @@ class AdaptiveOrbMachine {
       task: clone(this.state.task),
       stage: this.state.stage,
       broadReady: this.state.broadReady,
+      entryStep: this.state.entryStep,
       tunnelPath: [...this.state.tunnelPath],
       completedAt: this.state.completedAt,
       completionTimeMs: this.state.metrics.completionTimeMs,
@@ -1397,14 +1554,52 @@ const DETERMINISTIC_SCRIPT = Object.freeze([
   { at: 8700, type: "CONFIRM", source: "gesture" },
 ]);
 
+function dispatchDeterministicStep(machine, action) {
+  const authorized = clone(action);
+  authorized[REPLAY_AUTHORITY] = true;
+  return machine.dispatch(authorized);
+}
+
+function commitSensorFreeAfterTeardown(machine, { source, at } = {}) {
+  const action = { type: "ACCESSIBLE", source, at };
+  action[SENSOR_FREE_AUTHORITY] = true;
+  return machine.dispatch(action);
+}
+
+function verifyDeterministicRecord(record) {
+  return (
+    record.deterministicFingerprint === EXPECTED_DETERMINISTIC_FINGERPRINT &&
+    record.complete === true &&
+    record.exactTaskVerdict === true &&
+    JSON.stringify(record.task) === JSON.stringify(EXPECTED_TASK) &&
+    record.activeMode === "tunnel" &&
+    record.modePreference === "auto" &&
+    JSON.stringify(record.modesUsed) ===
+      JSON.stringify(["orbit", "compass", "tunnel"]) &&
+    record.freezeCauses.length === 0 &&
+    record.metrics.completionTimeMs === 8700 &&
+    record.metrics.falseCommits === 0 &&
+    record.metrics.modeTransitions.length === 2 &&
+    record.metrics.sensorLosses === 1 &&
+    record.metrics.sensorRecoveries === 1 &&
+    record.metrics.intentionalWrongBranches === 1 &&
+    record.metrics.undos === 1
+  );
+}
+
 function runDeterministicSimulation() {
   let now = 0;
   const machine = new AdaptiveOrbMachine({ clock: () => now });
   for (const action of DETERMINISTIC_SCRIPT) {
     now = action.at;
-    machine.dispatch(clone(action));
+    dispatchDeterministicStep(machine, action);
   }
   const record = machine.exportRecord(now);
+  if (!verifyDeterministicRecord(record)) {
+    throw new Error(
+      `Deterministic replay verification failed: ${record.deterministicFingerprint}`,
+    );
+  }
   return { machine, record };
 }
 
@@ -1412,12 +1607,15 @@ export {
   AdaptiveOrbMachine,
   DETERMINISTIC_SCRIPT,
   DWELL_TARGET_MS,
+  EXPECTED_DETERMINISTIC_FINGERPRINT,
   EXPECTED_TASK,
   MODE_NAMES,
   broadIntentComplete,
   choiceShapeForState,
   chooseModeForShape,
   createTask,
+  commitSensorFreeAfterTeardown,
+  dispatchDeterministicStep,
   fingerprint,
   normalizeSpeech,
   optionsForState,
@@ -1426,4 +1624,5 @@ export {
   runDeterministicSimulation,
   taskFieldsMatch,
   taskMatchesExpected,
+  verifyDeterministicRecord,
 };

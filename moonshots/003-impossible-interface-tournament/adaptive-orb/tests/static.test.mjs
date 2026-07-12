@@ -17,6 +17,11 @@ test("generated index is self-contained and has the required product hooks", asy
   assert.match(html, /pagehide/);
   assert.match(html, /event\.persisted/);
   assert.match(html, /BUILD_TOURNAMENT_EVIDENCE/);
+  assert.match(html, /entry-quantity-/);
+  assert.match(html, /class RadialAimCoordinator/);
+  assert.match(html, /pendingDetectorBuffers/);
+  assert.match(html, /EXPECTED_DETERMINISTIC_FINGERPRINT = "c1b6e39f"/);
+  assert.match(html, /replay-rejected/);
   assert.doesNotMatch(html, /<iframe\b/i);
   assert.doesNotMatch(html, /<script[^>]+\bsrc=/i);
   assert.doesNotMatch(html, /<link[^>]+\bhref=/i);

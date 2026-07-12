@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { AdaptiveOrbMachine } from "../src/core.mjs";
 import {
   AdaptiveSensorController,
   CoarseGestureGate,
@@ -93,6 +94,42 @@ test("gesture gate cannot confirm by returning through center", () => {
   assert.equal(returnToRadial.confirmed, true);
 });
 
+test("gesture phase resets when the armed choice identity changes", () => {
+  const gate = new CoarseGestureGate({
+    downDelta: 0.05,
+    returnDelta: 0.02,
+    timeoutMs: 500,
+    cooldownMs: 100,
+  });
+  gate.sample({
+    zone: "radial",
+    y: 0.4,
+    at: 0,
+    armed: true,
+    epoch: 1,
+    choiceId: "alpha",
+  });
+  gate.sample({
+    zone: "radial",
+    y: 0.47,
+    at: 100,
+    armed: true,
+    epoch: 1,
+    choiceId: "alpha",
+  });
+  const changed = gate.sample({
+    zone: "radial",
+    y: 0.4,
+    at: 150,
+    armed: true,
+    epoch: 1,
+    choiceId: "beta",
+  });
+  assert.equal(changed.confirmed, false);
+  assert.equal(changed.phase, "settled");
+  assert.equal(gate.armedChoiceId, "beta");
+});
+
 test("delayed detector completion is rejected and releases the pending gate", async () => {
   let resolveDetection;
   const detection = new Promise((resolve) => {
@@ -107,6 +144,7 @@ test("delayed detector completion is rejected and releases the pending gate", as
   });
   const generation = controller.lifecycle.begin();
   controller.active = true;
+  controller.freshness.reset(generation);
   controller.detector = detector;
   controller.contentEpoch = 2;
   controller.processDetector(
@@ -132,6 +170,295 @@ test("delayed detector completion is rejected and releases the pending gate", as
     true,
   );
   controller.stop("detector-test");
+});
+
+test("FaceDetector aim requires accepted fresh frame content and processed sample", async () => {
+  let now = 20;
+  const aims = [];
+  const actions = [];
+  const detector = {
+    detect: async () => [
+      { boundingBox: { x: 100, y: 100, width: 100, height: 100 } },
+    ],
+  };
+  const controller = new AdaptiveSensorController({
+    video: { videoWidth: 640, videoHeight: 480 },
+    onAction: (action) => actions.push(action),
+    onAim: (aim) => aims.push(aim),
+    clock: () => now,
+  });
+  const generation = controller.lifecycle.begin();
+  controller.active = true;
+  controller.freshness.reset(generation);
+  controller.detector = detector;
+  controller.contentEpoch = 3;
+  controller.processDetector(
+    generation,
+    10,
+    { generation, frameAt: 10, contentAt: 10 },
+    new Uint8Array([4, 5, 6]),
+    { activeTotal: 0, centroidX: 0, centroidY: 0, difference: 1 },
+  );
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(aims.length, 1);
+  assert.equal(controller.freshness.frameAt, 10);
+  assert.equal(controller.freshness.contentAt, 10);
+  assert.equal(controller.freshness.processedAt, 10);
+  assert.equal(
+    actions.some(
+      (action) =>
+        action.type === "SENSOR_SAMPLE" &&
+        Number.isFinite(action.processedAt) &&
+        !Number.isFinite(action.frameAt),
+    ),
+    true,
+  );
+
+  const stoppedAims = [];
+  const stopped = new AdaptiveSensorController({
+    video: { videoWidth: 640, videoHeight: 480 },
+    onAim: (aim) => stoppedAims.push(aim),
+    clock: () => now,
+  });
+  const stoppedGeneration = stopped.lifecycle.begin();
+  stopped.active = true;
+  stopped.freshness.reset(stoppedGeneration);
+  stopped.detector = detector;
+  stopped.onAction = (action) => {
+    if (action.type === "SENSOR_SAMPLE" && Number.isFinite(action.processedAt)) {
+      stopped.stop("freshness-callback-stop");
+    }
+  };
+  stopped.processDetector(
+    stoppedGeneration,
+    15,
+    { generation: stoppedGeneration, frameAt: 15, contentAt: 15 },
+    new Uint8Array([7, 8, 9]),
+    { activeTotal: 0, centroidX: 0, centroidY: 0, difference: 1 },
+  );
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(stoppedAims.length, 0);
+
+  const rejectedAims = [];
+  const rejected = new AdaptiveSensorController({
+    video: { videoWidth: 640, videoHeight: 480 },
+    onAim: (aim) => rejectedAims.push(aim),
+    onAction: (action) =>
+      Number.isFinite(action.processedAt)
+        ? { ok: false, effect: "rejected" }
+        : { ok: true },
+    clock: () => now,
+  });
+  const rejectedGeneration = rejected.lifecycle.begin();
+  rejected.active = true;
+  rejected.freshness.reset(rejectedGeneration);
+  rejected.detector = detector;
+  rejected.processDetector(
+    rejectedGeneration,
+    16,
+    { generation: rejectedGeneration, frameAt: 16, contentAt: 16 },
+    new Uint8Array([3, 2, 1]),
+    { activeTotal: 0, centroidX: 0, centroidY: 0, difference: 1 },
+  );
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(rejectedAims.length, 0);
+  assert.equal(rejected.freshness.processedAt, null);
+  rejected.stop("rejected-sample-test");
+  controller.stop("success-test");
+  now = 30;
+});
+
+test("detector error and fallback transition emit no stale aim and clear buffers", async () => {
+  const aims = [];
+  const actions = [];
+  const detector = { detect: async () => { throw new Error("detector failed"); } };
+  const controller = new AdaptiveSensorController({
+    video: { videoWidth: 640, videoHeight: 480 },
+    onAction: (action) => actions.push(action),
+    onAim: (aim) => aims.push(aim),
+    clock: () => 30,
+  });
+  const generation = controller.lifecycle.begin();
+  controller.active = true;
+  controller.freshness.reset(generation);
+  controller.detector = detector;
+  controller.contentEpoch = 1;
+  controller.processDetector(
+    generation,
+    20,
+    { generation, frameAt: 20, contentAt: 20 },
+    new Uint8Array([9, 8, 7]),
+    { activeTotal: 1, centroidX: 1, centroidY: 1, difference: 2 },
+  );
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(aims.length, 0);
+  assert.equal(controller.detector, null);
+  assert.equal(controller.pendingDetectorBuffers.size, 0);
+  assert.equal(controller.pendingRecoveryCauses.has("detector-transition"), true);
+  assert.equal(
+    actions.some(
+      (action) =>
+        action.type === "SENSOR_LOSS" &&
+        action.cause === "detector-transition",
+    ),
+    true,
+  );
+  controller.stop("error-test");
+});
+
+test("old detector completion cannot cancel or unlock a replacement request", async () => {
+  let resolveOld;
+  let resolveNew;
+  const oldDetection = new Promise((resolve) => {
+    resolveOld = resolve;
+  });
+  const newDetection = new Promise((resolve) => {
+    resolveNew = resolve;
+  });
+  let calls = 0;
+  const detector = {
+    detect() {
+      calls += 1;
+      return calls === 1 ? oldDetection : newDetection;
+    },
+  };
+  const aims = [];
+  const controller = new AdaptiveSensorController({
+    video: { videoWidth: 640, videoHeight: 480 },
+    onAim: (aim) => aims.push(aim),
+    clock: () => 40,
+  });
+  const generation = controller.lifecycle.begin();
+  controller.active = true;
+  controller.freshness.reset(generation);
+  controller.detector = detector;
+  controller.processDetector(
+    generation,
+    10,
+    { generation, frameAt: 10, contentAt: 10 },
+    new Uint8Array([1, 2, 3]),
+    { activeTotal: 0, centroidX: 0, centroidY: 0, difference: 1 },
+  );
+  controller.invalidateContent(generation, 20);
+  controller.processDetector(
+    generation,
+    30,
+    { generation, frameAt: 30, contentAt: 30 },
+    new Uint8Array([4, 5, 6]),
+    { activeTotal: 0, centroidX: 0, centroidY: 0, difference: 1 },
+  );
+  const replacementTimeout = controller.detectorTimeout;
+  resolveOld([
+    { boundingBox: { x: 100, y: 100, width: 100, height: 100 } },
+  ]);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(controller.detectorPending, true);
+  assert.equal(controller.detectorTimeout, replacementTimeout);
+  assert.equal(controller.pendingDetectorBuffers.size, 1);
+
+  resolveNew([
+    { boundingBox: { x: 120, y: 100, width: 100, height: 100 } },
+  ]);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(controller.detectorPending, false);
+  assert.equal(controller.pendingDetectorBuffers.size, 0);
+  assert.equal(aims.length, 1);
+  controller.stop("replacement-test");
+});
+
+test("invalid content immediately revokes aim and requires content plus processing", () => {
+  let now = 100;
+  const machine = new AdaptiveOrbMachine({ clock: () => now });
+  machine.dispatch({ type: "START", kind: "live", generation: 1, at: 0 });
+  machine.dispatch({
+    type: "SENSOR_STATUS",
+    sensor: "camera",
+    status: "active",
+    at: 1,
+  });
+  machine.dispatch({
+    type: "SENSOR_STATUS",
+    sensor: "estimator",
+    status: "active",
+    at: 1,
+  });
+  machine.dispatch({
+    type: "SENSOR_SAMPLE",
+    generation: 1,
+    frameAt: 10,
+    contentAt: 10,
+    processedAt: 10,
+    at: 10,
+  });
+  machine.dispatch({
+    type: "HIGHLIGHT",
+    id: "route-beacons",
+    source: "gaze",
+    at: 20,
+  });
+  machine.dispatch({ type: "DWELL", durationMs: 250, at: 30 });
+
+  const aims = [];
+  const controller = new AdaptiveSensorController({
+    video: null,
+    onAction: (action) => machine.dispatch(action),
+    onAim: (aim) => aims.push(aim),
+    clock: () => now,
+  });
+  const generation = controller.lifecycle.begin();
+  controller.active = true;
+  controller.freshness.reset(generation);
+  controller.setArmed(true, "route-beacons");
+  controller.invalidateContent(generation, now);
+  controller.invalidateContent(generation, now + 1);
+  assert.equal(machine.state.highlight, null);
+  assert.equal(machine.state.armed, false);
+  assert.equal(controller.armed, false);
+  assert.equal(controller.armedChoiceId, null);
+  assert.deepEqual(machine.state.freezeCauses, ["content-invalid"]);
+  assert.equal(machine.state.metrics.sensorLosses, 1);
+
+  now = 200;
+  controller.processFallback(
+    now,
+    { generation, frameAt: now, contentAt: now },
+    new Uint8Array([1, 2, 3]),
+    { activeTotal: 0, centroidX: 0, centroidY: 0, difference: 1 },
+  );
+  assert.deepEqual(machine.state.freezeCauses, []);
+  assert.equal(machine.state.metrics.sensorRecoveries, 1);
+  assert.equal(aims.length, 1);
+  controller.stop("content-test");
+});
+
+test("shutdown zeros every pending detector-derived buffer", () => {
+  const never = new Promise(() => {});
+  const controller = new AdaptiveSensorController({
+    video: { videoWidth: 640, videoHeight: 480 },
+    clock: () => 10,
+  });
+  const generation = controller.lifecycle.begin();
+  controller.active = true;
+  controller.freshness.reset(generation);
+  controller.detector = { detect: () => never };
+  controller.processDetector(
+    generation,
+    10,
+    { generation, frameAt: 10, contentAt: 10 },
+    new Uint8Array([11, 12, 13]),
+    { activeTotal: 0, centroidX: 0, centroidY: 0, difference: 1 },
+  );
+  const pending = [...controller.pendingDetectorBuffers];
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].some((value) => value !== 0), true);
+  controller.stop("pending-buffer-test");
+  assert.equal(controller.pendingDetectorBuffers.size, 0);
+  assert.equal(pending[0].every((value) => value === 0), true);
 });
 
 test("stopStream stops every acquired media track", () => {

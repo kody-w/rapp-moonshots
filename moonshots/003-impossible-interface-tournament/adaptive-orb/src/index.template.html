@@ -260,8 +260,9 @@
         <div class="disclosure-grid">
           <p>
             <strong>Ephemeral frames:</strong> a 48×36 analysis canvas is cleared
-            every processing turn. Raw pixel bytes are zeroed. Only a derived
-            grayscale comparison survives until the next frame, then is zeroed.
+            every processing turn. Raw pixel bytes are zeroed. One rolling derived
+            grayscale comparison and at most one tracked detector working copy may
+            exist; each is zeroed on replacement, completion, or shutdown.
           </p>
           <p>
             <strong>Honest estimate:</strong> FaceDetector supplies a transient face

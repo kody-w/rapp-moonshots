@@ -2,14 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   AdaptiveOrbMachine,
+  DETERMINISTIC_SCRIPT,
   EXPECTED_TASK,
+  EXPECTED_DETERMINISTIC_FINGERPRINT,
   chooseModeForShape,
+  dispatchDeterministicStep,
   parseBroadIntent,
   runDeterministicSimulation,
   taskMatchesExpected,
+  verifyDeterministicRecord,
 } from "../src/core.mjs";
 
-function begin(kind = "simulation") {
+function begin(kind = "live") {
   let now = 0;
   const machine = new AdaptiveOrbMachine({ clock: () => now });
   machine.dispatch({ type: "START", kind, generation: 4, at: now });
@@ -283,17 +287,28 @@ test("intentional tunnel branch is reversible without losing route values", () =
 
 test("sensor-free parity completes the exact task with separate aim and confirm", () => {
   const { machine } = begin("accessible");
-  captureBroad(machine);
-  choose(machine, "destination-orion", "keyboard", 300);
-  choose(machine, "gate-north", "touch", 400);
-  choose(machine, "confirm-route", "switch", 500);
-  choose(machine, "return-home", "keyboard", 600);
+  choose(machine, "route-beacons", "keyboard", 100);
+  choose(machine, "entry-quantity-3", "touch", 200);
+  machine.dispatch({ type: "CYCLE", delta: 1, source: "switch", at: 300 });
+  machine.dispatch({ type: "CONFIRM", source: "switch", at: 301 });
+  choose(machine, "entry-time-1430", "keyboard", 400);
+  choose(machine, "entry-handling-fragile", "touch", 500);
+  machine.dispatch({ type: "CYCLE", delta: 1, source: "switch", at: 600 });
+  machine.dispatch({ type: "CONFIRM", source: "switch", at: 601 });
+  choose(machine, "destination-orion", "touch", 700);
+  choose(machine, "gate-north", "keyboard", 800);
+  choose(machine, "confirm-route", "switch", 900);
+  choose(machine, "return-home", "touch", 1000);
   assert.equal(machine.state.stage, "complete");
   assert.equal(taskMatchesExpected(machine.state.task), true);
   assert.deepEqual(machine.state.task, EXPECTED_TASK);
   assert.equal(machine.state.sensors.camera, "not-requested");
   assert.equal(machine.state.sensors.microphone, "not-requested");
   assert.equal(machine.state.metrics.falseCommits, 0);
+  assert.equal(machine.state.metrics.confirmationSources.voice, 0);
+  assert.ok(machine.state.metrics.confirmationSources.keyboard > 0);
+  assert.ok(machine.state.metrics.confirmationSources.touch > 0);
+  assert.ok(machine.state.metrics.confirmationSources.switch > 0);
 });
 
 test("deterministic replay uses all modes and proves the exact shared task", () => {
@@ -320,6 +335,46 @@ test("deterministic replay uses all modes and proves the exact shared task", () 
   }
   assert.ok(record.metrics.perMode.compass.dwellMs > 0);
   assert.ok(record.metrics.perMode.tunnel.dwellMs > 0);
+  assert.equal(
+    record.deterministicFingerprint,
+    EXPECTED_DETERMINISTIC_FINGERPRINT,
+  );
+  assert.equal(verifyDeterministicRecord(record), true);
+});
+
+test("deterministic replay rejects every external action without state drift", () => {
+  let now = 0;
+  const machine = new AdaptiveOrbMachine({ clock: () => now });
+  dispatchDeterministicStep(machine, DETERMINISTIC_SCRIPT[0]);
+  const lockedState = JSON.stringify(machine.state);
+  for (const action of [
+    { type: "VOICE", text: "undo", source: "voice" },
+    { type: "HIGHLIGHT", id: "route-beacons", source: "touch" },
+    { type: "CYCLE", delta: 1, source: "keyboard" },
+    { type: "CONFIRM", source: "gesture" },
+    { type: "CENTER", source: "pointer" },
+    { type: "ACCESSIBLE", source: "external" },
+    { type: "STOP", source: "external" },
+    { type: "PAGEHIDE", source: "external" },
+  ]) {
+    const result = machine.dispatch({ ...action, at: 10 });
+    assert.equal(result.effect, "replay-rejected", action.type);
+    assert.equal(JSON.stringify(machine.state), lockedState, action.type);
+  }
+  for (const action of DETERMINISTIC_SCRIPT.slice(1)) {
+    now = action.at;
+    dispatchDeterministicStep(machine, action);
+    machine.exportRecord(now);
+  }
+  const record = machine.exportRecord(now);
+  assert.equal(record.deterministicFingerprint, "c1b6e39f");
+  assert.equal(verifyDeterministicRecord(record), true);
+  const finalState = JSON.stringify(machine.state);
+  assert.equal(
+    machine.dispatch({ type: "UNDO", source: "keyboard", at: 9000 }).effect,
+    "replay-rejected",
+  );
+  assert.equal(JSON.stringify(machine.state), finalState);
 });
 
 test("export contains no raw media, transcript, persistence, or irreversible effect", () => {

@@ -38,15 +38,25 @@ class DetectorEpochGuard {
   }
 
   accept(token, generation, contentEpoch, detectorIdentity) {
-    const accepted =
-      token.epoch === this.epoch &&
-      token.generation === generation &&
-      token.contentEpoch === contentEpoch &&
-      token.detectorIdentity === detectorIdentity;
+    const accepted = this.matches(
+      token,
+      generation,
+      contentEpoch,
+      detectorIdentity,
+    );
     if (!accepted) {
       this.rejections += 1;
     }
     return accepted;
+  }
+
+  matches(token, generation, contentEpoch, detectorIdentity) {
+    return (
+      token.epoch === this.epoch &&
+      token.generation === generation &&
+      token.contentEpoch === contentEpoch &&
+      token.detectorIdentity === detectorIdentity
+    );
   }
 }
 
@@ -64,6 +74,14 @@ class FreshnessGate {
     this.frameAt = null;
     this.contentAt = null;
     this.processedAt = null;
+  }
+
+  invalidate(signals) {
+    for (const signal of signals) {
+      if (["frameAt", "contentAt", "processedAt"].includes(signal)) {
+        this[signal] = null;
+      }
+    }
   }
 
   update(sample) {
@@ -116,25 +134,28 @@ class CoarseGestureGate {
     this.baseline = null;
     this.startedAt = null;
     this.armedEpoch = null;
+    this.armedChoiceId = null;
     this.lastConfirmAt = -Infinity;
   }
 
-  sample({ zone, y, at, armed, epoch }) {
+  sample({ zone, y, at, armed, epoch, choiceId }) {
     if (!armed || zone === "center" || !Number.isFinite(y)) {
       this.phase = zone === "center" ? "center" : "idle";
       this.baseline = null;
       this.startedAt = null;
       this.armedEpoch = null;
+      this.armedChoiceId = null;
       return { confirmed: false, phase: this.phase };
     }
     if (at - this.lastConfirmAt < this.cooldownMs) {
       return { confirmed: false, phase: "cooldown" };
     }
-    if (this.armedEpoch !== epoch) {
+    if (this.armedEpoch !== epoch || this.armedChoiceId !== choiceId) {
       this.phase = "settled";
       this.baseline = y;
       this.startedAt = at;
       this.armedEpoch = epoch;
+      this.armedChoiceId = choiceId;
       return { confirmed: false, phase: this.phase };
     }
     if (at - this.startedAt > this.timeoutMs) {
@@ -206,7 +227,11 @@ class AdaptiveSensorController {
     this.speaking = false;
     this.detector = null;
     this.detectorPending = false;
+    this.detectorRequestId = 0;
     this.detectorTimeout = null;
+    this.pendingDetectorBuffers = new Set();
+    this.pendingRecoveryCauses = new Set();
+    this.contentBlocked = false;
     this.contentEpoch = 0;
     this.lastFrameToken = null;
     this.previousGray = null;
@@ -216,7 +241,7 @@ class AdaptiveSensorController {
     this.lastMotionGestureAt = -Infinity;
     this.armed = false;
     this.armedEpoch = 0;
-    this.lastAimAt = null;
+    this.armedChoiceId = null;
     this.analysisCanvas =
       typeof document === "undefined" ? null : document.createElement("canvas");
     if (this.analysisCanvas) {
@@ -423,6 +448,100 @@ class AdaptiveSensorController {
     schedule();
   }
 
+  trackDetectorBuffer(gray) {
+    const buffer = gray.slice();
+    this.pendingDetectorBuffers.add(buffer);
+    return buffer;
+  }
+
+  releaseDetectorBuffer(buffer) {
+    if (!buffer) {
+      return;
+    }
+    buffer.fill(0);
+    this.pendingDetectorBuffers.delete(buffer);
+  }
+
+  releasePendingDetectorBuffers() {
+    for (const buffer of this.pendingDetectorBuffers) {
+      buffer.fill(0);
+    }
+    this.pendingDetectorBuffers.clear();
+  }
+
+  markRecoveryRequired(cause, at) {
+    if (this.pendingRecoveryCauses.has(cause)) {
+      return;
+    }
+    this.pendingRecoveryCauses.add(cause);
+    this.onAction({
+      type: "SENSOR_LOSS",
+      cause,
+      sensor: null,
+      at,
+    });
+  }
+
+  revokeSensorArm() {
+    this.armed = false;
+    this.armedChoiceId = null;
+    this.armedEpoch += 1;
+    this.gestureGate.reset();
+  }
+
+  invalidateContent(generation, at) {
+    this.contentEpoch += 1;
+    this.detectorGuard.invalidate();
+    this.detectorRequestId += 1;
+    this.detectorPending = false;
+    clearTimeout(this.detectorTimeout);
+    this.detectorTimeout = null;
+    this.freshness.invalidate(["contentAt", "processedAt"]);
+    this.releasePendingDetectorBuffers();
+    this.faceBaseline = null;
+    this.motionPoint = { x: 0.5, y: 0.5 };
+    this.revokeSensorArm();
+    this.contentBlocked = true;
+    if (this.active && this.lifecycle.isCurrent(generation)) {
+      this.markRecoveryRequired("content-invalid", at);
+    }
+  }
+
+  detectorTokenMatches(token, generation, detectorIdentity) {
+    return (
+      this.active &&
+      this.lifecycle.isCurrent(generation) &&
+      this.detectorGuard.matches(
+        token,
+        generation,
+        this.contentEpoch,
+        detectorIdentity,
+      )
+    );
+  }
+
+  transitionDetectorToFallback(token, generation, detectorIdentity, label, at) {
+    if (!this.detectorTokenMatches(token, generation, detectorIdentity)) {
+      return false;
+    }
+    this.detectorGuard.invalidate();
+    this.detectorRequestId += 1;
+    this.detectorPending = false;
+    this.detector = null;
+    this.freshness.invalidate(["processedAt"]);
+    this.releasePendingDetectorBuffers();
+    this.revokeSensorArm();
+    this.markRecoveryRequired("detector-transition", at);
+    this.onAction({
+      type: "SENSOR_STATUS",
+      sensor: "estimator",
+      status: "active",
+      label,
+      at,
+    });
+    return true;
+  }
+
   processFrame(at, metadata, generation) {
     if (
       !this.active ||
@@ -503,8 +622,7 @@ class AdaptiveSensorController {
       if (contentValid) {
         sample.contentAt = at;
       } else {
-        this.contentEpoch += 1;
-        this.detectorGuard.invalidate();
+        this.invalidateContent(generation, at);
       }
 
       if (contentValid) {
@@ -533,8 +651,7 @@ class AdaptiveSensorController {
       this.previousGray = gray;
       gray = null;
     } catch {
-      this.contentEpoch += 1;
-      this.detectorGuard.invalidate();
+      this.invalidateContent(generation, at);
       this.emitFreshness(sample);
     } finally {
       if (pixels?.data?.fill) {
@@ -553,52 +670,65 @@ class AdaptiveSensorController {
   }
 
   processDetector(generation, at, sample, gray, motion) {
+    const frameAccepted = this.emitFreshness(sample);
+    if (!frameAccepted) {
+      return false;
+    }
     if (this.detectorPending) {
-      this.emitFreshness(sample);
-      return;
+      return true;
     }
     this.detectorPending = true;
+    const requestId = ++this.detectorRequestId;
     const detectorIdentity = this.detector;
     const token = this.detectorGuard.capture(
       generation,
       this.contentEpoch,
       detectorIdentity,
     );
-    const grayCopy = gray.slice();
-    this.detectorTimeout = setTimeout(() => {
-      if (
-        this.detectorPending &&
-        this.active &&
-        this.lifecycle.isCurrent(generation) &&
-        detectorIdentity === this.detector
-      ) {
-        this.detectorGuard.invalidate();
-        this.detectorPending = false;
-        this.detector = null;
-        this.onAction({
-          type: "SENSOR_STATUS",
-          sensor: "estimator",
-          status: "active",
-          label: "frame-motion fallback after detector stall · not eye tracking",
-          at: this.clock(),
-        });
-        this.processFallback(this.clock(), sample, grayCopy, motion);
+    const grayCopy = this.trackDetectorBuffer(gray);
+    const timeoutHandle = setTimeout(() => {
+      if (this.detectorTimeout === timeoutHandle) {
+        this.detectorTimeout = null;
       }
-      grayCopy.fill(0);
+      if (
+        requestId !== this.detectorRequestId ||
+        !this.detectorPending
+      ) {
+        this.releaseDetectorBuffer(grayCopy);
+        return;
+      }
+      if (!this.detectorTokenMatches(token, generation, detectorIdentity)) {
+        this.detectorPending = false;
+        this.releaseDetectorBuffer(grayCopy);
+        return;
+      }
+      this.transitionDetectorToFallback(
+        token,
+        generation,
+        detectorIdentity,
+        "frame-motion fallback after detector stall · not eye tracking",
+        this.clock(),
+      );
+      this.releaseDetectorBuffer(grayCopy);
     }, 900);
+    this.detectorTimeout = timeoutHandle;
 
     Promise.resolve(detectorIdentity.detect(this.video))
       .then((faces) => {
-        clearTimeout(this.detectorTimeout);
+        clearTimeout(timeoutHandle);
+        if (this.detectorTimeout === timeoutHandle) {
+          this.detectorTimeout = null;
+        }
+        if (requestId !== this.detectorRequestId) {
+          return;
+        }
         const accepted =
-          this.active &&
-          this.lifecycle.isCurrent(generation) &&
           this.detectorGuard.accept(
             token,
             generation,
             this.contentEpoch,
             this.detector,
-          );
+          ) && this.detectorTokenMatches(token, generation, detectorIdentity);
         if (!accepted) {
           this.detectorPending = false;
           this.onAction({
@@ -613,7 +743,11 @@ class AdaptiveSensorController {
         const face = Array.isArray(faces) ? faces[0] : null;
         const box = face?.boundingBox;
         if (!box || !this.video.videoWidth || !this.video.videoHeight) {
-          this.processFallback(at, sample, grayCopy, motion);
+          this.processFallback(at, sample, grayCopy, motion, {
+            token,
+            generation,
+            detectorIdentity,
+          });
           return;
         }
         const x = (box.x + box.width / 2) / this.video.videoWidth;
@@ -625,36 +759,54 @@ class AdaptiveSensorController {
           x: clamp(0.5 + (x - this.faceBaseline.x) * 3.2),
           y: clamp(0.5 + (y - this.faceBaseline.y) * 3.2),
         };
-        sample.processedAt = at;
-        this.emitFreshness(sample);
-        this.emitAim(point, 0.72, "face-position", at);
+        const processedSample = { generation, processedAt: at };
+        const freshnessAccepted = this.emitFreshness(processedSample);
+        if (
+          freshnessAccepted &&
+          this.freshness.isFresh(this.clock()) &&
+          this.detectorTokenMatches(token, generation, detectorIdentity)
+        ) {
+          this.emitAim(point, 0.72, "face-position", at);
+        }
       })
       .catch(() => {
-        clearTimeout(this.detectorTimeout);
-        if (
-          this.active &&
-          this.lifecycle.isCurrent(generation) &&
-          detectorIdentity === this.detector
-        ) {
-          this.detectorGuard.invalidate();
+        clearTimeout(timeoutHandle);
+        if (this.detectorTimeout === timeoutHandle) {
+          this.detectorTimeout = null;
+        }
+        if (requestId !== this.detectorRequestId) {
+          return;
+        }
+        if (this.detectorTokenMatches(token, generation, detectorIdentity)) {
+          this.transitionDetectorToFallback(
+            token,
+            generation,
+            detectorIdentity,
+            "frame-motion fallback · not eye tracking",
+            this.clock(),
+          );
+        } else {
           this.detectorPending = false;
-          this.detector = null;
-          this.onAction({
-            type: "SENSOR_STATUS",
-            sensor: "estimator",
-            status: "active",
-            label: "frame-motion fallback · not eye tracking",
-            at: this.clock(),
-          });
-          this.processFallback(at, sample, grayCopy, motion);
         }
       })
       .finally(() => {
-        grayCopy.fill(0);
+        this.releaseDetectorBuffer(grayCopy);
       });
   }
 
-  processFallback(at, sample, gray, motion) {
+  processFallback(at, sample, gray, motion, detectorContext = null) {
+    if (
+      detectorContext &&
+      !this.detectorTokenMatches(
+        detectorContext.token,
+        detectorContext.generation,
+        detectorContext.detectorIdentity,
+      )
+    ) {
+      return false;
+    }
+    const contentEpoch = this.contentEpoch;
+    let rotationDelta = null;
     if (motion.activeTotal > 0 && motion.difference > 0.35) {
       const centroid = {
         x:
@@ -684,11 +836,7 @@ class AdaptiveSensorController {
         at - this.lastMotionGestureAt > 900
       ) {
         this.lastMotionGestureAt = at;
-        this.onGesture({
-          type: "rotate",
-          delta: centroid.x > 0.5 ? 1 : -1,
-          at,
-        });
+        rotationDelta = centroid.x > 0.5 ? 1 : -1;
       }
     } else {
       if (this.neutralSince === null) {
@@ -698,23 +846,86 @@ class AdaptiveSensorController {
       this.motionPoint.x += (0.5 - this.motionPoint.x) * decay;
       this.motionPoint.y += (0.5 - this.motionPoint.y) * decay;
     }
-    sample.processedAt = at;
-    this.emitFreshness(sample);
-    this.emitAim(this.motionPoint, clamp(motion.difference / 12, 0.25, 0.66), "motion", at);
-    if (gray?.fill) {
-      gray.fill(0);
+    const processedSample = detectorContext
+      ? { generation: sample.generation, processedAt: at }
+      : { ...sample, processedAt: at };
+    const freshnessAccepted = this.emitFreshness(processedSample);
+    const contextAccepted =
+      this.active &&
+      this.lifecycle.isCurrent(sample.generation) &&
+      this.contentEpoch === contentEpoch &&
+      (!detectorContext ||
+        this.detectorTokenMatches(
+          detectorContext.token,
+          detectorContext.generation,
+          detectorContext.detectorIdentity,
+        ));
+    if (
+      !freshnessAccepted ||
+      !this.freshness.isFresh(this.clock()) ||
+      !contextAccepted
+    ) {
+      return false;
     }
+    if (rotationDelta !== null) {
+      this.onGesture({ type: "rotate", delta: rotationDelta, at });
+    }
+    this.emitAim(this.motionPoint, clamp(motion.difference / 12, 0.25, 0.66), "motion", at);
+    return true;
   }
 
   emitFreshness(sample) {
+    const previous = {
+      frameAt: this.freshness.frameAt,
+      contentAt: this.freshness.contentAt,
+      processedAt: this.freshness.processedAt,
+    };
     if (!this.freshness.update(sample)) {
-      return;
+      return false;
     }
-    this.onAction({
+    const actionResult = this.onAction({
       type: "SENSOR_SAMPLE",
       ...sample,
       at: sample.processedAt ?? sample.contentAt ?? sample.frameAt,
     });
+    if (actionResult?.ok === false) {
+      this.freshness.frameAt = previous.frameAt;
+      this.freshness.contentAt = previous.contentAt;
+      this.freshness.processedAt = previous.processedAt;
+      return false;
+    }
+    if (!this.active || !this.lifecycle.isCurrent(sample.generation)) {
+      return false;
+    }
+    const freshnessNow = this.clock();
+    const hasProcessed =
+      this.freshness.processedAt !== null &&
+      Math.max(0, freshnessNow - this.freshness.processedAt) <=
+        this.freshness.maxAgeMs;
+    const hasContent =
+      this.freshness.contentAt !== null &&
+      Math.max(0, freshnessNow - this.freshness.contentAt) <=
+        this.freshness.maxAgeMs;
+    for (const cause of [...this.pendingRecoveryCauses]) {
+      const recovered =
+        cause === "content-invalid"
+          ? hasContent && hasProcessed
+          : cause === "detector-transition"
+            ? hasProcessed
+            : false;
+      if (recovered) {
+        this.pendingRecoveryCauses.delete(cause);
+        if (cause === "content-invalid") {
+          this.contentBlocked = false;
+        }
+        this.onAction({
+          type: "SENSOR_RECOVER",
+          cause,
+          at: sample.processedAt,
+        });
+      }
+    }
+    return this.active && this.lifecycle.isCurrent(sample.generation);
   }
 
   emitAim(point, confidence, estimator, at) {
@@ -730,20 +941,31 @@ class AdaptiveSensorController {
       at,
       armed: this.armed,
       epoch: this.armedEpoch,
+      choiceId: this.armedChoiceId,
     });
     if (gesture.confirmed) {
-      this.onGesture({ type: "confirm", source: "gesture", at });
+      this.onGesture({
+        type: "confirm",
+        source: "gesture",
+        choiceId: this.armedChoiceId,
+        at,
+      });
     }
   }
 
-  setArmed(armed) {
-    if (armed && !this.armed) {
+  setArmed(armed, choiceId = null) {
+    const normalizedChoice = armed ? choiceId : null;
+    const changedChoice =
+      armed && this.armed && normalizedChoice !== this.armedChoiceId;
+    if (armed && (!this.armed || changedChoice)) {
       this.armedEpoch += 1;
+      this.gestureGate.reset();
     }
     if (!armed) {
       this.gestureGate.reset();
     }
     this.armed = armed;
+    this.armedChoiceId = normalizedChoice;
   }
 
   startWatchdog(generation) {
@@ -971,6 +1193,9 @@ class AdaptiveSensorController {
       this.previousGray.fill(0);
       this.previousGray = null;
     }
+    this.releasePendingDetectorBuffers();
+    this.pendingRecoveryCauses.clear();
+    this.contentBlocked = false;
     if (this.analysisContext && this.analysisCanvas) {
       this.analysisContext.clearRect(
         0,
@@ -981,10 +1206,13 @@ class AdaptiveSensorController {
     }
     this.detector = null;
     this.detectorPending = false;
+    this.detectorRequestId += 1;
     this.faceBaseline = null;
     this.motionPoint = { x: 0.5, y: 0.5 };
     this.lastFrameToken = null;
     this.gestureGate.reset();
+    this.armed = false;
+    this.armedChoiceId = null;
     if (reportOff) {
       const at = this.clock();
       this.onAction({

@@ -1,5 +1,6 @@
-import { AdaptiveOrbMachine, DETERMINISTIC_SCRIPT, DWELL_TARGET_MS, choiceShapeForState } from "./core.mjs";
+import { AdaptiveOrbMachine, DETERMINISTIC_SCRIPT, DWELL_TARGET_MS, EXPECTED_DETERMINISTIC_FINGERPRINT, choiceShapeForState, dispatchDeterministicStep, verifyDeterministicRecord } from "./core.mjs";
 import { AdaptiveSensorController } from "./sensors.mjs";
+import { RadialAimCoordinator, performSensorFreeTransition } from "./session.mjs";
 import { renderTournamentComparison } from "./comparison.mjs";
 
 const byId = (id) => document.getElementById(id);
@@ -84,15 +85,15 @@ const stageCopy = {
 let logicalNow = null;
 let machine = createMachine();
 let sensorController = null;
-let lastAimId = null;
-let lastAimAt = null;
-let lastAimZone = null;
+const aimCoordinator = new RadialAimCoordinator();
 let lastChoiceSignature = "";
 let lastTaskSignature = "";
 let lastEventSignature = "";
 let lastComparisonSignature = "";
 let lastModeStatsSignature = "";
 let simulationRunning = false;
+let replayLocked = false;
+let sensorTransitioning = false;
 
 function sessionNow() {
   return logicalNow === null ? performance.now() : logicalNow;
@@ -114,22 +115,28 @@ function createSensorController() {
     clock: () => performance.now(),
     onAction(action) {
       if (!machine || machine.state.sessionKind === "simulation") {
-        return;
+        return { ok: false, effect: "ignored" };
       }
-      machine.dispatch(action);
-      render();
+      const result = machine.dispatch(action);
+      aimCoordinator.synchronize(machine.state);
+      if (!sensorTransitioning) {
+        render();
+      }
+      return result;
     },
     onAim: handleSensorAim,
     onGesture: handleSensorGesture,
     onSpeech(text) {
-      const result = machine.dispatch({ type: "VOICE", text, source: "voice" });
-      if (result.effect === "export") {
-        exportMetrics();
+      if (replayLocked) {
+        return;
       }
-      render();
-      sensorController?.announce(machine.state.announcement);
-      if (result.effect === "stop") {
-        sensorController?.stop("spoken stop");
+      const result = dispatchAndRender({
+        type: "VOICE",
+        text,
+        source: "voice",
+      });
+      if (result.effect !== "access-request") {
+        sensorController?.announce(machine.state.announcement);
       }
     },
     onCaption(text) {
@@ -149,8 +156,7 @@ async function startLive() {
   render();
   const started = await sensorController.start();
   if (!started) {
-    sensorController.stop("permission or startup failure");
-    machine.dispatch({ type: "ACCESSIBLE", source: "startup-fallback" });
+    transitionToSensorFree("startup-fallback");
     elements.assertiveStatus.textContent =
       "Sensors unavailable. Sensor-free controls are active with the same task.";
   } else {
@@ -181,14 +187,18 @@ async function startSimulation() {
     return;
   }
   simulationRunning = true;
+  replayLocked = true;
   showApplication();
   logicalNow = 0;
   elements.assertiveStatus.textContent =
     "Deterministic simulation started. It will visibly use Orbit, Compass, and Tunnel.";
-  for (const scripted of DETERMINISTIC_SCRIPT) {
+  for (let index = 0; index < DETERMINISTIC_SCRIPT.length; index += 1) {
+    const scripted = DETERMINISTIC_SCRIPT[index];
     logicalNow = scripted.at;
-    machine.dispatch(structuredClone(scripted));
-    render();
+    dispatchDeterministicStep(machine, scripted);
+    if (index < DETERMINISTIC_SCRIPT.length - 1) {
+      render();
+    }
     const important =
       scripted.type === "CONFIRM" ||
       scripted.type === "VOICE" ||
@@ -198,86 +208,93 @@ async function startSimulation() {
     await sleep(important ? 210 : 70);
   }
   simulationRunning = false;
-  elements.comparisonPanel.open = true;
-  elements.assertiveStatus.textContent =
-    "Exact task complete using all three modes, one sensor loss recovery, one wrong branch, and undo.";
-  elements.app.dataset.simulationComplete = "true";
+  const record = machine.exportRecord(logicalNow);
+  const verified =
+    record.deterministicFingerprint === EXPECTED_DETERMINISTIC_FINGERPRINT &&
+    verifyDeterministicRecord(record);
+  if (verified) {
+    machine.state.announcement =
+      `Verified exact replay ${EXPECTED_DETERMINISTIC_FINGERPRINT}. All three modes passed.`;
+    elements.comparisonPanel.open = true;
+    elements.assertiveStatus.textContent =
+      "Verified exact task complete using all three modes, one sensor loss recovery, one wrong branch, and undo.";
+    elements.app.dataset.simulationComplete = "true";
+    elements.app.dataset.replayFingerprint = record.deterministicFingerprint;
+  } else {
+    machine.state.announcement =
+      `Replay verification failed. Expected ${EXPECTED_DETERMINISTIC_FINGERPRINT}; no success is claimed.`;
+    elements.assertiveStatus.textContent = machine.state.announcement;
+    elements.app.dataset.simulationComplete = "false";
+  }
   render();
 }
 
 function handleSensorAim(sample) {
-  if (
-    !machine ||
-    machine.state.sessionKind !== "live" ||
-    machine.state.status === "paused" ||
-    machine.state.freezeCauses.includes("user-stop")
-  ) {
+  if (!machine || replayLocked) {
     return;
   }
-  if (sample.zone === "center") {
-    if (lastAimZone !== "center") {
-      machine.dispatch({ type: "CENTER", source: "sensor-center", at: sample.at });
-    }
-    lastAimId = null;
-    lastAimAt = sample.at;
-    lastAimZone = "center";
+  const result = aimCoordinator.handle(machine, sample);
+  if (result.changed) {
     render();
-    return;
   }
-
-  const options = machine.state.options;
-  if (!options.length) {
-    return;
-  }
-  let angle = Math.atan2(sample.y - 0.5, sample.x - 0.5) + Math.PI / 2;
-  if (angle < 0) {
-    angle += Math.PI * 2;
-  }
-  const index = Math.floor((angle / (Math.PI * 2)) * options.length) % options.length;
-  const id = options[index].id;
-  if (id !== lastAimId || lastAimZone === "center") {
-    machine.dispatch({ type: "HIGHLIGHT", id, source: "gaze", at: sample.at });
-  } else if (lastAimAt !== null) {
-    const durationMs = Math.max(0, sample.at - lastAimAt);
-    if (durationMs <= 350) {
-      machine.dispatch({ type: "DWELL", durationMs, at: sample.at });
-    }
-  }
-  lastAimId = id;
-  lastAimAt = sample.at;
-  lastAimZone = "radial";
-  render();
 }
 
 function handleSensorGesture(gesture) {
-  if (!machine || machine.state.sessionKind !== "live") {
+  if (!machine || machine.state.sessionKind !== "live" || replayLocked) {
     return;
   }
   let result;
   if (gesture.type === "rotate" && machine.state.mode === "tunnel") {
-    result = machine.dispatch({
+    result = dispatchAndRender({
       type: "CYCLE",
       delta: gesture.delta,
       source: "gesture",
       at: gesture.at,
     });
-  } else if (gesture.type === "confirm") {
-    result = machine.dispatch({
+  } else if (
+    gesture.type === "confirm" &&
+    gesture.choiceId === machine.state.highlight
+  ) {
+    result = dispatchAndRender({
       type: "CONFIRM",
       source: "gesture",
       at: gesture.at,
     });
   }
-  if (result?.ok) {
+  if (result?.ok && result.effect !== "access-request") {
     sensorController?.announce(machine.state.announcement);
   }
-  render();
 }
 
 function dispatchAndRender(action) {
+  if (replayLocked) {
+    return {
+      ok: false,
+      effect: "replay-rejected",
+      reason: "deterministic-replay-locked",
+    };
+  }
   const result = machine.dispatch(action);
+  if (result.effect === "access-request") {
+    transitionToSensorFree(action.source || "access-option");
+    return result;
+  }
   if (result.effect === "export") {
     exportMetrics();
+  }
+  if (
+    ["CENTER", "SWITCH_MODE", "AUTO_MODE", "STOP", "CANCEL", "UNDO"].includes(
+      action.type,
+    ) ||
+    machine.state.freezeCauses.length
+  ) {
+    aimCoordinator.reset();
+  } else {
+    aimCoordinator.synchronize(machine.state);
+  }
+  if (result.effect === "stop") {
+    sensorController?.stop("safety stop");
+    sensorController = null;
   }
   render();
   return result;
@@ -339,6 +356,7 @@ function renderChoices() {
       button.type = "button";
       button.className = "choice";
       button.dataset.optionId = candidate.id;
+      button.disabled = replayLocked;
       button.setAttribute(
         "aria-label",
         `${candidate.label}. ${candidate.detail}. Highlight only; separate confirmation required.`,
@@ -360,6 +378,7 @@ function renderChoices() {
 
   for (const button of elements.choiceLayer.querySelectorAll(".choice")) {
     const highlighted = button.dataset.optionId === machine.state.highlight;
+    button.disabled = replayLocked;
     button.dataset.highlighted = String(highlighted);
     button.dataset.armed = String(highlighted && machine.state.armed);
     button.setAttribute("aria-pressed", String(highlighted));
@@ -424,9 +443,16 @@ function renderModeStats(record) {
 
 function render() {
   const state = machine.state;
+  aimCoordinator.synchronize(state);
   const record = machine.exportRecord(sessionNow());
   const grammar = grammarCopy[state.mode];
-  const stage = stageCopy[state.stage];
+  const stage =
+    state.stage === "intent" && state.entryStep
+      ? [
+          `Semantic entry · ${state.entryStep}`,
+          `Select ${state.entryStep}`,
+        ]
+      : stageCopy[state.stage];
   const shape = choiceShapeForState(state);
 
   elements.modeStatus.textContent = `${grammar.title} · ${
@@ -485,12 +511,31 @@ function render() {
   elements.confirmChoice.disabled = !state.highlight || !state.armed;
   elements.undoChoice.disabled = state.history.length === 0;
   elements.resumeSession.disabled = !state.freezeCauses.includes("user-stop");
+  if (replayLocked) {
+    for (const control of [
+      elements.previousChoice,
+      elements.nextChoice,
+      elements.confirmChoice,
+      elements.restChoice,
+      elements.undoChoice,
+      elements.centerOrb,
+      elements.exportMetrics,
+      elements.useAccessible,
+      elements.stopSensors,
+      elements.resumeSession,
+    ]) {
+      control.disabled = true;
+    }
+  }
 
   renderTask();
   renderChoices();
   renderEvents();
   renderModeStats(record);
-  sensorController?.setArmed(state.armed && state.freezeCauses.length === 0);
+  sensorController?.setArmed(
+    state.armed && state.freezeCauses.length === 0,
+    state.highlight,
+  );
 
   const comparisonSignature = JSON.stringify({
     exact: record.exactTaskVerdict,
@@ -507,6 +552,9 @@ function render() {
 }
 
 function exportMetrics() {
+  if (replayLocked) {
+    return false;
+  }
   const record = machine.exportRecord(sessionNow());
   const blob = new Blob([`${JSON.stringify(record, null, 2)}\n`], {
     type: "application/json",
@@ -517,22 +565,35 @@ function exportMetrics() {
   anchor.download = `adaptive-orb-${record.sessionKind || "session"}-metrics.json`;
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(localUrl), 0);
+  return true;
 }
 
-function continueSensorFree(source) {
-  sensorController?.stop("sensor-free transition");
-  sensorController = null;
-  machine.dispatch({ type: "ACCESSIBLE", source });
-  machine.dispatch({ type: "RESUME", source });
+function transitionToSensorFree(source, { resume = false } = {}) {
+  if (replayLocked) {
+    return {
+      ok: false,
+      effect: "replay-rejected",
+      reason: "deterministic-replay-locked",
+    };
+  }
+  sensorTransitioning = true;
+  const transition = performSensorFreeTransition({
+    machine,
+    controller: sensorController,
+    source,
+    at: sessionNow(),
+    resume,
+  });
+  sensorController = transition.controller;
+  sensorTransitioning = false;
+  aimCoordinator.reset();
   render();
   elements.orbStage.focus();
+  return transition.result;
 }
 
 function stopSession(source) {
-  machine.dispatch({ type: "STOP", source });
-  sensorController?.stop("safety stop");
-  sensorController = null;
-  render();
+  return dispatchAndRender({ type: "STOP", source });
 }
 
 elements.startLive.addEventListener("click", startLive);
@@ -557,12 +618,18 @@ elements.undoChoice.addEventListener("click", () =>
   dispatchAndRender({ type: "UNDO", source: "touch" }),
 );
 elements.exportMetrics.addEventListener("click", exportMetrics);
-elements.useAccessible.addEventListener("click", () => continueSensorFree("touch"));
-elements.stopSensors.addEventListener("click", () => continueSensorFree("end-sensors"));
-elements.resumeSession.addEventListener("click", () => continueSensorFree("resume"));
+elements.useAccessible.addEventListener("click", () => transitionToSensorFree("touch"));
+elements.stopSensors.addEventListener("click", () => transitionToSensorFree("end-sensors"));
+elements.resumeSession.addEventListener("click", () => {
+  if (machine.state.sessionKind === "live" && !sensorController) {
+    transitionToSensorFree("resume", { resume: true });
+  } else {
+    dispatchAndRender({ type: "RESUME", source: "touch" });
+  }
+});
 
 document.addEventListener("keydown", (event) => {
-  if (elements.app.hidden || simulationRunning) {
+  if (elements.app.hidden || simulationRunning || replayLocked) {
     return;
   }
   const interactive = event.target.closest?.(

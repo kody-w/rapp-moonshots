@@ -69,6 +69,18 @@ Fingerprint: `c1b6e39f`.
 - delayed permission/play and detector work cannot revive an old generation;
 - stop/cancel/undo preempt mixed ordinary speech;
 - sensor-free keyboard/touch/switch control completes the same task;
+- sensor-free control enters quantity, color, time, and handling through visible
+  semantic options without direct voice dispatch;
+- every sensor-free transition stops camera, microphone, and recognition before
+  accessible state is committed or rendered;
+- invalid content immediately revokes aim and requires fresh content plus a
+  separately accepted processed estimate;
+- long sensor gaps clear dwell and require a new highlight; duplicate/invalid
+  dwell samples add no events;
+- gesture epochs include highlighted choice identity;
+- every pending detector working copy is zeroed on completion or teardown;
+- deterministic mode rejects external input and verifies fingerprint
+  `c1b6e39f` before any success announcement;
 - JSON contains no raw media or raw transcript;
 - generated HTML has exact Clawpilot tokens, no external asset, and
   `connect-src 'none'`;

@@ -101,12 +101,13 @@ function stripModuleSyntax(source) {
     .trim();
 }
 
-const [template, styles, core, sensors, comparison, app, evidence] =
+const [template, styles, core, sensors, session, comparison, app, evidence] =
   await Promise.all([
     readFile(resolve(root, "src/index.template.html"), "utf8"),
     readFile(resolve(root, "src/styles.css"), "utf8"),
     readFile(resolve(root, "src/core.mjs"), "utf8"),
     readFile(resolve(root, "src/sensors.mjs"), "utf8"),
+    readFile(resolve(root, "src/session.mjs"), "utf8"),
     readFile(resolve(root, "src/comparison.mjs"), "utf8"),
     readFile(resolve(root, "src/app.mjs"), "utf8"),
     loadTournamentEvidence(),
@@ -116,6 +117,7 @@ const bundledScript = [
   `const BUILD_TOURNAMENT_EVIDENCE = Object.freeze(${JSON.stringify(evidence)});`,
   stripModuleSyntax(core),
   stripModuleSyntax(sensors),
+  stripModuleSyntax(session),
   stripModuleSyntax(comparison),
   stripModuleSyntax(app),
 ].join("\n\n");

@@ -2,6 +2,9 @@
   "schemaVersion": 1,
   "taskId": "cobalt-beacon-route",
   "deterministicFingerprint": "c1b6e39f",
+  "expectedFingerprint": "c1b6e39f",
+  "exactStateVerified": true,
+  "externalInputLocked": true,
   "eventCount": 35,
   "events": [
     {
