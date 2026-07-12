@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   CameraVisibilityGuard,
+  FreshNeutralGate,
   LifecycleGate,
   shouldReloadAfterPageShow,
 } from "../src/core.mjs";
@@ -99,4 +100,34 @@ test("foreground watchdog grants grace after lastFrameAt ages while hidden", () 
   assert.match(visibilitySource, /cancelPendingForVisibility\("visibility-hidden"\)/);
   assert.match(visibilitySource, /cancelPendingForVisibility\("visibility-foreground"\)/);
   assert.match(appSource, /tracker\.shouldDeclareCameraLoss\(performance\.now\(\)\)/);
+});
+
+test("foreground grace never counts as observed fresh-frame neutrality", () => {
+  const neutralGate = new FreshNeutralGate({ requiredMs: 480 });
+  neutralGate.reset();
+  let hasPreviousFrame = false;
+  const processFreshNeutralFrame = (at) => {
+    if (!hasPreviousFrame) {
+      hasPreviousFrame = true;
+      return neutralGate.ready;
+    }
+    return neutralGate.observeNeutral(at);
+  };
+
+  assert.equal(processFreshNeutralFrame(700), false);
+  assert.equal(neutralGate.since, null);
+  assert.equal(processFreshNeutralFrame(733), false);
+  assert.equal(neutralGate.since, 733);
+  assert.equal(processFreshNeutralFrame(1195), false);
+  assert.equal(processFreshNeutralFrame(1228), true);
+  assert.ok(1228 - neutralGate.since >= 480);
+
+  const trackerSource = appSource.slice(
+    appSource.indexOf("class LocalMotionTracker"),
+    appSource.indexOf("function onGesture"),
+  );
+  assert.match(trackerSource, /this\.neutralGate = new FreshNeutralGate\(\)/);
+  assert.match(trackerSource, /resetMotionState\(\) \{[\s\S]*?this\.neutralGate\.reset\(\)/);
+  assert.match(trackerSource, /this\.neutralGate\.observeNeutral\(now\)/);
+  assert.doesNotMatch(trackerSource, /neutralSince\s*=\s*now/);
 });

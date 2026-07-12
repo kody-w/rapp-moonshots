@@ -1,6 +1,7 @@
 import {
   CameraVisibilityGuard,
   DETERMINISTIC_ACTIONS,
+  FreshNeutralGate,
   LifecycleGate,
   MediaFrameGate,
   TASK_LAYERS,
@@ -285,8 +286,7 @@ class LocalMotionTracker {
     this.frameGate = new MediaFrameGate();
     this.visibilityGuard = new CameraVisibilityGuard();
     this.lifecycle = new LifecycleGate();
-    this.neutralSince = performance.now();
-    this.neutralReady = false;
+    this.neutralGate = new FreshNeutralGate();
     this.gestureWindow = null;
     this.lastPreviewAt = 0;
     this.lastFaceAt = 0;
@@ -335,11 +335,10 @@ class LocalMotionTracker {
       : window.requestAnimationFrame(this.onAnimationFrame);
   }
 
-  resetMotionState(now = 0) {
+  resetMotionState() {
     this.previous = null;
     this.gestureWindow = null;
-    this.neutralReady = false;
-    this.neutralSince = now;
+    this.neutralGate.reset();
     this.centerRestSent = false;
   }
 
@@ -355,7 +354,7 @@ class LocalMotionTracker {
     this.lifecycle.start();
     this.faceDetectionPending = false;
     this.lastFaceAt = now;
-    this.resetMotionState(now);
+    this.resetMotionState();
   }
 
   shouldDeclareCameraLoss(now) {
@@ -426,9 +425,8 @@ class LocalMotionTracker {
   consumeFrame(motion, now) {
     const neutral = motion.activeRatio < 0.012;
     if (neutral) {
-      if (!this.neutralSince) this.neutralSince = now;
-      if (now - this.neutralSince >= 480) this.neutralReady = true;
-      if (now - this.neutralSince >= 1200 && !this.centerRestSent) {
+      this.neutralGate.observeNeutral(now);
+      if (this.neutralGate.neutralDuration(now) >= 1200 && !this.centerRestSent) {
         this.centerRestSent = true;
         this.callbacks.onCenterRest("camera-motion-rest");
       }
@@ -442,18 +440,17 @@ class LocalMotionTracker {
         };
         const gesture = classifyMotionGesture(sample);
         this.gestureWindow = null;
-        this.neutralReady = false;
-        this.neutralSince = now;
+        this.neutralGate.restartFromNeutral(now);
         if (gesture) this.callbacks.onGesture(gesture);
       }
     } else {
-      this.neutralSince = 0;
+      const wasNeutralReady = this.neutralGate.ready;
+      this.neutralGate.observeMotion();
       this.centerRestSent = false;
       if (motion.activeRatio > 0.55) {
         this.gestureWindow = null;
-        this.neutralReady = false;
       } else if (motion.centroid && motion.activeRatio >= 0.018) {
-        if (!this.gestureWindow && this.neutralReady) {
+        if (!this.gestureWindow && wasNeutralReady) {
           this.gestureWindow = {
             start: motion.centroid,
             end: motion.centroid,
@@ -477,7 +474,7 @@ class LocalMotionTracker {
         }
       }
     }
-    this.callbacks.onNeutral(this.neutralReady, motion);
+    this.callbacks.onNeutral(this.neutralGate.ready, motion);
   }
 
   async detectFace(now) {

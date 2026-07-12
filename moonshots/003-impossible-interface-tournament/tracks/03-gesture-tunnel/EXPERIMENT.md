@@ -112,6 +112,8 @@ The follow-up experiment also holds these independent invariants:
 - camera liveness is suspended while hidden; an aged pre-background
   `lastFrameAt` cannot stop healthy sensors on the first foreground watchdog,
   and pending camera input is canceled before fresh-frame gating resumes.
+- foreground frames at +700 ms and +733 ms remain neutral-unready; only 480 ms
+  of subsequent fresh neutral observations can enable gesture/undo gating.
 
 `npm run experiment` performs two identical simulations, compares both with the
 checked-in metrics and replay, and writes `evidence/experiment-summary.json`.

@@ -37,6 +37,9 @@ camera-motion sweep, dip to open its threshold, then say **“choose.”** Say
 - Hidden documents suspend liveness and reset raw frame/motion state. Returning
   to foreground cancels pending previews, waits for a fresh frame, and grants a
   2.5-second grace period before camera loss can be declared.
+- Foreground grace is not neutral-motion evidence. Neutral timing stays empty
+  until the first fresh frame comparison reports neutral, then requires the
+  full 480 ms of fresh-frame neutrality before gesture or undo gating enables.
 - The detector recognizes only coarse displacement. It does **not** classify
   hands, identity, emotion, or precise eye direction.
 - When `FaceDetector` exists, the face bounding-box center can provide a coarse

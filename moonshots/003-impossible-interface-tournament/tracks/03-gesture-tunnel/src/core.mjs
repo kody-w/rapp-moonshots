@@ -256,6 +256,42 @@ export class CameraVisibilityGuard {
   }
 }
 
+export class FreshNeutralGate {
+  constructor({ requiredMs = 480 } = {}) {
+    this.requiredMs = requiredMs;
+    this.since = null;
+    this.ready = false;
+  }
+
+  reset() {
+    this.since = null;
+    this.ready = false;
+  }
+
+  observeNeutral(now) {
+    if (!Number.isFinite(now)) {
+      this.reset();
+      return false;
+    }
+    if (this.since === null) this.since = now;
+    this.ready = now - this.since >= this.requiredMs;
+    return this.ready;
+  }
+
+  observeMotion() {
+    this.reset();
+  }
+
+  restartFromNeutral(now) {
+    this.since = Number.isFinite(now) ? now : null;
+    this.ready = false;
+  }
+
+  neutralDuration(now) {
+    return this.since === null || !Number.isFinite(now) ? 0 : Math.max(0, now - this.since);
+  }
+}
+
 export function shouldReloadAfterPageShow(event) {
   return event?.persisted === true;
 }

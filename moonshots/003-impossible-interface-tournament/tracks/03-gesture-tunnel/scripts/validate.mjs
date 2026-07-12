@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   CameraVisibilityGuard,
   DETERMINISTIC_ACTIONS,
+  FreshNeutralGate,
   LifecycleGate,
   MediaFrameGate,
   OPTION_COUNT,
@@ -222,6 +223,19 @@ gate("visibility release invariant", () => {
   assert.match(app, /resumeFromVisibility\(foregroundAt\)/);
   assert.match(app, /cancelPendingForVisibility\("visibility-foreground"\)/);
   assert.match(app, /tracker\.shouldDeclareCameraLoss\(performance\.now\(\)\)/);
+});
+
+gate("fresh neutral invariant", () => {
+  const neutralGate = new FreshNeutralGate({ requiredMs: 480 });
+  assert.equal(neutralGate.since, null);
+  assert.equal(neutralGate.observeNeutral(733), false);
+  assert.equal(neutralGate.observeNeutral(1195), false);
+  assert.equal(neutralGate.observeNeutral(1228), true);
+  neutralGate.reset();
+  assert.equal(neutralGate.since, null);
+  assert.match(app, /this\.neutralGate = new FreshNeutralGate\(\)/);
+  assert.match(app, /this\.neutralGate\.reset\(\)/);
+  assert.doesNotMatch(app, /neutralSince\s*=\s*foregroundAt/);
 });
 
 gate("evidence and rollback docs", () => {

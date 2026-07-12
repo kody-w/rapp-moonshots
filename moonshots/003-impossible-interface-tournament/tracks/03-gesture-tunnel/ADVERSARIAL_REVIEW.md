@@ -11,6 +11,7 @@ user who interprets “gaze” more literally than the implementation warrants.
 | Background motion resembles a swipe | 480 ms neutral gate, full-frame-motion rejection, confidence threshold, 900 ms cooldown | Fans, screens, or another person can still move the centroid |
 | 60 Hz display repeats a 30 fps frame | Video-frame callback/media-time gate ignores duplicates before motion state or liveness changes | Browser media timestamps must advance correctly |
 | Hidden-tab time makes the last frame look stale on return | Hidden state suspends liveness; foreground resets motion, cancels previews, and waits for a fresh frame or 2.5 s grace | A genuinely dead camera is reported after the grace period |
+| Foreground grace is mistaken for neutral motion | Neutral timestamp resets to empty and starts only on a processed fresh neutral comparison | Users still need 480 ms of observable neutrality after return |
 | A head-position preview is mistaken for eye tracking | UI and docs say coarse webcam gaze estimate/head-position proxy; no eye or identity claim | “Gaze” can still create an inflated expectation |
 | Face detection resolves after camera replacement | Captured lifecycle generation and detector identity are rechecked after `await` before callbacks | The experimental detector API can still fail or disappear |
 | Preview causes a false commit | Preview and motion-enter cannot call commit; voice “choose” or switch Enter is required | Misrecognized “choose” remains possible, so voice confidence and commit cooldown apply |
