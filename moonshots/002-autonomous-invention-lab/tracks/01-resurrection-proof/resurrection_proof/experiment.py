@@ -172,9 +172,16 @@ def run_experiment(
 
         passed_canaries = _int_metric(metrics, "canaries_passed")
         total_canaries = _int_metric(metrics, "canaries_total")
+        reported_required_canaries = _int_metric(metrics, "canaries_required")
         if passed_canaries is not None:
             canaries_passed += passed_canaries
-        if passed_canaries == expected_canaries and total_canaries == expected_canaries:
+        if (
+            passed_canaries is not None
+            and total_canaries is not None
+            and passed_canaries >= expected_canaries
+            and total_canaries >= expected_canaries
+            and reported_required_canaries == expected_canaries
+        ):
             canary_complete_runs += 1
 
         detected = _int_metric(metrics, "corruptions_detected")
@@ -211,7 +218,7 @@ def run_experiment(
         ),
         "behavioral_canaries": (
             canary_complete_runs == runs
-            and canaries_passed == required_canaries_total
+            and canaries_passed >= required_canaries_total
         ),
         "corruption_hard_fails": (
             corruption_hard_fails == runs

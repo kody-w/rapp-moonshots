@@ -46,7 +46,7 @@ the presentation delay without changing the drill.
 | Isolate | A mode-`0700`, uniquely named workspace is created under ignored local runtime storage. |
 | Restore | The checked synthetic fixture is copied; the source fixture is never modified. |
 | Verify | Exact file inventory, byte sizes, and all five SHA-256 digests match. |
-| Canaries | Agent discovery, greeting contract, memory recall, and capability routing all behave correctly. |
+| Canaries | Agent discovery, greeting contract, memory recall, and capability routing behave correctly; the policy's `required_canaries` count must be met. |
 | Corrupt | `memory/facts.json` receives a controlled, same-byte-length synthetic mutation, so inventory and size checks still pass. |
 | Prove | SHA-256 verification raises `CHECKSUM_MISMATCH`; accepting the mutation makes the entire drill fail. |
 | Receipt | The workspace is deleted and a public-safe JSON receipt becomes downloadable. |
@@ -60,6 +60,8 @@ failure.
 - `fixtures/rapp-estate/` is invented, public fixture data.
 - The engine rejects fixtures unless `synthetic: true`,
   `classification: synthetic-public-fixture`, and `network_access: false`.
+- `required_canaries` is carried into execution and the receipt; too few
+  executed or passing canaries abort the drill before receipt creation.
 - No socket client, remote-machine integration, vault reader, credential
   provider, or live brainstem client exists in the application.
 - The HTTP server binds only to `127.0.0.1` or `localhost`.
@@ -128,7 +130,9 @@ The suite covers:
 6. required Clawpilot theme, self-contained UI, CSP, and health endpoint;
 7. successful headless aggregation, median/p95 latency, and workspace cleanup;
 8. a simulated false acceptance producing a failed threshold and exit code `1`;
-9. experiment-mode CLI routing that never calls the HTTP server.
+9. experiment-mode CLI routing that never calls the HTTP server;
+10. refusal and cleanup when fixture policy requires more canaries than exist;
+11. bounded shutdown waiting, timeout reporting, worker tracking, and cleanup.
 
 ## API
 
@@ -151,24 +155,30 @@ removed in the engine's `finally` path.
 | Manifest path traversal | Absolute, non-canonical, and parent paths are refused. | This prototype does not ingest archives; an archive adapter would need separate extraction defenses. |
 | Symlink escape | Any fixture or recovered symlink is refused. | Other special filesystem nodes are outside the synthetic fixture contract. |
 | Private estate substituted | Explicit synthetic classification and offline policy are mandatory. | Classification is a guardrail, not a DLP scanner; this build must never be pointed at private data. |
-| Canary quietly regresses | Any observed/expected mismatch aborts receipt creation. | Four canaries cover the fixture contract, not every future RAPP behavior. |
+| Canary quietly regresses | Any mismatch aborts; the policy's required count is enforced and recorded. | The fixture currently implements four canaries, not every future RAPP behavior. |
 | Corruption guard becomes a no-op | Failure to raise the exact checksum error fails the whole drill. | A signed or independently anchored manifest is future work. |
 | Receipt leaks machine details | Recursive privacy gate blocks private keys and local paths. | Free-form future receipt fields must continue to pass the same release gate. |
 | Concurrent operator clicks | Backend permits one active drill; UI disables the button. | Separate application processes are not coordinated. |
+| Ctrl+C during a drill | New drills are refused; tracked workers get up to 15 seconds to finish their `finally` cleanup. Success is printed only after workers finish and runtime is empty. | A stuck worker can exceed the bound; the process exits `2` and warns that cleanup is unconfirmed. |
 | Process is force-killed | No remote side effects; source remains immutable. | A hard kill can leave ignored `.runtime/` files, handled by the rollback below. |
 
 ## Rollback and cleanup
 
-1. Stop the server with **Ctrl+C**.
-2. Normal, failed, and exception paths remove each isolated workspace
+1. Stop the server with **Ctrl+C**. It stops accepting drills and waits up to
+   fifteen seconds for every tracked worker to complete cleanup.
+2. A confirmed shutdown prints `Workspace cleanup confirmed` and exits `0`.
+   If the bound expires or runtime is not empty, it prints an explicit
+   unconfirmed-cleanup warning and exits `2`—it never claims a clean stop.
+3. Normal, failed, and exception paths remove each isolated workspace
    automatically.
-3. After an operating-system kill, remove only this track's ignored runtime:
+4. After an operating-system kill or an unconfirmed shutdown, inspect and then
+   remove only this track's ignored runtime:
 
    ```bash
    rm -rf .runtime
    ```
 
-4. No package, service, database, credential, remote resource, or live
+5. No package, service, database, credential, remote resource, or live
    brainstem was created, so there is nothing else to roll back.
 
 The fixture source stays immutable throughout every drill. A new run starts

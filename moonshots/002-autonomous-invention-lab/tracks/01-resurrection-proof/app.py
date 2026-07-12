@@ -67,8 +67,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         runtime_root=ROOT / ".runtime" / "workspaces",
         step_delay=_step_delay(),
     )
-    serve(args.host, args.port, manager, ROOT / "web")
-    return 0
+    cleanup_confirmed = serve(args.host, args.port, manager, ROOT / "web")
+    return 0 if cleanup_confirmed else 2
 
 
 if __name__ == "__main__":

@@ -191,7 +191,9 @@ def verify_manifest(estate_root: Path) -> dict[str, int]:
     return {"files": len(manifest["files"])}
 
 
-def _assert_synthetic_fixture(fixture_root: Path) -> dict[str, Any]:
+def _assert_synthetic_fixture(
+    fixture_root: Path,
+) -> tuple[dict[str, Any], int]:
     estate = _read_json(fixture_root / "estate.json")
     policy = _read_json(fixture_root / "policy" / "recovery.json")
     if (
@@ -219,7 +221,7 @@ def _assert_synthetic_fixture(fixture_root: Path) -> dict[str, Any]:
         raise DrillFailure(
             "UNSAFE_FIXTURE_POLICY", "Fixture policy must require at least three canaries."
         )
-    return estate
+    return estate, required_canaries
 
 
 class RecoveredEstate:
@@ -435,7 +437,7 @@ def execute_drill(
     try:
         _emit(progress, "isolate", "running", 3, "Opening isolated workspace")
         scan_inventory(fixture_root)
-        fixture_metadata = _assert_synthetic_fixture(fixture_root)
+        fixture_metadata, required_canaries = _assert_synthetic_fixture(fixture_root)
         source_manifest = load_manifest(fixture_root)
         if source_manifest["estate_id"] != fixture_metadata.get("estate_id"):
             raise DrillFailure(
@@ -469,13 +471,30 @@ def execute_drill(
 
         _emit(progress, "canaries", "running", 52, "Running behavioral canaries")
         canaries = run_behavioral_canaries(restored_root)
+        passed_canaries = sum(
+            canary.get("status") == "pass" for canary in canaries
+        )
+        if (
+            len(canaries) < required_canaries
+            or passed_canaries < required_canaries
+        ):
+            raise DrillFailure(
+                "INSUFFICIENT_CANARIES",
+                (
+                    f"Fixture requires {required_canaries} passing canaries; "
+                    f"{passed_canaries} of {len(canaries)} executed canaries passed."
+                ),
+            )
         _pause(step_delay)
         _emit(
             progress,
             "canaries",
             "pass",
             67,
-            f"{len(canaries)} of {len(canaries)} canaries passed",
+            (
+                f"{passed_canaries} canaries passed; "
+                f"{required_canaries} required"
+            ),
         )
 
         _emit(
@@ -557,8 +576,9 @@ def execute_drill(
                 "files_restored": inventory_result["files"],
                 "bytes_restored": inventory_result["bytes"],
                 "files_manifest_verified": manifest_result["files"],
-                "canaries_passed": len(canaries),
+                "canaries_passed": passed_canaries,
                 "canaries_total": len(canaries),
+                "canaries_required": required_canaries,
                 "corruptions_injected": 1,
                 "corruptions_detected": 1,
             },

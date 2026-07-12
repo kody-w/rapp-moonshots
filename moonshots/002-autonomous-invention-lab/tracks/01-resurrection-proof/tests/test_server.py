@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import re
 import shutil
@@ -7,9 +9,16 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 from urllib.request import Request, urlopen
 
-from resurrection_proof.server import DrillManager, build_server
+from resurrection_proof.server import (
+    DrillBusy,
+    DrillManager,
+    ShutdownResult,
+    build_server,
+    serve,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,12 +29,12 @@ class ApplicationEndToEndTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         shutil.rmtree(TEST_ROOT, ignore_errors=True)
-        manager = DrillManager(
+        cls.manager = DrillManager(
             ROOT / "fixtures" / "rapp-estate",
             TEST_ROOT / "workspaces",
             step_delay=0,
         )
-        cls.server = build_server("127.0.0.1", 0, manager, ROOT / "web")
+        cls.server = build_server("127.0.0.1", 0, cls.manager, ROOT / "web")
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
         host, port = cls.server.server_address[:2]
@@ -36,6 +45,9 @@ class ApplicationEndToEndTests(unittest.TestCase):
         cls.server.shutdown()
         cls.server.server_close()
         cls.thread.join(timeout=2)
+        result = cls.manager.shutdown(timeout=2)
+        if not result.cleanup_confirmed:
+            raise AssertionError("API test manager did not clean up")
         shutil.rmtree(TEST_ROOT, ignore_errors=True)
 
     def get_json(self, path: str) -> tuple[dict[str, object], object]:
@@ -97,6 +109,111 @@ class ApplicationEndToEndTests(unittest.TestCase):
         health, _ = self.get_json("/api/health")
         self.assertEqual(health["status"], "ready")
         self.assertEqual(health["safety_mode"], "synthetic-offline")
+
+
+class WorkerShutdownTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = ROOT / ".test-runtime" / "worker-shutdown"
+        shutil.rmtree(self.root, ignore_errors=True)
+        self.root.mkdir(parents=True)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _manager_with_blocked_worker(
+        self,
+    ) -> tuple[DrillManager, threading.Event, threading.Event]:
+        started = threading.Event()
+        release = threading.Event()
+
+        def runner(
+            _fixture: Path,
+            runtime: Path,
+            _drill_id: str,
+            **_kwargs: object,
+        ) -> dict[str, object]:
+            workspace = runtime / "held-workspace"
+            workspace.mkdir(parents=True)
+            started.set()
+            try:
+                release.wait(timeout=2)
+            finally:
+                shutil.rmtree(workspace, ignore_errors=True)
+            return {"outcome": "PASS"}
+
+        manager = DrillManager(
+            ROOT / "fixtures" / "rapp-estate",
+            self.root / "workspaces",
+            step_delay=0,
+            drill_runner=runner,
+        )
+        manager.start()
+        self.assertTrue(started.wait(timeout=1))
+        return manager, release, started
+
+    def test_shutdown_waits_for_active_worker_cleanup(self) -> None:
+        manager, release, _started = self._manager_with_blocked_worker()
+        timer = threading.Timer(0.05, release.set)
+        timer.start()
+
+        result = manager.shutdown(timeout=1)
+        timer.join(timeout=1)
+
+        self.assertTrue(result.cleanup_confirmed)
+        self.assertEqual(result.tracked_workers, 1)
+        self.assertEqual(result.remaining_workers, 0)
+        self.assertTrue(result.workspace_clean)
+        self.assertGreater(result.waited_seconds, 0)
+        self.assertLessEqual(result.waited_seconds, 1)
+        with self.assertRaises(DrillBusy):
+            manager.start()
+
+    def test_shutdown_timeout_reports_cleanup_unconfirmed(self) -> None:
+        manager, release, _started = self._manager_with_blocked_worker()
+        try:
+            timed_out = manager.shutdown(timeout=0.01)
+            self.assertFalse(timed_out.cleanup_confirmed)
+            self.assertEqual(timed_out.tracked_workers, 1)
+            self.assertEqual(timed_out.remaining_workers, 1)
+            self.assertFalse(timed_out.workspace_clean)
+        finally:
+            release.set()
+            completed = manager.shutdown(timeout=1)
+
+        self.assertTrue(completed.cleanup_confirmed)
+        self.assertEqual(completed.remaining_workers, 0)
+        self.assertTrue(completed.workspace_clean)
+
+    def test_server_prints_no_clean_claim_after_shutdown_timeout(self) -> None:
+        manager = Mock()
+        manager.shutdown.return_value = ShutdownResult(
+            tracked_workers=1,
+            remaining_workers=1,
+            workspace_clean=False,
+            waited_seconds=0.01,
+        )
+        server = Mock()
+        server.server_address = ("127.0.0.1", 8787)
+        server.serve_forever.side_effect = KeyboardInterrupt
+        output = io.StringIO()
+
+        with (
+            patch("resurrection_proof.server.build_server", return_value=server),
+            contextlib.redirect_stdout(output),
+        ):
+            confirmed = serve(
+                "127.0.0.1",
+                8787,
+                manager,
+                ROOT / "web",
+                shutdown_timeout=0.01,
+            )
+
+        self.assertFalse(confirmed)
+        manager.shutdown.assert_called_once_with(timeout=0.01)
+        server.server_close.assert_called_once()
+        self.assertIn("cleanup was not confirmed", output.getvalue())
+        self.assertNotIn("Workspace cleanup confirmed", output.getvalue())
 
 
 if __name__ == "__main__":

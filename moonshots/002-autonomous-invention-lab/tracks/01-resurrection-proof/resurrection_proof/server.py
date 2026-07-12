@@ -6,18 +6,22 @@ import json
 import re
 import secrets
 import threading
+import time
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlsplit
 
 from .drill import PHASES, DrillFailure, execute_drill
 
 
 _DRILL_ROUTE = re.compile(r"^/api/drills/(rp-[A-Za-z0-9-]{3,80})(/receipt)?$")
+DrillRunner = Callable[..., dict[str, Any]]
+DEFAULT_SHUTDOWN_TIMEOUT = 15.0
 
 
 def _utc_now() -> str:
@@ -30,6 +34,18 @@ class DrillBusy(RuntimeError):
     pass
 
 
+@dataclass(frozen=True)
+class ShutdownResult:
+    tracked_workers: int
+    remaining_workers: int
+    workspace_clean: bool
+    waited_seconds: float
+
+    @property
+    def cleanup_confirmed(self) -> bool:
+        return self.remaining_workers == 0 and self.workspace_clean
+
+
 class DrillManager:
     """Owns drill state while keeping ephemeral filesystem details private."""
 
@@ -39,12 +55,16 @@ class DrillManager:
         runtime_root: Path,
         *,
         step_delay: float = 0.35,
+        drill_runner: DrillRunner = execute_drill,
     ):
         self.fixture_root = fixture_root
         self.runtime_root = runtime_root
         self.step_delay = step_delay
+        self.drill_runner = drill_runner
         self._lock = threading.Lock()
         self._jobs: dict[str, dict[str, Any]] = {}
+        self._workers: set[threading.Thread] = set()
+        self._accepting = True
 
     def _snapshot(self, job: dict[str, Any]) -> dict[str, Any]:
         public = {key: value for key, value in job.items() if key != "receipt"}
@@ -53,6 +73,11 @@ class DrillManager:
 
     def start(self) -> dict[str, Any]:
         with self._lock:
+            if not self._accepting:
+                raise DrillBusy("Recovery service is shutting down.")
+            self._workers = {
+                worker for worker in self._workers if worker.is_alive()
+            }
             if any(job["status"] in {"queued", "running"} for job in self._jobs.values()):
                 raise DrillBusy("A recovery drill is already running.")
             completed = [
@@ -94,14 +119,27 @@ class DrillManager:
             self._jobs[drill_id] = job
             snapshot = self._snapshot(job)
 
-        thread = threading.Thread(
-            target=self._run,
-            args=(drill_id,),
-            name=f"resurrection-{drill_id}",
-            daemon=True,
-        )
-        thread.start()
+            thread = threading.Thread(
+                target=self._run_tracked,
+                args=(drill_id,),
+                name=f"resurrection-{drill_id}",
+                daemon=True,
+            )
+            self._workers.add(thread)
+            try:
+                thread.start()
+            except RuntimeError:
+                self._workers.discard(thread)
+                self._jobs.pop(drill_id, None)
+                raise
         return snapshot
+
+    def _run_tracked(self, drill_id: str) -> None:
+        try:
+            self._run(drill_id)
+        finally:
+            with self._lock:
+                self._workers.discard(threading.current_thread())
 
     def _progress(self, drill_id: str, event: dict[str, Any]) -> None:
         with self._lock:
@@ -132,7 +170,7 @@ class DrillManager:
 
     def _run(self, drill_id: str) -> None:
         try:
-            receipt = execute_drill(
+            receipt = self.drill_runner(
                 self.fixture_root,
                 self.runtime_root,
                 drill_id,
@@ -201,6 +239,39 @@ class DrillManager:
                 raise KeyError(drill_id)
             receipt = self._jobs[drill_id].get("receipt")
             return deepcopy(receipt) if receipt is not None else None
+
+    def shutdown(self, timeout: float = 8.0) -> ShutdownResult:
+        if timeout < 0:
+            raise ValueError("shutdown timeout cannot be negative")
+        started = time.monotonic()
+        deadline = started + timeout
+        with self._lock:
+            self._accepting = False
+            workers = [worker for worker in self._workers if worker.is_alive()]
+
+        for worker in workers:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            worker.join(remaining)
+
+        with self._lock:
+            active = {worker for worker in self._workers if worker.is_alive()}
+            self._workers = active
+
+        try:
+            workspace_clean = (
+                not self.runtime_root.exists()
+                or not any(self.runtime_root.iterdir())
+            )
+        except OSError:
+            workspace_clean = False
+        return ShutdownResult(
+            tracked_workers=len(workers),
+            remaining_workers=len(active),
+            workspace_clean=workspace_clean,
+            waited_seconds=round(time.monotonic() - started, 4),
+        )
 
 
 class ResurrectionHTTPServer(ThreadingHTTPServer):
@@ -378,7 +449,14 @@ def build_server(
     return ResurrectionHTTPServer((host, port), manager, web_root)
 
 
-def serve(host: str, port: int, manager: DrillManager, web_root: Path) -> None:
+def serve(
+    host: str,
+    port: int,
+    manager: DrillManager,
+    web_root: Path,
+    *,
+    shutdown_timeout: float = DEFAULT_SHUTDOWN_TIMEOUT,
+) -> bool:
     server = build_server(host, port, manager, web_root)
     actual_host, actual_port = server.server_address[:2]
     print()
@@ -390,6 +468,28 @@ def serve(host: str, port: int, manager: DrillManager, web_root: Path) -> None:
     try:
         server.serve_forever(poll_interval=0.2)
     except KeyboardInterrupt:
-        print("\n  Stopped. Ephemeral workspaces are cleaned automatically.")
+        print(
+            "\n  Shutdown requested. Waiting up to "
+            f"{shutdown_timeout:g}s for recovery cleanup..."
+        )
     finally:
+        result = manager.shutdown(timeout=shutdown_timeout)
         server.server_close()
+        if result.cleanup_confirmed:
+            print(
+                "  Stopped. Workspace cleanup confirmed"
+                f" ({result.tracked_workers} active worker(s) observed)."
+            )
+        elif result.remaining_workers:
+            print(
+                "  HTTP server stopped, but cleanup was not confirmed: "
+                f"{result.remaining_workers} worker(s) did not finish within "
+                f"{shutdown_timeout:g}s. Inspect .runtime before removal."
+            )
+        else:
+            print(
+                "  HTTP server stopped, but cleanup was not confirmed: "
+                "the runtime workspace is not empty. "
+                "Inspect .runtime before removal."
+            )
+    return result.cleanup_confirmed
