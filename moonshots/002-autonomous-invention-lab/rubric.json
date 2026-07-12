@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "scale": {
+    "minimum": 1,
+    "maximum": 10
+  },
+  "criteria": [
+    {
+      "id": "novelty",
+      "label": "Category novelty",
+      "weight": 0.2,
+      "question": "Does the application create a meaningfully new interaction or category?"
+    },
+    {
+      "id": "pain",
+      "label": "User pain",
+      "weight": 0.2,
+      "question": "Is the problem urgent enough that a user would change behavior?"
+    },
+    {
+      "id": "application",
+      "label": "Working application",
+      "weight": 0.2,
+      "question": "Can a user complete the core experience now?"
+    },
+    {
+      "id": "proof",
+      "label": "Measured proof",
+      "weight": 0.15,
+      "question": "Does a falsifiable experiment support the value claim?"
+    },
+    {
+      "id": "demo",
+      "label": "Demo magic",
+      "weight": 0.15,
+      "question": "Can the invention become obvious and memorable in three minutes?"
+    },
+    {
+      "id": "compounding",
+      "label": "Compounding value",
+      "weight": 0.1,
+      "question": "Does each use make RAPP, its evidence, or its ecosystem more valuable?"
+    }
+  ],
+  "minimum_finalist_score": 7.5,
+  "automatic_failures": [
+    "No runnable application",
+    "No measurable experiment",
+    "Private data required for the demo",
+    "Irreversible or undisclosed side effects",
+    "Moonshot claim exceeds measured evidence"
+  ]
+}
+
