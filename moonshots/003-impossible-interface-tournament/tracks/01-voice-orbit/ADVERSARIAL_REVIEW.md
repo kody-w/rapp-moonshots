@@ -14,8 +14,10 @@ coarse and browser-dependent.
 | Downward petal aim looks like a nod | Center return could confirm | Nod anchors only after a stable petal pose; center is processed first and resets the gate | Coarse motion can still false-trigger away from center |
 | Face leaves frame | Stale highlight | Estimator loss clears highlight and freezes commits | Detection may report loss late |
 | Camera/mic track ends or mutes | Missing modality | Immediate freeze; priority controls remain | Voice stop cannot work after mic loss; keyboard/touch stop remains |
+| Stop occurs while preview playback is awaited | Speech could start after stop | Active/stream recheck after await; unconditional idempotent cleanup detaches recognizer callbacks and restarts | Browser-level media teardown still depends on platform APIs |
 | Speech hears `confirm` incorrectly | Wrong commit | Confirmation requires an existing highlight | Highlight itself can be wrong |
 | New route values spoken after commit | Confirmed task silently changes | Committed/complete stages reject all parsed route mutations until undo/new route | User must notice the rejection prompt/event |
+| Unsupported destination follows a valid one | Stale valid value could survive | Destination-like unsupported speech clears the field and emits a repair | Vocabulary remains intentionally limited |
 | Phrase contains `stop`, `cancel`, or `undo` | Ordinary parse could override safety | Priority scan occurs before all other parsing | Benign sentences containing those words fail safe |
 | `FaceDetector` unavailable | Claimed gaze quality collapses | Explicit head/motion fallback label | Motion fallback is substantially less useful |
 | Browser speech is remote | Audio crosses app’s local boundary | Pre-permission and in-session caveat | Vendor behavior is outside app control |

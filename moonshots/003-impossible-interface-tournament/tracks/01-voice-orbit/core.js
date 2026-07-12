@@ -56,19 +56,30 @@
       .trim();
   }
 
-  function normalizeDestinationIdentifier(value) {
+  function destinationCandidateIdentifier(value) {
     const speech = normalizeSpeech(value);
-    const match = speech.match(
+    const known = speech.match(
       /\b(orion|luna|atlas|polaris)\s*(?:-|dash|hyphen|number)?\s*(zero|one|two|three|four|five|six|seven|eight|nine|\d+)\b/,
     );
+    const directed = speech.match(
+      /\b(?:to|destination(?:\s+(?:is|equals))?)\s+(?:the\s+)?([a-z]+)\s*(?:-|dash|hyphen|number)?\s*(zero|one|two|three|four|five|six|seven|eight|nine|\d+)\b/,
+    );
+    const standalone = speech.match(
+      /^([a-z]+)\s*(?:-|dash|hyphen|number)?\s*(zero|one|two|three|four|five|six|seven|eight|nine|\d+)$/,
+    );
+    const match = known || directed || standalone;
     if (!match) {
       return null;
     }
     const number = Object.prototype.hasOwnProperty.call(SPOKEN_NUMBERS, match[2])
       ? SPOKEN_NUMBERS[match[2]]
       : Number(match[2]);
-    const identifier = `${match[1].toUpperCase()}-${number}`;
-    return SUPPORTED_DESTINATIONS.includes(identifier) ? identifier : null;
+    return `${match[1].toUpperCase()}-${number}`;
+  }
+
+  function normalizeDestinationIdentifier(value) {
+    const candidate = destinationCandidateIdentifier(value);
+    return candidate && SUPPORTED_DESTINATIONS.includes(candidate) ? candidate : null;
   }
 
   function isSupportedDestination(value) {
@@ -126,22 +137,31 @@
       }
     }
 
-    if (
-      /\bnon\s*-?\s*fragile\b/.test(speech) ||
-      /\bnot\s+(?:marked\s+)?(?:as\s+)?fragile\b/.test(speech) ||
-      /\b(?:do not|don'?t)\s+(?:(?:mark|make|treat)\s+)?(?:(?:it|them)\s+)?(?:as\s+)?fragile\b/.test(
+    const handlingNegated =
+      /\bnon\s*-?\s*(?:fragile|delicate)\b/.test(speech) ||
+      /\bnot\s+(?:marked\s+|treated\s+)?(?:as\s+)?(?:fragile|delicate)\b/.test(speech) ||
+      /\b(?:do not|don'?t)\s+(?:(?:mark|make|treat)\s+)(?:(?:it|them)\s+)?(?:as\s+)?(?:fragile|delicate)\b/.test(
         speech,
       ) ||
-      /\b(standard|rugged)\b/.test(speech)
-    ) {
+      /\b(?:do not|don'?t|not(?:\s+to)?)\s+handle(?:d)?(?:\s+(?:it|them))?\s+with care\b/.test(
+        speech,
+      );
+    if (handlingNegated || /\b(standard|rugged)\b/.test(speech)) {
       parsed.fragile = false;
-    } else if (/\b(fragile|delicate|handle with care)\b/.test(speech)) {
+    } else if (
+      /\b(?:fragile|delicate|handle(?:\s+(?:it|them))?\s+with care)\b/.test(speech)
+    ) {
       parsed.fragile = true;
     }
 
-    const destination = normalizeDestinationIdentifier(speech);
-    if (destination) {
-      parsed.destination = destination;
+    const destinationCandidate = destinationCandidateIdentifier(speech);
+    if (destinationCandidate) {
+      if (isSupportedDestination(destinationCandidate)) {
+        parsed.destination = destinationCandidate;
+      } else {
+        parsed.destination = null;
+        parsed.destinationRejected = destinationCandidate;
+      }
     }
 
     const gateMatch = speech.match(/\b(north|south|east|west)\s+gate\b/);
@@ -577,7 +597,9 @@
     _undo(source) {
       const snapshot = this.undoStack.pop();
       if (!snapshot) {
-        this.state.metrics.voiceRepairs += 1;
+        if (source === "voice") {
+          this.state.metrics.voiceRepairs += 1;
+        }
         this._log("safety.undo.empty", { source });
         return;
       }
@@ -588,7 +610,9 @@
     }
 
     _stop(source) {
-      this.state.stoppedAt = this.clock();
+      if (this.state.stoppedAt === null) {
+        this.state.stoppedAt = this.clock();
+      }
       this.state.status = "stopped";
       this.state.frozen = true;
       this.state.freezeReason = "stopped by user";
@@ -660,6 +684,7 @@
         this._log("draft.destination.rejected", { value: parsed.destination });
         return [];
       }
+      const rejectedDestination = parsed.destinationRejected || null;
       const changed = [];
       if (parsed.action === "route" || this.state.task.action === "route") {
         this.state.task.action = "route";
@@ -678,8 +703,15 @@
       }
       this.state.highlight = null;
       this.state.highlightSource = null;
-      this.state.lastAction = "voice-draft";
       this._log("voice.values", { fields: changed });
+      if (rejectedDestination) {
+        this.state.metrics.errors += 1;
+        this.state.metrics.voiceRepairs += 1;
+        this.state.lastAction = "destination-rejected";
+        this._log("draft.destination.rejected", { value: rejectedDestination });
+      } else {
+        this.state.lastAction = "voice-draft";
+      }
       return changed;
     }
 
@@ -696,7 +728,7 @@
         return;
       }
       if (/\bundo\b/.test(speech)) {
-        this._undo(source);
+        this._undo("voice");
         return;
       }
       if (/\bexport\b/.test(speech)) {
@@ -742,7 +774,10 @@
         (this.state.stage === "collect" &&
           Object.keys(parseRouteUtterance(`route ${speech}`)).length > 1);
       if (recognized) {
-        const contextual = this.state.stage === "collect" ? parseRouteUtterance(`route ${speech}`) : parsed;
+        const contextual =
+          this.state.stage === "collect"
+            ? { ...parseRouteUtterance(`route ${speech}`), ...parsed }
+            : parsed;
         this._applyParsedSpeech(contextual);
         return;
       }

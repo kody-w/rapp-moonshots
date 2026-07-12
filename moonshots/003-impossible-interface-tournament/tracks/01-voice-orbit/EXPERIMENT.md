@@ -54,6 +54,10 @@ participants or media.
 | No-speech startup | No media request and no SpeechRecognition construction/start |
 | Commit integrity | Route speech cannot mutate committed/completed values |
 | Timing | Completion freezes elapsed time before any delayed export |
+| Media race | Stop during preview playback prevents recognizer construction/restart |
+| Destination repair | Unsupported identifier clears any stale draft destination |
+| Handling negation | Negation applies to fragile, delicate, and handle-with-care only |
+| Repeated safety | Repeated stop preserves first stop time; non-voice empty undo is not a voice repair |
 | Theme | Exact Clawpilot variables and required fonts present |
 
 ## Metrics

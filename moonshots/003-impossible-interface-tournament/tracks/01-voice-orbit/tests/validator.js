@@ -143,6 +143,30 @@ check("no-media fallback cannot request microphone or start speech", () => {
   assert.match(core, /speech = "disabled"/);
 });
 
+check("preview and recognition stop races fail closed", () => {
+  const live = section(app, "async function startLive()", "function simulationStep(");
+  const speech = section(app, "function startSpeechRecognition()", "function bindTrackSafety(");
+  const cleanup = section(app, "function stopRuntimeSensors()", "function dispatch(action)");
+  const dispatcher = section(app, "function dispatch(action)", "function setSensor(");
+  const playIndex = live.indexOf("await elements.cameraPreview.play()");
+  const postPlayGuard = live.indexOf(
+    'if (machine.state.status !== "active" || runtime.stream !== stream)',
+    playIndex,
+  );
+  const recognitionIndex = live.indexOf("startSpeechRecognition()");
+  assert.ok(playIndex >= 0 && postPlayGuard > playIndex && recognitionIndex > postPlayGuard);
+  assert.match(
+    speech,
+    /if \(machine\.state\.status !== "active" \|\| !runtime\.stream\)\s*{\s*return;/,
+  );
+  assert.match(speech, /runtime\.recognition !== recognition/);
+  assert.match(cleanup, /runtime\.recognition\.onstart = null/);
+  assert.match(cleanup, /runtime\.recognition\.onresult = null/);
+  assert.match(cleanup, /runtime\.recognition\.onerror = null/);
+  assert.match(cleanup, /runtime\.recognition\.onend = null/);
+  assert.match(dispatcher, /if \(machine\.state\.status === "stopped"\)\s*{\s*stopRuntimeSensors\(\)/);
+});
+
 check("native Enter activation is preserved for interactive controls", () => {
   assert.match(app, /function isNativeInteractiveTarget\(target\)/);
   assert.match(app, /button, a\[href\], input, select, textarea, summary/);
@@ -187,6 +211,7 @@ check("safety, fallback, and local export controls are visible", () => {
   assert.match(core, /class NodGestureGate/);
   assert.match(core, /sample\.zone === "center"/);
   assert.match(core, /draft\.mutation\.blocked/);
+  assert.match(core, /destinationRejected/);
   assert.match(core, /SUPPORTED_DESTINATIONS/);
 });
 

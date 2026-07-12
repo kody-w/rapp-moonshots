@@ -66,13 +66,26 @@ test("negation wins over fragile and spoken destinations are validated", () => {
   );
   assert.equal(parsed.fragile, false);
   assert.equal(parsed.destination, "LUNA-3");
+  [
+    "not fragile",
+    "not delicate",
+    "do not handle with care",
+    "don't mark them as delicate",
+    "not handled with care",
+  ].forEach((handling) => {
+    assert.equal(parseRouteUtterance(handling).fragile, false, handling);
+  });
+  assert.equal(parseRouteUtterance("do not delay; handle with care").fragile, true);
+  assert.equal(parseRouteUtterance("mark delicate").fragile, true);
   assert.equal(normalizeDestinationIdentifier("Atlas number two"), "ATLAS-2");
   assert.equal(normalizeDestinationIdentifier("Polaris dash four"), "POLARIS-4");
   assert.equal(normalizeDestinationIdentifier("Orion eight"), null);
   assert.equal(normalizeDestinationIdentifier("Vega nine"), null);
   assert.equal(isSupportedDestination("ORION-7"), true);
   assert.equal(isSupportedDestination("VEGA-9"), false);
-  assert.equal("destination" in parseRouteUtterance("route one beacon to Vega nine"), false);
+  const invalidRoute = parseRouteUtterance("route one beacon to Vega nine");
+  assert.equal(invalidRoute.destination, null);
+  assert.equal(invalidRoute.destinationRejected, "VEGA-9");
   assert.equal(
     taskComplete({
       action: "route",
@@ -85,6 +98,28 @@ test("negation wins over fragile and spoken destinations are validated", () => {
     }),
     false,
   );
+});
+
+test("unsupported destination speech clears a stale valid draft value", () => {
+  const rejected = parseRouteUtterance("destination Vega nine");
+  assert.equal(rejected.destination, null);
+  assert.equal(rejected.destinationRejected, "VEGA-9");
+
+  const machine = new VoiceOrbitMachine();
+  machine.dispatch({ type: "START", mode: "simulation" });
+  exactRoute(machine);
+  assert.equal(machine.state.stage, "review");
+  assert.equal(machine.state.task.destination, "ORION-7");
+  machine.dispatch({ type: "VOICE", text: "destination Vega nine", source: "speech" });
+  assert.equal(machine.state.task.destination, null);
+  assert.equal(machine.state.stage, "collect");
+  assert.equal(machine.state.lastAction, "destination-rejected");
+  assert.equal(machine.state.metrics.errors, 1);
+  assert.equal(machine.state.metrics.voiceRepairs, 1);
+  assert.equal(machine.state.events.at(-1).type, "draft.destination.rejected");
+  machine.dispatch({ type: "VOICE", text: "Orion seven", source: "speech" });
+  assert.equal(machine.state.task.destination, "ORION-7");
+  assert.equal(machine.state.stage, "review");
 });
 
 test("center rest cancels a downward aim without completing a nod", () => {
@@ -317,6 +352,32 @@ test("completion time stays frozen across delayed export", () => {
   const record = machine.exportRecord();
   assert.equal(record.metrics.elapsedMs, 900);
   assert.equal(record.events.at(-1).t, 900);
+});
+
+test("repeated stop preserves the first stop time", () => {
+  let now = 100;
+  const machine = new VoiceOrbitMachine({ clock: () => now });
+  machine.dispatch({ type: "START", mode: "simulation" });
+  now = 500;
+  machine.dispatch({ type: "STOP", source: "keyboard" });
+  assert.equal(machine.state.stoppedAt, 500);
+  assert.equal(machine.state.metrics.elapsedMs, 400);
+  now = 900;
+  machine.dispatch({ type: "STOP", source: "touch" });
+  assert.equal(machine.state.stoppedAt, 500);
+  assert.equal(machine.state.metrics.elapsedMs, 400);
+  assert.equal(machine.state.events.at(-1).t, 400);
+});
+
+test("empty undo counts a repair only for voice", () => {
+  const machine = new VoiceOrbitMachine();
+  machine.dispatch({ type: "START", mode: "fallback" });
+  machine.dispatch({ type: "UNDO", source: "keyboard" });
+  machine.dispatch({ type: "UNDO", source: "touch" });
+  assert.equal(machine.state.metrics.voiceRepairs, 0);
+  machine.dispatch({ type: "VOICE", text: "undo", source: "speech" });
+  assert.equal(machine.state.metrics.voiceRepairs, 1);
+  assert.equal(machine.state.events.at(-1).detail.source, "voice");
 });
 
 test("deterministic simulation completes the exact shared task", () => {

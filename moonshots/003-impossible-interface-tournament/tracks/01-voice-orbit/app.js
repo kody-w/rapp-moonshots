@@ -302,6 +302,9 @@
       runtime.recognitionRestart = null;
     }
     if (runtime.recognition) {
+      runtime.recognition.onstart = null;
+      runtime.recognition.onresult = null;
+      runtime.recognition.onerror = null;
       runtime.recognition.onend = null;
       try {
         runtime.recognition.stop();
@@ -349,13 +352,20 @@
         "Route locked after confirmation. Say “undo” or explicitly choose New route first.";
       announce("Confirmed route unchanged. Undo or choose New route before editing.");
     }
+    if (action.type === "VOICE" && machine.state.lastAction === "destination-rejected") {
+      elements.lastHeard.textContent =
+        "Unsupported destination rejected. Choose ORION-7, LUNA-3, ATLAS-2, or POLARIS-4.";
+      announce("Unsupported destination cleared from the route draft.");
+    }
     if (machine.state.exportRequested > previousExport) {
       downloadRecord();
     }
-    if (previousStatus !== "stopped" && machine.state.status === "stopped") {
+    if (machine.state.status === "stopped") {
       stopRuntimeSensors();
-      elements.lastHeard.textContent = "Sensors stopped. Session data remains only in memory.";
-      announce("Camera and microphone stopped.");
+      if (previousStatus !== "stopped") {
+        elements.lastHeard.textContent = "Sensors stopped. Session data remains only in memory.";
+        announce("Camera and microphone stopped.");
+      }
     }
     return machine.state;
   }
@@ -655,6 +665,9 @@
   }
 
   function startSpeechRecognition() {
+    if (machine.state.status !== "active" || !runtime.stream) {
+      return;
+    }
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) {
       setSensor("speech", "unavailable", "Web Speech API not supported");
@@ -671,10 +684,29 @@
     recognition.lang = document.documentElement.lang || "en-US";
 
     recognition.onstart = () => {
+      if (
+        !runtime.recognitionWanted ||
+        machine.state.status !== "active" ||
+        runtime.recognition !== recognition
+      ) {
+        try {
+          recognition.stop();
+        } catch (error) {
+          void error;
+        }
+        return;
+      }
       setSensor("speech", "active", "recognizer listening");
       elements.lastHeard.textContent = "Listening…";
     };
     recognition.onresult = (event) => {
+      if (
+        !runtime.recognitionWanted ||
+        machine.state.status !== "active" ||
+        runtime.recognition !== recognition
+      ) {
+        return;
+      }
       let interim = "";
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const text = event.results[index][0].transcript.trim();
@@ -693,6 +725,9 @@
       }
     };
     recognition.onerror = (event) => {
+      if (machine.state.status !== "active" || runtime.recognition !== recognition) {
+        return;
+      }
       const code = speechErrorCode(event);
       setSensor("speech", "error", code);
       dispatch({ type: "ERROR", area: "speech", code });
@@ -703,10 +738,21 @@
       }
     };
     recognition.onend = () => {
-      if (!runtime.recognitionWanted || machine.state.status === "stopped") {
+      if (
+        !runtime.recognitionWanted ||
+        machine.state.status !== "active" ||
+        runtime.recognition !== recognition
+      ) {
         return;
       }
       runtime.recognitionRestart = window.setTimeout(() => {
+        if (
+          !runtime.recognitionWanted ||
+          machine.state.status !== "active" ||
+          runtime.recognition !== recognition
+        ) {
+          return;
+        }
         try {
           recognition.start();
         } catch (error) {
@@ -814,7 +860,15 @@
           code: error.name || "autoplay",
         });
       }
+      if (machine.state.status !== "active" || runtime.stream !== stream) {
+        stopRuntimeSensors();
+        return;
+      }
       startEstimator();
+      if (machine.state.status !== "active" || runtime.stream !== stream) {
+        stopRuntimeSensors();
+        return;
+      }
       startSpeechRecognition();
       announce("Sensors active. Speak a broad intent.");
     } catch (error) {

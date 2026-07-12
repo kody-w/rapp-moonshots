@@ -53,6 +53,9 @@ home, and confirms home with a simulated nod.
 Touching a petal only highlights it. A separate confirmation action is always
 required. After confirmation, route values are immutable: further route speech
 is rejected until **Undo** or an explicitly confirmed **New route**.
+Destination-like speech outside ORION-7, LUNA-3, ATLAS-2, and POLARIS-4 clears
+the draft destination and reports a repair instead of retaining a stale value.
+Negation is scoped to fragile, delicate, and handle-with-care phrasing.
 
 ## Sensor honesty
 
@@ -68,6 +71,9 @@ is rejected until **Undo** or an explicitly confirmed **New route**.
   sample, raw sample bytes are zeroed, and cleanup clears it again.
 - Loss of camera, microphone, or the active estimator freezes activation and
   clears the armed highlight. Stop, cancel, and undo still work.
+- Every awaited media step rechecks the active session. Stop cleanup is
+  idempotent, removes every recognition callback/restart, and cannot revive
+  speech after a delayed preview start.
 - This is not medical-grade eye tracking and does not claim pixel accuracy.
 
 Webcam frames stay in memory only long enough for local analysis. The
@@ -102,8 +108,9 @@ gaze/dwell non-activation, explicit commits, center rest, sensor-loss freeze,
 priority safety commands, exact deterministic completion, export privacy,
 locked committed routes, completion-time freezing, destination normalization,
 no-media startup isolation, native Enter activation, analysis-canvas clearing,
-network/persistence absence, browser capability hooks, and the mandatory
-Clawpilot theme.
+media-stop races, scoped handling negation, repeated-stop timing, source-aware
+undo repairs, network/persistence absence, browser capability hooks, and the
+mandatory Clawpilot theme.
 
 ## Files
 
