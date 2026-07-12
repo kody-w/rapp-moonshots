@@ -78,19 +78,32 @@ raw exception.
 a behavior-plus-adversary rehearsal can demonstrate both liveness and integrity
 in one repeatable run.
 
-Run ten drills and retain the ten downloaded receipts. The experiment succeeds
-only when all thresholds hold:
+Run the reproducible ten-drill experiment:
 
-| Metric | Acceptance threshold | Receipt field |
+```bash
+python3 app.py --experiment --runs 10
+```
+
+This is a headless path: it never constructs or starts the HTTP server. It runs
+ten independently isolated drills with presentation delays disabled, evaluates
+each public-safe receipt in memory, prints one aggregate JSON document, and
+exits `0` only when every threshold passes. Any missed threshold exits `1`.
+`--runs N` accepts 1–1000 and scales every required count to `N`.
+
+| Metric | Acceptance threshold for 10 runs | Aggregate JSON field |
 | --- | ---: | --- |
-| Clean restore success | 10/10 | `outcome` |
-| Manifest coverage | 5/5 files each run | `metrics.files_manifest_verified` |
-| Behavioral liveness | 4/4 canaries each run | `metrics.canaries_passed` |
-| Corruption detection | 10/10 hard failures | `controlled_corruption.observed_guard_result` |
-| False acceptance | 0 | `metrics.corruptions_detected` |
-| Workspace cleanup | 10/10 true | `safety.ephemeral_workspace_removed` |
-| Public-safety gate | 10/10 receipts issued | receipt availability itself |
-| Restore latency | Record median and p95 | `metrics.recovery_seconds` |
+| Clean restore success | 10/10 | `metrics.clean_successes` |
+| Manifest coverage | 50/50 files; 10/10 runs | `metrics.manifest` |
+| Behavioral liveness | 40/40 canaries; 10/10 runs | `metrics.canaries` |
+| Corruption detection | 10/10 hard failures | `metrics.corruption.hard_fails` |
+| False acceptance | 0 | `metrics.corruption.false_acceptances` |
+| Workspace cleanup | 10/10 | `metrics.cleanup` |
+| Public-safety gate | 10/10 receipts | `runs_completed` |
+| Restore latency | Record median and nearest-rank p95 | `metrics.latency_seconds` |
+
+The JSON also contains a boolean for every threshold, an overall
+`meets_thresholds`, public-safe failure-code counts, total experiment duration,
+and `safety.http_server_started: false`.
 
 The deliberately same-size mutation is important: it establishes an
 adversarial baseline where “the right files with the right sizes” is proven
@@ -112,7 +125,10 @@ The suite covers:
 3. refusal of a non-synthetic fixture before workspace creation;
 4. receipt privacy enforcement;
 5. a real loopback HTTP server, one-button API flow, and receipt download;
-6. required Clawpilot theme, self-contained UI, CSP, and health endpoint.
+6. required Clawpilot theme, self-contained UI, CSP, and health endpoint;
+7. successful headless aggregation, median/p95 latency, and workspace cleanup;
+8. a simulated false acceptance producing a failed threshold and exit code `1`;
+9. experiment-mode CLI routing that never calls the HTTP server.
 
 ## API
 
@@ -185,6 +201,7 @@ workforce returns **alive, correct, and able to reject corruption**.
 app.py                         # one-command entry point
 resurrection_proof/
   drill.py                     # restore, verification, canaries, adversary, receipt
+  experiment.py                # headless N-run aggregation and threshold exit
   server.py                    # loopback HTTP API and progress orchestration
 fixtures/rapp-estate/          # synthetic public estate + SHA-256 manifest
 web/index.html                 # self-contained Clawpilot application
