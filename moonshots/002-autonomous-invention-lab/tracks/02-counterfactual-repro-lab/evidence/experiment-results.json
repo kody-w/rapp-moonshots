@@ -1,0 +1,75 @@
+{
+  "hypothesis": "The lab identifies the seeded environmental cause in every scenario, with repeatable baseline and counterfactual outcomes, while changing one variable per trial and leaving no workspace residue.",
+  "measured_at_utc": "2026-07-12T01:13:32.660265+00:00",
+  "pass_gates": {
+    "baseline_reproducibility": "9/9 failures",
+    "cause_accuracy": "3/3",
+    "counterfactual_reproducibility": "9/9 passes",
+    "median_scenario_duration_under_ms": 3000,
+    "residual_workspaces": 0,
+    "variables_changed_per_trial": 1
+  },
+  "passed": true,
+  "runs": [
+    {
+      "baseline_failures": 3,
+      "baseline_repeats": 3,
+      "cause_correct": true,
+      "controls_rejected": 2,
+      "duration_ms": 511.12,
+      "expected_cause": "checkout.lineEnding",
+      "flip_passes": 3,
+      "flip_repeats": 3,
+      "observed_cause": "checkout.lineEnding",
+      "residual_workspaces": 0,
+      "scenario": "line-endings",
+      "trials": 12,
+      "variables_changed_per_trial": 1
+    },
+    {
+      "baseline_failures": 3,
+      "baseline_repeats": 3,
+      "cause_correct": true,
+      "controls_rejected": 2,
+      "duration_ms": 578.89,
+      "expected_cause": "simulatedPath.order",
+      "flip_passes": 3,
+      "flip_repeats": 3,
+      "observed_cause": "simulatedPath.order",
+      "residual_workspaces": 0,
+      "scenario": "path-precedence",
+      "trials": 12,
+      "variables_changed_per_trial": 1
+    },
+    {
+      "baseline_failures": 3,
+      "baseline_repeats": 3,
+      "cause_correct": true,
+      "controls_rejected": 2,
+      "duration_ms": 508.56,
+      "expected_cause": "feature.safeParser",
+      "flip_passes": 3,
+      "flip_repeats": 3,
+      "observed_cause": "feature.safeParser",
+      "residual_workspaces": 0,
+      "scenario": "environment-flag",
+      "trials": 12,
+      "variables_changed_per_trial": 1
+    }
+  ],
+  "schema": "counterfactual-repro-measurement/v1",
+  "summary": {
+    "baseline_failures": 9,
+    "baseline_repeats": 9,
+    "cause_accuracy_percent": 100.0,
+    "controls_rejected": 6,
+    "counterfactual_passes": 9,
+    "counterfactual_repeats": 9,
+    "median_scenario_duration_ms": 511.12,
+    "residual_workspaces": 0,
+    "scenarios_correct": 3,
+    "scenarios_total": 3,
+    "total_trials": 36,
+    "workspaces_created_and_cleaned": 36
+  }
+}

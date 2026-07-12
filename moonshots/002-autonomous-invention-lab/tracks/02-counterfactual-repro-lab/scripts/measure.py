@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""Run the invention's falsifiable three-scenario measurement."""
+
+import argparse
+import json
+import shutil
+import statistics
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+TRACK_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(TRACK_ROOT))
+
+from counterfactual_lab import ExperimentRunner, SCENARIOS  # noqa: E402
+
+
+EXPECTED_CAUSES = {
+    "line-endings": "checkout.lineEnding",
+    "path-precedence": "simulatedPath.order",
+    "environment-flag": "feature.safeParser",
+}
+
+
+def measure() -> dict:
+    runtime_root = TRACK_ROOT / ".runtime" / "measurement"
+    shutil.rmtree(runtime_root, ignore_errors=True)
+    runner = ExperimentRunner(runtime_root=runtime_root)
+    runs = []
+    try:
+        for scenario_id in SCENARIOS:
+            result = runner.run(scenario_id)
+            flip = result["first_repeatable_flip"]
+            runs.append(
+                {
+                    "scenario": scenario_id,
+                    "expected_cause": EXPECTED_CAUSES[scenario_id],
+                    "observed_cause": flip["variable"],
+                    "cause_correct": flip["variable"] == EXPECTED_CAUSES[scenario_id],
+                    "baseline_repeats": result["baseline_capture"]["repetitions"],
+                    "baseline_failures": (
+                        result["baseline_capture"]["repetitions"]
+                        - result["baseline_capture"]["pass_count"]
+                    ),
+                    "flip_repeats": flip["repeat_count"],
+                    "flip_passes": flip["pass_count"],
+                    "controls_rejected": len(result["interventions"]) - 1,
+                    "trials": result["metrics"]["trials_run"],
+                    "duration_ms": result["metrics"]["duration_ms"],
+                    "variables_changed_per_trial": result["metrics"][
+                        "variables_changed_per_trial"
+                    ],
+                    "residual_workspaces": len(list(runtime_root.iterdir())),
+                }
+            )
+    finally:
+        shutil.rmtree(runtime_root, ignore_errors=True)
+
+    total_trials = sum(run["trials"] for run in runs)
+    report = {
+        "schema": "counterfactual-repro-measurement/v1",
+        "measured_at_utc": datetime.now(timezone.utc).isoformat(),
+        "hypothesis": (
+            "The lab identifies the seeded environmental cause in every scenario, "
+            "with repeatable baseline and counterfactual outcomes, while changing "
+            "one variable per trial and leaving no workspace residue."
+        ),
+        "pass_gates": {
+            "cause_accuracy": "3/3",
+            "baseline_reproducibility": "9/9 failures",
+            "counterfactual_reproducibility": "9/9 passes",
+            "variables_changed_per_trial": 1,
+            "residual_workspaces": 0,
+            "median_scenario_duration_under_ms": 3000,
+        },
+        "summary": {
+            "scenarios_correct": sum(run["cause_correct"] for run in runs),
+            "scenarios_total": len(runs),
+            "cause_accuracy_percent": round(
+                100 * sum(run["cause_correct"] for run in runs) / len(runs), 1
+            ),
+            "baseline_failures": sum(run["baseline_failures"] for run in runs),
+            "baseline_repeats": sum(run["baseline_repeats"] for run in runs),
+            "counterfactual_passes": sum(run["flip_passes"] for run in runs),
+            "counterfactual_repeats": sum(run["flip_repeats"] for run in runs),
+            "controls_rejected": sum(run["controls_rejected"] for run in runs),
+            "total_trials": total_trials,
+            "workspaces_created_and_cleaned": total_trials,
+            "residual_workspaces": sum(run["residual_workspaces"] for run in runs),
+            "median_scenario_duration_ms": round(
+                statistics.median(run["duration_ms"] for run in runs), 2
+            ),
+        },
+        "runs": runs,
+    }
+    summary = report["summary"]
+    report["passed"] = (
+        summary["scenarios_correct"] == summary["scenarios_total"]
+        and summary["baseline_failures"] == summary["baseline_repeats"]
+        and summary["counterfactual_passes"] == summary["counterfactual_repeats"]
+        and summary["residual_workspaces"] == 0
+        and all(run["variables_changed_per_trial"] == 1 for run in runs)
+        and summary["median_scenario_duration_ms"] < 3000
+    )
+    return report
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Measure all seeded experiments")
+    parser.add_argument(
+        "--write-evidence",
+        action="store_true",
+        help="Write the fixed evidence/experiment-results.json artifact",
+    )
+    args = parser.parse_args()
+    report = measure()
+    print(json.dumps(report, indent=2, sort_keys=True))
+    if args.write_evidence:
+        output = TRACK_ROOT / "evidence" / "experiment-results.json"
+        output.parent.mkdir(exist_ok=True)
+        output.write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    return 0 if report["passed"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
