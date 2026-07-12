@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RAPP Invention Lab</title>
+  <script>
+    (() => {
+      const param = new URLSearchParams(window.location.search).get("scoutTheme");
+      const theme =
+        param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --cp-bg: #f7f4ef;
+      --cp-bg-elevated: #fcfbf8;
+      --cp-surface: #ffffff;
+      --cp-surface-soft: #f5f5f5;
+      --cp-border: #dedede;
+      --cp-border-strong: #919191;
+      --cp-text: #242424;
+      --cp-text-muted: #5c5c5c;
+      --cp-text-soft: #6f6f6f;
+      --cp-accent: #b11f4b;
+      --cp-accent-hover: #9a1a41;
+      --cp-accent-soft: rgba(177, 31, 75, 0.08);
+      --cp-accent-fg: #ffffff;
+      --cp-success: #16a34a;
+      --cp-danger: #dc2626;
+      --cp-warning: #f59e0b;
+      --cp-link: #0078d4;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+      --cp-overlay: rgba(255, 255, 255, 0.8);
+      --cp-panel: rgba(255, 255, 255, 0.86);
+      --cp-panel-strong: rgba(255, 255, 255, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.55);
+      --cp-highlight: rgba(177, 31, 75, 0.12);
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --cp-bg: #3d3b3a;
+      --cp-bg-elevated: #343231;
+      --cp-surface: #292929;
+      --cp-surface-soft: #2e2e2e;
+      --cp-border: #474747;
+      --cp-border-strong: #5f5f5f;
+      --cp-text: #dedede;
+      --cp-text-muted: #919191;
+      --cp-text-soft: #b0b0b0;
+      --cp-accent: #fd8ea1;
+      --cp-accent-hover: #fb7b91;
+      --cp-accent-soft: rgba(253, 142, 161, 0.14);
+      --cp-accent-fg: #1a1a1a;
+      --cp-success: #4ade80;
+      --cp-danger: #f87171;
+      --cp-warning: #fbbf24;
+      --cp-link: #4da6ff;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+      --cp-overlay: rgba(41, 41, 41, 0.88);
+      --cp-panel: rgba(41, 41, 41, 0.72);
+      --cp-panel-strong: rgba(41, 41, 41, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.04);
+      --cp-highlight: rgba(253, 142, 161, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--cp-bg);
+      color: var(--cp-text);
+      font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    button, input { font: inherit; }
+    .mono { font-family: Consolas, "Courier New", Courier, monospace; }
+    .shell { width: min(1440px, calc(100% - 32px)); margin: auto; padding: 28px 0 60px; }
+    .header { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; margin-bottom: 20px; }
+    .eyebrow { color: var(--cp-accent); text-transform: uppercase; letter-spacing: .08em; font-size: 12px; font-weight: 800; }
+    h1 { margin: 7px 0 9px; font-size: clamp(42px, 7vw, 82px); line-height: .92; letter-spacing: -.05em; }
+    .subtitle { color: var(--cp-text-muted); max-width: 820px; line-height: 1.5; margin: 0; }
+    .button {
+      border: 1px solid var(--cp-border);
+      border-radius: .625rem;
+      padding: 9px 12px;
+      background: var(--cp-surface);
+      color: var(--cp-text);
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .button:hover { border-color: var(--cp-accent); background: var(--cp-accent-soft); }
+    .card { border: 1px solid var(--cp-border); border-radius: 16px; background: var(--cp-surface); box-shadow: 0 0 0 1px var(--cp-sheen); }
+    .challenge { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; padding: 17px; margin-bottom: 16px; border-color: var(--cp-accent); }
+    .challenge strong { display: block; margin-bottom: 4px; }
+    .challenge span { color: var(--cp-text-muted); font-size: 12px; line-height: 1.45; }
+    .timer { color: var(--cp-accent); font-size: 22px; font-weight: 800; }
+    .tracks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 16px; }
+    .track { position: relative; overflow: hidden; }
+    .track::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 5px; background: var(--cp-accent); }
+    .track-head { padding: 18px 16px 12px; border-bottom: 1px solid var(--cp-border); }
+    .track-number { color: var(--cp-accent); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
+    .track h2 { margin: 5px 0 5px; font-size: 22px; }
+    .track-hook { color: var(--cp-text-muted); font-size: 12px; min-height: 36px; line-height: 1.45; }
+    .track-body { padding: 14px 16px 16px; }
+    .pitch { padding: 11px; border: 1px solid var(--cp-accent); border-radius: .625rem; background: var(--cp-accent-soft); font-size: 12px; line-height: 1.45; margin-bottom: 13px; }
+    .score-row { display: grid; grid-template-columns: 74px 1fr 24px; gap: 8px; align-items: center; margin: 8px 0; font-size: 10px; }
+    input[type="range"] { width: 100%; accent-color: var(--cp-accent); }
+    .track-total { display: flex; justify-content: space-between; align-items: center; margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--cp-border); }
+    .score { font-size: 28px; font-weight: 800; }
+    .launch {
+      display: inline-flex;
+      padding: 8px 10px;
+      border: 1px solid var(--cp-border);
+      border-radius: .625rem;
+      color: var(--cp-text-muted);
+      text-decoration: none;
+      pointer-events: none;
+    }
+    .stage { display: grid; grid-template-columns: 1fr .75fr; gap: 14px; }
+    .stage-panel { padding: 18px; }
+    .stage-label { color: var(--cp-text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; font-weight: 800; }
+    .winner { margin: 7px 0 6px; font-size: 32px; }
+    .winner-reason { color: var(--cp-text-muted); line-height: 1.5; min-height: 48px; }
+    .criteria { display: grid; gap: 8px; margin-top: 14px; }
+    .criterion { display: flex; justify-content: space-between; gap: 12px; padding: 9px; border: 1px solid var(--cp-border); border-radius: .625rem; background: var(--cp-surface-soft); font-size: 11px; }
+    .status-list { display: grid; gap: 9px; margin-top: 12px; }
+    .status { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; font-size: 11px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cp-warning); }
+    .status span:last-child { color: var(--cp-text-muted); }
+    .footer { margin-top: 16px; color: var(--cp-text-muted); font-size: 10px; display: flex; justify-content: space-between; gap: 16px; }
+    @media (max-width: 1000px) { .tracks { grid-template-columns: 1fr; } .stage { grid-template-columns: 1fr; } }
+    @media (max-width: 620px) { .shell { width: calc(100% - 20px); } .header { flex-direction: column; } .challenge { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="header">
+      <div>
+        <div class="eyebrow">Moonshot 002 · RAPP Invention Laboratory</div>
+        <h1>Three inventions enter.</h1>
+        <p class="subtitle">Independent fleet teams are building real applications in parallel. Score the evidence, launch each prototype, and choose which invention earns the moonshot.</p>
+      </div>
+      <button class="button" id="themeButton" type="button">Toggle theme</button>
+    </header>
+
+    <section class="card challenge">
+      <div><strong>The challenge</strong><span>Discover three novel, buildable inventions from existing RAPP assets. Require experiments, adversarial review, working applications, and a Shark Tank final.</span></div>
+      <div class="timer">BUILDING</div>
+    </section>
+
+    <section class="tracks" id="tracks"></section>
+
+    <section class="stage">
+      <article class="card stage-panel">
+        <div class="stage-label">Current Shark Tank leader</div>
+        <h2 class="winner" id="winner"></h2>
+        <p class="winner-reason" id="winnerReason"></p>
+        <div class="criteria">
+          <div class="criterion"><strong>Moonshot test</strong><span>Could this create a new category?</span></div>
+          <div class="criterion"><strong>Reality test</strong><span>Is there a working application?</span></div>
+          <div class="criterion"><strong>Evidence test</strong><span>Did an experiment support the claim?</span></div>
+          <div class="criterion"><strong>Compounding test</strong><span>Does each run make RAPP more valuable?</span></div>
+        </div>
+      </article>
+      <article class="card stage-panel">
+        <div class="stage-label">Parallel build floor</div>
+        <div class="status-list">
+          <div class="status"><span class="dot"></span><strong>Resurrection Proof</strong><span>building</span></div>
+          <div class="status"><span class="dot"></span><strong>Counterfactual Repro Lab</strong><span>building</span></div>
+          <div class="status"><span class="dot"></span><strong>Ghost Ops</strong><span>building</span></div>
+        </div>
+      </article>
+    </section>
+
+    <footer class="footer"><span>Scores remain in this browser only.</span><span>No prototype may publish, purchase, or touch private data.</span></footer>
+  </main>
+
+  <script>
+    const inventions = [
+      {
+        id: "resurrection",
+        number: "Track 01",
+        name: "Resurrection Proof",
+        hook: "Prove an agent estate can actually come back from disaster.",
+        pitch: "Backups tell you files exist. Resurrection Proof tells you your digital intelligence can come back from the dead.",
+        reason: "It converts disaster recovery from a promise into a repeatable product demonstration."
+      },
+      {
+        id: "repro",
+        number: "Track 02",
+        name: "Counterfactual Repro Lab",
+        hook: "Change one environment variable until a failure flips.",
+        pitch: "CI tells you where software failed. Counterfactual Repro Lab discovers the smallest environmental difference that caused it.",
+        reason: "It turns cross-platform debugging from log comparison into causal experimentation."
+      },
+      {
+        id: "ghost",
+        number: "Track 03",
+        name: "Ghost Ops",
+        hook: "Infrastructure rehearses disasters before they happen.",
+        pitch: "Ghost Ops is a flight simulator for AI-native operations—and every exercise leaves behind a recovery playbook.",
+        reason: "It transforms dry incident response into an unforgettable, repeatable learning experience."
+      }
+    ];
+    const criteria = ["Novelty", "Pain", "Proof", "Demo", "Leverage"];
+    const saved = JSON.parse(localStorage.getItem("rappInventionScores") || "{}");
+    const scores = {};
+    const tracksRoot = document.getElementById("tracks");
+
+    for (const invention of inventions) {
+      scores[invention.id] = saved[invention.id] || [8, 8, 7, 8, 8];
+      const card = document.createElement("article");
+      card.className = "card track";
+      const head = document.createElement("div");
+      head.className = "track-head";
+      const number = document.createElement("div");
+      number.className = "track-number";
+      number.textContent = invention.number;
+      const title = document.createElement("h2");
+      title.textContent = invention.name;
+      const hook = document.createElement("div");
+      hook.className = "track-hook";
+      hook.textContent = invention.hook;
+      head.append(number, title, hook);
+      const body = document.createElement("div");
+      body.className = "track-body";
+      const pitch = document.createElement("div");
+      pitch.className = "pitch";
+      pitch.textContent = invention.pitch;
+      body.append(pitch);
+      criteria.forEach((criterion, index) => {
+        const row = document.createElement("label");
+        row.className = "score-row";
+        const label = document.createElement("span");
+        label.textContent = criterion;
+        const input = document.createElement("input");
+        input.type = "range";
+        input.min = "1";
+        input.max = "10";
+        input.value = scores[invention.id][index];
+        const value = document.createElement("strong");
+        value.textContent = input.value;
+        input.addEventListener("input", () => {
+          scores[invention.id][index] = Number(input.value);
+          value.textContent = input.value;
+          persist();
+          renderWinner();
+          total.textContent = score(invention.id).toFixed(1);
+        });
+        row.append(label, input, value);
+        body.append(row);
+      });
+      const footer = document.createElement("div");
+      footer.className = "track-total";
+      const total = document.createElement("span");
+      total.className = "score";
+      total.textContent = score(invention.id).toFixed(1);
+      const launch = document.createElement("span");
+      launch.className = "launch";
+      launch.textContent = "Prototype building";
+      footer.append(total, launch);
+      body.append(footer);
+      card.append(head, body);
+      tracksRoot.append(card);
+    }
+
+    function score(id) {
+      return scores[id].reduce((sum, value) => sum + value, 0) / scores[id].length;
+    }
+    function persist() {
+      localStorage.setItem("rappInventionScores", JSON.stringify(scores));
+    }
+    function renderWinner() {
+      const winner = [...inventions].sort((a, b) => score(b.id) - score(a.id))[0];
+      document.getElementById("winner").textContent = `${winner.name} · ${score(winner.id).toFixed(1)}`;
+      document.getElementById("winnerReason").textContent = winner.reason;
+    }
+    document.getElementById("themeButton").addEventListener("click", () => {
+      const root = document.documentElement;
+      root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    });
+    renderWinner();
+  </script>
+</body>
+</html>
