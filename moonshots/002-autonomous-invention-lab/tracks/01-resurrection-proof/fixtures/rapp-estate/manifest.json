@@ -1,0 +1,31 @@
+{
+  "schema": "resurrection-proof-manifest/v1",
+  "estate_id": "fixture-rapp-estate-001",
+  "files": [
+    {
+      "path": "agents/greeter.json",
+      "sha256": "178ee49af124ccb46af83c25692946a6f51d1c247d3647219e584d631c7b0608",
+      "bytes": 128
+    },
+    {
+      "path": "estate.json",
+      "sha256": "69e873b2ad1af7d695d833ee9231fc9f64ee2a0365f109065c35077da629c4e9",
+      "bytes": 168
+    },
+    {
+      "path": "memory/facts.json",
+      "sha256": "1ff7b06de84cbc76741c1de98e914dcbfba9668892fee572eae24a7221de491c",
+      "bytes": 100
+    },
+    {
+      "path": "policy/recovery.json",
+      "sha256": "e084b16009503f53cd3b6ddcfe35ce727d72d63151cab85e49e5dd22d3d827f2",
+      "bytes": 112
+    },
+    {
+      "path": "registry/agents.json",
+      "sha256": "d4cbc8c4f80ed7bb3672edc2c11f4df9756ab77acba61929a338c57e7436aaf6",
+      "bytes": 385
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "estate_id": "fixture-rapp-estate-001",
+  "name": "RAPP Estate Alpha",
+  "classification": "synthetic-public-fixture",
+  "schema_version": 1,
+  "synthetic": true
+}

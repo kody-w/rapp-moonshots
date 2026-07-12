@@ -1,0 +1,5 @@
+{
+  "allowed_classification": "synthetic-public-fixture",
+  "network_access": false,
+  "required_canaries": 4
+}
