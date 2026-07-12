@@ -214,6 +214,7 @@
       this.detector = null;
       this.detectorBusy = false;
       this.estimatorGeneration = 0;
+      this.contentValidityEpoch = new Core.ContentValidityEpoch();
       this.faceMisses = 0;
       this.running = false;
       this.frameHandle = 0;
@@ -229,6 +230,7 @@
     }
 
     start() {
+      this.invalidatePendingDetections();
       if ("FaceDetector" in window) {
         try {
           this.detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
@@ -250,12 +252,17 @@
     switchToFallback(reason) {
       if (!this.detector) return false;
       this.estimatorGeneration += 1;
+      this.invalidatePendingDetections();
       this.detector = null;
-      this.detectorBusy = false;
       this.motion.clear();
       this.mode = "frame-motion head-pose fallback";
       this.callbacks.onMode(this.mode, reason || "FaceDetector unavailable");
       return true;
+    }
+
+    invalidatePendingDetections() {
+      this.detectorBusy = false;
+      return this.contentValidityEpoch.advance();
     }
 
     scheduleFrame() {
@@ -300,6 +307,9 @@
     }
 
     handleFreshness(result) {
+      if (result.justFrozen || result.resumed) {
+        this.invalidatePendingDetections();
+      }
       const shouldReport =
         !this.callbacks.shouldReportFreshness ||
         this.callbacks.shouldReportFreshness();
@@ -350,6 +360,9 @@
       const previousLuminance = this.contentGate.previous;
       const content = this.contentGate.observe(luminance, frameObservedAt);
       this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      if (content.becameInvalid || content.justTimedOut || content.recovered) {
+        this.invalidatePendingDetections();
+      }
       const shouldReport =
         !this.callbacks.shouldReportFreshness ||
         this.callbacks.shouldReportFreshness();
@@ -404,18 +417,21 @@
       this.detectorBusy = true;
       const detector = this.detector;
       const estimatorGeneration = this.estimatorGeneration;
+      const detectorEpoch = this.contentValidityEpoch.capture();
       detector
         .detect(this.video)
         .then((faces) => {
           if (
             !this.running ||
-            estimatorGeneration !== this.estimatorGeneration
+            estimatorGeneration !== this.estimatorGeneration ||
+            !this.contentValidityEpoch.accepts(detectorEpoch)
           ) {
             return;
           }
           const freshness = this.frameGate.check(performance.now());
           this.handleFreshness(freshness);
           if (
+            !this.contentValidityEpoch.accepts(detectorEpoch) ||
             freshness.frozen ||
             !this.contentGate.isFresh(performance.now())
           ) {
@@ -444,12 +460,18 @@
           }
         })
         .catch(() => {
-          if (estimatorGeneration === this.estimatorGeneration) {
+          if (
+            estimatorGeneration === this.estimatorGeneration &&
+            this.contentValidityEpoch.accepts(detectorEpoch)
+          ) {
             this.switchToFallback("FaceDetector error");
           }
         })
         .finally(() => {
-          if (estimatorGeneration === this.estimatorGeneration) {
+          if (
+            estimatorGeneration === this.estimatorGeneration &&
+            this.contentValidityEpoch.accepts(detectorEpoch)
+          ) {
             this.detectorBusy = false;
           }
         });
@@ -457,6 +479,7 @@
 
     stop() {
       this.running = false;
+      this.invalidatePendingDetections();
       cancelAnimationFrame(this.frameHandle);
       if (
         this.videoFrameHandle !== null &&
@@ -792,6 +815,7 @@
         setStatus("Confidence low. Dwell timer paused; nothing can execute.");
       },
       onSensorLost(reason) {
+        if (state.visionSensor) state.visionSensor.invalidatePendingDetections();
         state.nodDetector.endArm();
         earcon("warning");
         elements.sensorOverlay.classList.remove("is-hidden");
@@ -802,6 +826,7 @@
         speak("Sensor signal lost. Input cleared. Return to center after recovery.", true);
       },
       onRecovered() {
+        if (state.visionSensor) state.visionSensor.invalidatePendingDetections();
         state.nodDetector.endArm();
         elements.sensorOverlay.classList.add("is-hidden");
         if (state.stream) setIndicator(elements.cameraIndicator, "on", "Camera local");
@@ -1432,6 +1457,7 @@
 
   function handleTrackLoss(reason) {
     if (state.completed || !state.stream) return;
+    if (state.visionSensor) state.visionSensor.invalidatePendingDetections();
     if (state.controller) state.controller.markSensorLost(performance.now(), reason);
     setIndicator(elements.cameraIndicator, "paused", "Camera signal lost");
   }
@@ -2058,6 +2084,7 @@
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && state.controller && !state.completed) {
         stopManualHold();
+        if (state.visionSensor) state.visionSensor.invalidatePendingDetections();
         state.controller.markSensorLost(performance.now(), "page hidden");
         renderController(state.controller.snapshot());
       }

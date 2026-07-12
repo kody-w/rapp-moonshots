@@ -336,6 +336,76 @@ test("dark or occluded frames cannot arm despite advancing counters", () => {
   );
 });
 
+test("deferred FaceDetector results from before sensor loss cannot recover state", async () => {
+  const validity = new Core.ContentValidityEpoch();
+  let resolveDetection;
+  let lastProcessedGazeAt = null;
+  const deferredDetection = new Promise((resolve) => {
+    resolveDetection = resolve;
+  });
+  const controller = new Core.GazeIntentController({
+    dwellMs: 800,
+    onSensorLost: () => validity.advance(),
+  });
+
+  hold(
+    controller,
+    Core.DIRECTION_POINTS.east,
+    0,
+    900,
+    { source: "sensor" },
+  );
+  assert.equal(controller.snapshot().armed, true);
+
+  const detectorEpoch = validity.capture();
+  const pendingResult = deferredDetection.then((sample) => {
+    if (!validity.accepts(detectorEpoch)) return false;
+    lastProcessedGazeAt = 1200;
+    controller.update(sample, 1200, { source: "sensor" });
+    return true;
+  });
+
+  controller.markSensorLost(1000, "content-occluded");
+  validity.advance();
+  resolveDetection({ ...Core.DIRECTION_POINTS.center, confidence: 0.95 });
+
+  assert.equal(await pendingResult, false);
+  assert.equal(lastProcessedGazeAt, null);
+  assert.equal(controller.snapshot().centerRequired, true);
+  assert.equal(controller.metrics.sensorRecoveries, 0);
+
+  const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
+  assert.match(app, /new Core\.ContentValidityEpoch\(\)/);
+  assert.match(
+    app,
+    /const detectorEpoch = this\.contentValidityEpoch\.capture\(\);\s*detector\s*\.detect\(this\.video\)/,
+  );
+  assert.match(
+    app,
+    /!this\.contentValidityEpoch\.accepts\(detectorEpoch\)[\s\S]*?this\.callbacks\.onSample\(/,
+  );
+  assert.match(
+    app,
+    /content\.becameInvalid \|\| content\.justTimedOut \|\| content\.recovered[\s\S]*?invalidatePendingDetections\(\)/,
+  );
+  assert.match(
+    app,
+    /if \(result\.justFrozen \|\| result\.resumed\) \{\s*this\.invalidatePendingDetections\(\)/,
+  );
+  assert.match(
+    app,
+    /onSensorLost\(reason\) \{\s*if \(state\.visionSensor\) state\.visionSensor\.invalidatePendingDetections\(\)/,
+  );
+  assert.match(
+    app,
+    /\.finally\(\(\) => \{[\s\S]*?contentValidityEpoch\.accepts\(detectorEpoch\)[\s\S]*?detectorBusy = false/,
+  );
+  assert.match(
+    app,
+    /stop\(\) \{\s*this\.running = false;\s*this\.invalidatePendingDetections\(\)/,
+  );
+});
+
 test("stale sensor-derived arms are atomically rejected before watchdog execution", () => {
   const executions = [];
   const staleController = new Core.GazeIntentController({

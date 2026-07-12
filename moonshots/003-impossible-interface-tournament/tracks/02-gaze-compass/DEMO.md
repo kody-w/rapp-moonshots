@@ -25,7 +25,8 @@ can help while an independent confirmation channel owns commitment.
    watchdog tick. Even if browser frame counters keep advancing, show content
    invalidation, atomic stale-arm rejection, and required center reacquisition.
 7. Stall FaceDetector while raw frames continue. Show processed-sample timeout,
-   arm revocation, and automatic frame-motion fallback recalibration.
+   arm revocation, and automatic frame-motion fallback recalibration. Resolve
+   the old request afterward and show that it cannot recover or move focus.
 8. Feed a static or uniformly dark test camera while presented-frame counters
    advance. Show that it cannot produce gaze samples, arm, or confirm and enters
    bounded sensor-loss recovery.

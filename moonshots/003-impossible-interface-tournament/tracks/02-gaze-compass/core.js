@@ -380,6 +380,25 @@
     }
   }
 
+  class ContentValidityEpoch {
+    constructor() {
+      this.current = 0;
+    }
+
+    capture() {
+      return this.current;
+    }
+
+    advance() {
+      this.current += 1;
+      return this.current;
+    }
+
+    accepts(capturedEpoch) {
+      return capturedEpoch === this.current;
+    }
+  }
+
   class FrameContentFreshnessGate {
     constructor(options) {
       const config = options || {};
@@ -1281,6 +1300,7 @@
     DEFAULT_CONFIG,
     DIRECTIONS,
     DIRECTION_POINTS,
+    ContentValidityEpoch,
     FrameContentFreshnessGate,
     TASK_STEPS,
     GazeIntentController,

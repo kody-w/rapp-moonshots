@@ -74,6 +74,10 @@ The exact tournament route is:
   content, the old arm is revoked and bounded sensor-loss recovery begins.
   Detector stalls switch to frame-motion fallback with timed recalibration. A
   sensor-derived confirm synchronously requires all three signals to be fresh.
+- Every asynchronous FaceDetector request captures a content-validity epoch.
+  Invalid/occluded content, sensor loss, recovery reset, fallback, and stop all
+  advance that epoch. A deferred result from an older epoch is discarded before
+  it can refresh gaze freshness or satisfy center recovery.
 - Nod recognition starts a new gesture epoch when an arm begins and ends it on
   every confirm, cancel, center, confidence pause, or sensor loss. Both nod
   phases must occur after the current arm.

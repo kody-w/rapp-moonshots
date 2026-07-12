@@ -69,6 +69,11 @@ flatGate.observe(new Uint8Array(64).fill(128), 0);
 const flatContent = flatGate.observe(new Uint8Array(64).fill(128), 500);
 assert.equal(flatContent.reason, "low-detail-or-occluded");
 assert.equal(flatContent.timedOut, true);
+const detectorValidity = new Core.ContentValidityEpoch();
+const deferredDetectorEpoch = detectorValidity.capture();
+detectorValidity.advance();
+assert.equal(detectorValidity.accepts(deferredDetectorEpoch), false);
+assert.equal(detectorValidity.accepts(detectorValidity.capture()), true);
 assert.equal(Core.parseVoiceCommand("do not confirm", Core.TASK_STEPS[0]).type, "rejected-confirm");
 assert.equal(Core.closedIntervalDuration(1000, 900), 0);
 assert.equal(Core.closedIntervalDuration(1000, 1650), 650);
@@ -107,6 +112,8 @@ const report = {
       occludedContent.timedOut &&
       flatContent.reason === "low-detail-or-occluded" &&
       flatContent.timedOut,
+    deferredDetectorResultRejected:
+      !detectorValidity.accepts(deferredDetectorEpoch),
     controllerEpochMetricsAggregated: true,
     armScopedNodGesture: true,
     lifecycleGenerationSafe: true,

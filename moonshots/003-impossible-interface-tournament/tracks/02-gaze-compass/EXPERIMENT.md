@@ -35,6 +35,9 @@ as a click.
     sensor arm and reach sensor loss within the content timeout.
 19. Dark, overexposed, or low-detail/occluded frames never produce a processed
     gaze sample, arm, or executable confirmation.
+20. A FaceDetector promise begun before content or sensor loss is rejected by
+    epoch after recovery and cannot refresh processed time, clear required
+    center, or increment recovery metrics.
 
 ## Method
 
