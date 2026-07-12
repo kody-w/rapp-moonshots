@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "experiment": "gesture-tunnel-deterministic-cobalt-route",
+  "status": "pass",
+  "repeatedRunsIdentical": true,
+  "exactTaskCompletion": true,
+  "finalDepth": 8,
+  "completionMs": 12450,
+  "intentionalWrongCommits": 1,
+  "undos": 1,
+  "blockedCommitsDuringLoss": 1,
+  "sensorRecoveryMs": 900,
+  "noMediaOrNetworkPersistence": true
+}

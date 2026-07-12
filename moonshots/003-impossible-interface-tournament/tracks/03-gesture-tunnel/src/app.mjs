@@ -1,14 +1,16 @@
 import {
-  CAMERA_DWELL_MS,
   DETERMINISTIC_ACTIONS,
-  EXPECTED_ROUTE,
   TASK_LAYERS,
   TunnelEngine,
+  allowsMediaCapture,
   applyDeterministicAction,
   classifyMotionGesture,
   coarseSector,
+  completionAnnouncement,
   motionCentroid,
   normalizeSpeech,
+  releaseMediaResources,
+  shouldHandleTunnelShortcut,
 } from "./core.mjs";
 
 const query = new URLSearchParams(window.location.search);
@@ -23,6 +25,7 @@ const elements = {
   privacyCopy: document.querySelector("#privacy-copy"),
   launch: document.querySelector("#launch-control"),
   app: document.querySelector("#app-shell"),
+  tunnelStage: document.querySelector("#tunnel-stage"),
   cameraStatus: document.querySelector("#camera-status"),
   voiceStatus: document.querySelector("#voice-status"),
   neutralStatus: document.querySelector("#neutral-status"),
@@ -190,13 +193,18 @@ function render() {
       ? "Task complete · say “export” for local evidence"
       : "Task ended with a mismatch · say “undo”";
   } else if (snapshot.frozen) {
+    const causes = snapshot.freezeCauses.join(" + ");
+    const userStopped = snapshot.freezeCauses.includes("user-stop");
+    const sensorLost = snapshot.freezeCauses.some((cause) => cause.endsWith("-lost"));
     elements.orbDepth.textContent = `Depth ${snapshot.depth} / ${TASK_LAYERS.length}`;
     elements.orbTitle.textContent = "Input frozen";
-    elements.orbState.textContent = snapshot.freezeReason ?? "sensor safety";
+    elements.orbState.textContent = causes || "safety gate";
     elements.voiceCommand.textContent =
-      snapshot.freezeReason === "stopped"
-        ? "Say “resume” or press R"
-        : "State held · say “recover” or press R";
+      userStopped && sensorLost
+        ? "State held · say “recover,” then “resume”"
+        : userStopped
+          ? "Say “resume” to clear the user stop"
+          : "State held · say “recover” or press R";
   } else {
     elements.orbDepth.textContent = `Depth ${snapshot.depth} / ${TASK_LAYERS.length}`;
     elements.orbTitle.textContent = snapshot.preview
@@ -413,22 +421,35 @@ function onCenterRest(source) {
 
 function stopMedia() {
   replacingSensors = true;
-  tracker?.stop();
-  tracker = null;
-  if (engine) {
-    engine.sensorStopped("camera", elapsed());
-    engine.sensorStopped("microphone", elapsed());
+  const activeStream = stream;
+  try {
+    try {
+      tracker?.stop();
+    } catch {
+      // Media release must continue even if frame processing teardown fails.
+    }
+    tracker = null;
+    releaseMediaResources(activeStream, elements.video);
+    stream = null;
+    if (engine && activeStream) {
+      engine.sensorStopped("camera", elapsed());
+      engine.sensorStopped("microphone", elapsed());
+    }
+  } finally {
+    stream = null;
+    elements.video.srcObject = null;
+    replacingSensors = false;
   }
-  if (stream) stream.getTracks().forEach((track) => track.stop());
-  stream = null;
-  elements.video.srcObject = null;
-  replacingSensors = false;
 }
 
 function handleSensorLoss(kind) {
-  if (!engine || replacingSensors || engine.state.freezeReason === `${kind}-lost`) return;
-  tracker?.stop();
-  engine.sensorLost(kind, elapsed());
+  if (!engine || replacingSensors) return;
+  const cause = `${kind}-lost`;
+  const alreadyFrozenForSensor = engine.state.freezeCauses.includes(cause);
+  const lostAt = elapsed();
+  stopMedia();
+  if (alreadyFrozenForSensor) return;
+  engine.sensorLost(kind, lostAt);
   setSensor(
     kind === "camera" ? elements.cameraStatus : elements.voiceStatus,
     `${kind} · lost`,
@@ -441,6 +462,7 @@ function handleSensorLoss(kind) {
 }
 
 async function startSensors({ recovery = false } = {}) {
+  if (!allowsMediaCapture({ accessibleMode, simulationMode })) return false;
   if (!navigator.mediaDevices?.getUserMedia) {
     handleSensorLoss("camera");
     setCaption("Media APIs unavailable; reload with ?accessible=1 for switch access");
@@ -450,7 +472,7 @@ async function startSensors({ recovery = false } = {}) {
   setSensor(elements.voiceStatus, recovery ? "voice · recovering" : "voice · requesting", "warn");
   try {
     if (stream) stopMedia();
-    stream = await navigator.mediaDevices.getUserMedia({
+    const acquiredStream = await navigator.mediaDevices.getUserMedia({
       video: {
         width: { ideal: 640 },
         height: { ideal: 480 },
@@ -463,15 +485,30 @@ async function startSensors({ recovery = false } = {}) {
         autoGainControl: true,
       },
     });
+    stream = acquiredStream;
     elements.video.srcObject = stream;
     await elements.video.play();
     const cameraTrack = stream.getVideoTracks()[0];
     const microphoneTrack = stream.getAudioTracks()[0];
     if (cameraTrack) engine.sensorStarted("camera", elapsed());
     if (microphoneTrack) engine.sensorStarted("microphone", elapsed());
-    if (cameraTrack) cameraTrack.addEventListener("ended", () => handleSensorLoss("camera"), { once: true });
+    if (cameraTrack) {
+      cameraTrack.addEventListener(
+        "ended",
+        () => {
+          if (stream === acquiredStream) handleSensorLoss("camera");
+        },
+        { once: true },
+      );
+    }
     if (microphoneTrack) {
-      microphoneTrack.addEventListener("ended", () => handleSensorLoss("microphone"), { once: true });
+      microphoneTrack.addEventListener(
+        "ended",
+        () => {
+          if (stream === acquiredStream) handleSensorLoss("microphone");
+        },
+        { once: true },
+      );
     }
     setSensor(elements.cameraStatus, "camera · local 96×72", "ok");
     setSensor(
@@ -486,7 +523,13 @@ async function startSensors({ recovery = false } = {}) {
       onCenterRest,
     });
     tracker.start();
-    if (recovery && engine.state.frozen) engine.sensorRecovered("camera", elapsed());
+    if (recovery) {
+      if (cameraTrack) engine.sensorRecovered("camera", elapsed());
+      if (microphoneTrack) engine.sensorRecovered("microphone", elapsed());
+      if (engine.state.freezeCauses.includes("unknown-lost") && cameraTrack && microphoneTrack) {
+        engine.sensorRecovered("unknown", elapsed());
+      }
+    }
     startRecognition();
     setCaption(
       tracker.faceDetector
@@ -507,19 +550,35 @@ async function startSensors({ recovery = false } = {}) {
 
 async function recoverSensors() {
   if (recoveryInFlight) return;
-  if (engine.state.freezeReason === "stopped") {
-    engine.resume(elapsed());
-    setCaption("Route resumed at the same committed depth");
-    announce("Route resumed.");
-    render();
+  if (!allowsMediaCapture({ accessibleMode, simulationMode })) {
+    setCaption("This mode never requests camera or microphone access");
+    return;
+  }
+  const sensorCauses = engine.state.freezeCauses.filter((cause) => cause.endsWith("-lost"));
+  if (sensorCauses.length === 0) {
+    setCaption(
+      engine.state.freezeCauses.includes("user-stop")
+        ? "User stop remains; say “resume”"
+        : "No lost sensor needs recovery",
+    );
     return;
   }
   recoveryInFlight = true;
   const recovered = await startSensors({ recovery: true });
   recoveryInFlight = false;
   if (recovered) {
-    setCaption("Sensors recovered; pending input stayed canceled");
-    announce("Sensors recovered. Pending input remained canceled.");
+    const remaining = engine.snapshot().freezeCauses;
+    setCaption(
+      remaining.length
+        ? `Sensors recovered; still frozen by ${remaining.join(" + ")}`
+        : "Sensors recovered; pending input stayed canceled",
+    );
+    announce(
+      remaining.length
+        ? "Sensors recovered. The user stop remains."
+        : "Sensors recovered. Pending input remained canceled.",
+    );
+    render();
   }
 }
 
@@ -545,7 +604,7 @@ function startRecognition() {
         const result = event.results[index];
         const alternative = result[0];
         if (result.isFinal) {
-          handleVoice(alternative.transcript, alternative.confidence || 0.7);
+          handleVoice(alternative.transcript, alternative.confidence);
         } else {
           setCaption("listening", alternative.transcript);
         }
@@ -572,7 +631,7 @@ function startRecognition() {
   }
 }
 
-function handleVoice(transcript, confidence = 1) {
+function handleVoice(transcript, confidence) {
   const phrase = normalizeSpeech(transcript);
   if (!phrase) return;
   if (/\bexport\b/.test(phrase)) {
@@ -581,9 +640,24 @@ function handleVoice(transcript, confidence = 1) {
     announce("Local evidence is ready.");
     return;
   }
-  if (/\b(recover|resume)\b/.test(phrase) && engine.state.frozen) {
+  if (/\brecover\b/.test(phrase) && engine.state.frozen) {
     setCaption("Recovery requested", transcript);
     recoverSensors();
+    return;
+  }
+  if (/\bresume\b/.test(phrase)) {
+    const result = engine.voice(phrase, { confidence, at: elapsed() });
+    const remaining = engine.snapshot().freezeCauses;
+    setCaption(
+      result.accepted
+        ? remaining.length
+          ? `User stop cleared; still frozen by ${remaining.join(" + ")}`
+          : "Route resumed at the same committed depth"
+        : "No user stop is active",
+      transcript,
+    );
+    if (result.accepted && remaining.length === 0) announce("Route resumed.");
+    render();
     return;
   }
 
@@ -596,7 +670,7 @@ function handleVoice(transcript, confidence = 1) {
   } else if (result.command === "choose" && result.accepted) {
     const committed = after.selections.at(-1);
     setCaption(`${committed.label} entered; prior shells remain visible`, transcript);
-    announce(after.completed ? "Exact route complete. Home." : `${committed.label} confirmed.`);
+    announce(completionAnnouncement(after, committed.label));
   } else if (result.command === "undo" && result.accepted) {
     setCaption("Last committed tunnel undone", transcript);
     announce("Last tunnel undone.");
@@ -631,7 +705,7 @@ function prepareEvidence() {
 }
 
 function useFallback(action) {
-  if (!engine || !launched) return;
+  if (!engine || !launched || simulationMode) return;
   engine.noteFallback(elapsed());
   const snapshot = engine.snapshot();
   if (action === "recover") {
@@ -684,7 +758,7 @@ async function launch() {
   launched = true;
   launchEpoch = performance.now();
   elements.gateway.hidden = true;
-  elements.app.focus({ preventScroll: true });
+  elements.tunnelStage.focus({ preventScroll: true });
   if (simulationMode) {
     engine = new TunnelEngine({
       clock: () => 0,
@@ -718,8 +792,21 @@ async function launch() {
 
 elements.launch.addEventListener("click", launch, { once: true });
 window.addEventListener("keydown", (event) => {
-  if (!launched && event.key === "Enter") {
-    elements.launch.click();
+  const nativeInteractive = Boolean(
+    event.target?.closest?.("button, a[href], input, select, textarea, [contenteditable]"),
+  );
+  const targetInTunnel = Boolean(
+    event.target?.nodeType && elements.tunnelStage.contains(event.target),
+  );
+  if (
+    !shouldHandleTunnelShortcut({
+      launched,
+      simulationMode,
+      targetInTunnel,
+      nativeInteractive,
+      key: event.key,
+    })
+  ) {
     return;
   }
   const actions = {
@@ -737,7 +824,6 @@ window.addEventListener("keydown", (event) => {
     E: "export",
   };
   const action = actions[event.key];
-  if (!action) return;
   event.preventDefault();
   useFallback(action);
 });

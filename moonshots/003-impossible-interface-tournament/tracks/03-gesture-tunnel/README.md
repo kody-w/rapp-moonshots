@@ -69,6 +69,7 @@ and replay downloads. Golden JSON is in `evidence/`.
 npm test
 npm run validate
 npm run evidence
+npm run experiment
 ```
 
 Only Node’s built-in test runner is used; there are no dependencies or external

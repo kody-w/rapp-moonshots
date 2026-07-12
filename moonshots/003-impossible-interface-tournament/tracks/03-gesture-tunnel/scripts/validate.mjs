@@ -6,12 +6,27 @@ import { fileURLToPath } from "node:url";
 import {
   OPTION_COUNT,
   TASK_LAYERS,
+  TunnelEngine,
+  allowsMediaCapture,
+  completionAnnouncement,
+  normalizeSpeechConfidence,
   runDeterministicSimulation,
+  shouldHandleTunnelShortcut,
 } from "../src/core.mjs";
 
 const trackRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFile(resolve(trackRoot, path), "utf8");
-const [html, styles, app, readme, experiment, adversarial, rollback, pitch] = await Promise.all([
+const [
+  html,
+  styles,
+  app,
+  readme,
+  experiment,
+  adversarial,
+  rollback,
+  pitch,
+  experimentSummaryText,
+] = await Promise.all([
   read("index.html"),
   read("src/styles.css"),
   read("src/app.mjs"),
@@ -20,7 +35,9 @@ const [html, styles, app, readme, experiment, adversarial, rollback, pitch] = aw
   read("ADVERSARIAL_REVIEW.md"),
   read("ROLLBACK.md"),
   read("PITCH.md"),
+  read("evidence/experiment-summary.json"),
 ]);
+const experimentSummary = JSON.parse(experimentSummaryText);
 
 const gates = [];
 function gate(name, assertion) {
@@ -92,6 +109,36 @@ gate("safety controls and disclosure", () => {
   assert.match(app, /pending preview canceled/i);
 });
 
+gate("reviewed runtime invariants", () => {
+  assert.equal(normalizeSpeechConfidence(0), 0);
+  assert.equal(normalizeSpeechConfidence(undefined), 0);
+  assert.equal(allowsMediaCapture({ accessibleMode: true }), false);
+  assert.equal(allowsMediaCapture({ simulationMode: true }), false);
+  assert.equal(
+    shouldHandleTunnelShortcut({
+      launched: true,
+      simulationMode: true,
+      targetInTunnel: true,
+      key: "Enter",
+    }),
+    false,
+  );
+  assert.match(completionAnnouncement({ completed: true, exact: false }), /does not match/i);
+
+  const engine = new TunnelEngine({ clock: () => 0, sessionId: "validator-freeze-causes" });
+  engine.start(0);
+  engine.sensorLost("camera", 100);
+  engine.stop(200);
+  engine.sensorRecovered("camera", 300);
+  assert.deepEqual(engine.snapshot().freezeCauses, ["user-stop"]);
+  engine.resume(400);
+  assert.equal(engine.snapshot().frozen, false);
+
+  assert.match(app, /releaseMediaResources\(activeStream, elements\.video\)/);
+  assert.match(app, /allowsMediaCapture\(\{ accessibleMode, simulationMode \}\)/);
+  assert.doesNotMatch(app, /alternative\.confidence\s*\|\|/);
+});
+
 gate("evidence and rollback docs", () => {
   assert.match(experiment, /hypothesis/i);
   assert.match(experiment, /measured/i);
@@ -99,6 +146,9 @@ gate("evidence and rollback docs", () => {
   assert.match(adversarial, /false commit/i);
   assert.match(rollback, /git revert/i);
   assert.match(pitch, /Gesture Tunnel/);
+  assert.equal(experimentSummary.status, "pass");
+  assert.equal(experimentSummary.repeatedRunsIdentical, true);
+  assert.equal(experimentSummary.exactTaskCompletion, true);
 });
 
 console.log(`Gesture Tunnel validator: ${gates.length}/${gates.length} gates passed`);

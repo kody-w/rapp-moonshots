@@ -160,7 +160,10 @@
       "atMs": 4400,
       "type": "sensor-lost",
       "depth": 2,
-      "sensor": "camera"
+      "sensor": "camera",
+      "freezeCauses": [
+        "camera-lost"
+      ]
     },
     {
       "sequence": 19,
@@ -189,7 +192,8 @@
       "atMs": 5300,
       "type": "sensor-recovered",
       "depth": 2,
-      "sensor": "camera"
+      "sensor": "camera",
+      "freezeCauses": []
     },
     {
       "sequence": 23,
@@ -477,7 +481,7 @@
     "preview": null,
     "armed": false,
     "frozen": false,
-    "freezeReason": null,
+    "freezeCauses": [],
     "completed": true,
     "exact": true
   }

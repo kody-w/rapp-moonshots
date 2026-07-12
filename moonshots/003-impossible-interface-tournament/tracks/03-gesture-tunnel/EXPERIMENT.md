@@ -76,6 +76,26 @@ The frozen-period intent is rejected and cannot become a pending preview.
 - built HTML has no external asset, network, recording, or persistence API;
 - both Clawpilot themes and the explicit access fallback are present.
 
+## Reviewed regression condition
+
+The follow-up experiment also holds these independent invariants:
+
+- explicit zero speech confidence stays zero; missing, nonnumeric, and nonfinite
+  confidence becomes zero and cannot select or choose;
+- camera loss, microphone loss, and user stop are independent freeze causes;
+  sensor recovery removes only its matching loss and resume removes only user
+  stop;
+- accessible and deterministic modes categorically deny media capture, while
+  deterministic playback rejects global state-changing shortcuts;
+- every acquired media track is stopped and the video element detached on
+  setup or runtime failure;
+- completion speech names exact success versus a mismatched route; and
+- Enter/Space shortcuts operate only while the tunnel surface owns focus and
+  never override native buttons or evidence links.
+
+`npm run experiment` performs two identical simulations, compares both with the
+checked-in metrics and replay, and writes `evidence/experiment-summary.json`.
+
 ## What remains to measure with people
 
 Completion speed, recognition repairs, fatigue, accidental back gestures,

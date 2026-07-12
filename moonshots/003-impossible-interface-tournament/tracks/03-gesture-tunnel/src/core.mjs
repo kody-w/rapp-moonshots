@@ -142,6 +142,70 @@ export function clamp(value, minimum = 0, maximum = 1) {
   return Math.min(maximum, Math.max(minimum, number));
 }
 
+export function normalizeSpeechConfidence(value, fallback = 0) {
+  return Number.isFinite(value) ? clamp(value) : clamp(fallback);
+}
+
+export function allowsMediaCapture({ accessibleMode = false, simulationMode = false } = {}) {
+  return !accessibleMode && !simulationMode;
+}
+
+const TUNNEL_SHORTCUT_KEYS = new Set([
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "Escape",
+  "Enter",
+  " ",
+  "u",
+  "U",
+  "r",
+  "R",
+  "e",
+  "E",
+]);
+
+export function shouldHandleTunnelShortcut({
+  launched = false,
+  simulationMode = false,
+  targetInTunnel = false,
+  nativeInteractive = false,
+  key = "",
+} = {}) {
+  return (
+    launched &&
+    !simulationMode &&
+    targetInTunnel &&
+    !nativeInteractive &&
+    TUNNEL_SHORTCUT_KEYS.has(key)
+  );
+}
+
+export function releaseMediaResources(mediaStream, video) {
+  let tracks = [];
+  try {
+    tracks = mediaStream?.getTracks?.() ?? [];
+  } catch {
+    tracks = [];
+  }
+  tracks.forEach((track) => {
+    try {
+      track.stop();
+    } catch {
+      // Continue releasing every acquired track.
+    }
+  });
+  if (video) video.srcObject = null;
+  return tracks.length;
+}
+
+export function completionAnnouncement(snapshot, committedLabel = "Tunnel") {
+  if (!snapshot?.completed) return `${committedLabel} confirmed.`;
+  return snapshot.exact
+    ? "Exact route complete. Home."
+    : "Route complete, but it does not match the cobalt mission. Say undo to repair it.";
+}
+
 export function wrapIndex(index, count = OPTION_COUNT) {
   const safeCount = Math.max(1, Math.floor(Number(count) || 1));
   return ((Math.floor(Number(index) || 0) % safeCount) + safeCount) % safeCount;
@@ -302,12 +366,12 @@ export class TunnelEngine {
       preview: null,
       armed: false,
       frozen: false,
-      freezeReason: null,
+      freezeCauses: [],
       completed: false,
       exact: false,
       lastCommitAt: Number.NEGATIVE_INFINITY,
       lastGestureAt: Number.NEGATIVE_INFINITY,
-      lostAt: null,
+      sensorLostAt: { camera: null, microphone: null, unknown: null },
     };
   }
 
@@ -347,7 +411,7 @@ export class TunnelEngine {
       preview: this.state.preview,
       armed: this.state.armed,
       frozen: this.state.frozen,
-      freezeReason: this.state.freezeReason,
+      freezeCauses: this.state.freezeCauses,
       completed: this.state.completed,
       exact: this.state.exact,
     });
@@ -357,7 +421,11 @@ export class TunnelEngine {
     const timestamp = this.at(at);
     const layer = this.currentLayer();
     if (!layer || this.state.frozen) {
-      this.record("preview-blocked", { source, reason: this.state.freezeReason ?? "complete" }, timestamp);
+      this.record(
+        "preview-blocked",
+        { source, reason: this.state.freezeCauses.join("+") || "complete" },
+        timestamp,
+      );
       return false;
     }
     const safeIndex = wrapIndex(index, layer.options.length);
@@ -536,7 +604,11 @@ export class TunnelEngine {
   undo({ source = "voice", at } = {}) {
     const timestamp = this.at(at);
     if (this.state.frozen || this.state.selections.length === 0) {
-      this.record("undo-blocked", { source, reason: this.state.freezeReason ?? "at-root" }, timestamp);
+      this.record(
+        "undo-blocked",
+        { source, reason: this.state.freezeCauses.join("+") || "at-root" },
+        timestamp,
+      );
       return false;
     }
     const removed = this.state.selections.pop();
@@ -556,30 +628,59 @@ export class TunnelEngine {
   sensorLost(kind = "unknown", at) {
     const timestamp = this.at(at);
     const safeKind = Object.hasOwn(this.metrics.sensorLosses, kind) ? kind : "unknown";
+    const cause = `${safeKind}-lost`;
     this.closeSensorWindow(safeKind, timestamp);
-    this.state.frozen = true;
-    this.state.freezeReason = `${safeKind}-lost`;
+    if (!this.state.freezeCauses.includes(cause)) {
+      this.state.freezeCauses.push(cause);
+      this.state.sensorLostAt[safeKind] = timestamp;
+      this.metrics.sensorLosses[safeKind] += 1;
+    }
+    this.syncFrozen();
     this.state.preview = null;
     this.state.armed = false;
-    this.state.lostAt = timestamp;
-    this.metrics.sensorLosses[safeKind] += 1;
-    this.record("sensor-lost", { sensor: safeKind }, timestamp);
+    this.record(
+      "sensor-lost",
+      { sensor: safeKind, freezeCauses: this.state.freezeCauses },
+      timestamp,
+    );
   }
 
   sensorRecovered(kind = "unknown", at) {
     const timestamp = this.at(at);
-    if (this.state.lostAt !== null) {
-      this.metrics.sensorRecoveryMs += Math.max(0, timestamp - this.state.lostAt);
+    const safeKind = Object.hasOwn(this.state.sensorLostAt, kind) ? kind : "unknown";
+    const lostAt = this.state.sensorLostAt[safeKind];
+    if (lostAt !== null) {
+      this.metrics.sensorRecoveryMs += Math.max(0, timestamp - lostAt);
     }
-    this.state.frozen = false;
-    this.state.freezeReason = null;
-    this.state.lostAt = null;
+    this.state.sensorLostAt[safeKind] = null;
+    this.removeFreezeCause(`${safeKind}-lost`);
     this.state.preview = null;
     this.state.armed = false;
-    if (Object.hasOwn(this.sensorActiveSince, kind) && this.sensorActiveSince[kind] === null) {
-      this.sensorActiveSince[kind] = timestamp;
+    if (
+      Object.hasOwn(this.sensorActiveSince, safeKind) &&
+      this.sensorActiveSince[safeKind] === null
+    ) {
+      this.sensorActiveSince[safeKind] = timestamp;
     }
-    this.record("sensor-recovered", { sensor: kind }, timestamp);
+    this.record(
+      "sensor-recovered",
+      { sensor: safeKind, freezeCauses: this.state.freezeCauses },
+      timestamp,
+    );
+  }
+
+  syncFrozen() {
+    this.state.frozen = this.state.freezeCauses.length > 0;
+  }
+
+  addFreezeCause(cause) {
+    if (!this.state.freezeCauses.includes(cause)) this.state.freezeCauses.push(cause);
+    this.syncFrozen();
+  }
+
+  removeFreezeCause(cause) {
+    this.state.freezeCauses = this.state.freezeCauses.filter((candidate) => candidate !== cause);
+    this.syncFrozen();
   }
 
   closeSensorWindow(kind, at) {
@@ -618,19 +719,17 @@ export class TunnelEngine {
 
   stop(at) {
     const timestamp = this.at(at);
-    this.state.frozen = true;
-    this.state.freezeReason = "stopped";
+    this.addFreezeCause("user-stop");
     this.state.preview = null;
     this.state.armed = false;
-    this.record("stop", {}, timestamp);
+    this.record("stop", { freezeCauses: this.state.freezeCauses }, timestamp);
   }
 
   resume(at) {
     const timestamp = this.at(at);
-    if (this.state.freezeReason !== "stopped") return false;
-    this.state.frozen = false;
-    this.state.freezeReason = null;
-    this.record("resume", {}, timestamp);
+    if (!this.state.freezeCauses.includes("user-stop")) return false;
+    this.removeFreezeCause("user-stop");
+    this.record("resume", { freezeCauses: this.state.freezeCauses }, timestamp);
     return true;
   }
 
@@ -639,10 +738,10 @@ export class TunnelEngine {
     this.record("fallback", {}, this.at(at));
   }
 
-  voice(text, { confidence = 1, at } = {}) {
+  voice(text, { confidence, at } = {}) {
     const timestamp = this.at(at);
     const phrase = normalizeSpeech(text);
-    const safeConfidence = clamp(confidence);
+    const safeConfidence = normalizeSpeechConfidence(confidence);
     const source = "voice";
     this.metrics.voiceCommands += 1;
     this.record("voice-input", { confidence: safeConfidence }, timestamp);
@@ -651,9 +750,11 @@ export class TunnelEngine {
       this.stop(timestamp);
       return { command: "stop", accepted: true };
     }
-    if (/\b(resume|recover)\b/.test(phrase)) {
-      const accepted = this.state.freezeReason === "stopped" ? this.resume(timestamp) : false;
-      return { command: "recover", accepted };
+    if (/\bresume\b/.test(phrase)) {
+      return { command: "resume", accepted: this.resume(timestamp) };
+    }
+    if (/\brecover\b/.test(phrase)) {
+      return { command: "recover", accepted: false };
     }
     if (/\b(cancel|never mind)\b/.test(phrase)) {
       return { command: "cancel", accepted: this.cancel({ source, at: timestamp }) };
