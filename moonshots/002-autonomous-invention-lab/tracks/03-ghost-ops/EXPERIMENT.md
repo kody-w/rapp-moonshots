@@ -8,7 +8,7 @@ The hypothesis fails if the mean paired difference is below 15 points. It is not
 
 ## Protocol
 
-- Engine: embedded Ghost Ops engine `1.0.0`
+- Engine: embedded Ghost Ops engine `1.0.1`
 - Scenarios: Midnight Canary and Phantom Credential
 - Seeds: integers `1..100` for each scenario
 - Trials: 200 matched pairs, 400 total simulations
@@ -41,6 +41,8 @@ Recorded locally on 2026-07-11:
 | **Combined** | **200** | **57.985** | **14.990** | **+42.995** | **0.625 / 4.585** | **200 / 200** |
 
 **Verdict: supported.** The observed `+42.995` point advantage exceeds the pre-registered `+15` threshold by `27.995` points. Mean spread events fell by `86.37%`.
+
+The 200-pair cohort was rerun after the `1.0.1` replay lifecycle, timestamp ordering, and recommendation-validity hardening. Score and spread metrics were unchanged.
 
 ## What this proves
 

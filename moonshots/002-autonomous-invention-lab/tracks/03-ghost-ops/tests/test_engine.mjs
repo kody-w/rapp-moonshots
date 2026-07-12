@@ -142,6 +142,113 @@ test("replay parser rejects extra fields and out-of-fixture targets", () => {
   }), /outside the fixture/);
 });
 
+test("replay preflight rejects duplicate state actions and exhausted inventory", () => {
+  const replay = (actions) => ({
+    schema: "ghost-ops/replay/v1",
+    scenarioId: "midnight-canary",
+    seed: 42,
+    actions: actions.map(([actionId, targetId]) => ({ actionId, targetId }))
+  });
+  assert.throws(() => Engine.validateReplay(replay([
+    ["isolate", "edge-03"],
+    ["isolate", "edge-03"]
+  ])), /Replay action 2 is invalid: Edda is already isolated/);
+  assert.throws(() => Engine.validateReplay(replay([
+    ["block-egress", "edge-03"],
+    ["block-egress", "auth-01"],
+    ["block-egress", "cache-07"]
+  ])), /Replay action 3 is invalid: Block egress has no uses remaining/);
+});
+
+test("event and feed timestamps are monotonic and feed events reuse post time", () => {
+  const state = run("midnight-canary", 30317, plans["midnight-canary"].containment);
+  for (let index = 1; index < state.events.length; index += 1) {
+    assert.ok(
+      Date.parse(state.events[index].at) >= Date.parse(state.events[index - 1].at),
+      `${state.events[index].id} regressed behind ${state.events[index - 1].id}`
+    );
+  }
+  for (let index = 1; index < state.feed.length; index += 1) {
+    assert.ok(Date.parse(state.feed[index].at) > Date.parse(state.feed[index - 1].at));
+  }
+  const feedEvents = new Map(
+    state.events
+      .filter((event) => event.type === "feed.posted")
+      .map((event) => [event.detail.postId, event])
+  );
+  for (const post of state.feed) {
+    assert.equal(feedEvents.get(post.id)?.at, post.at, `${post.id} must reuse its event timestamp`);
+  }
+});
+
+test("every responder recommendation is currently legal and in inventory", () => {
+  for (const [scenarioId, policy] of Object.entries(plans)) {
+    let state = Engine.createScenario(scenarioId, 30317);
+    for (const [actionId, targetId] of policy.containment) {
+      const recommendations = Engine.recommendations(state);
+      assert.equal(recommendations.length, 3);
+      for (const recommendation of recommendations) {
+        assert.equal(Engine.invalidReason(state, recommendation.actionId, recommendation.targetId), "");
+        assert.ok(state.inventory[recommendation.actionId] > 0);
+      }
+      state = Engine.applyAction(state, actionId, targetId);
+      if (state.inventory["block-egress"] === 0) {
+        assert.ok(Engine.recommendations(state).every((item) => item.actionId !== "block-egress"));
+      }
+    }
+    assert.equal(state.status, "resolved");
+    assert.deepEqual(plain(Engine.recommendations(state)), []);
+  }
+});
+
+test("replay timer failure cancels pending work and restores controls", () => {
+  const scheduled = [];
+  const cancelled = [];
+  const executed = [];
+  const failures = [];
+  let controlRenders = 0;
+  let completions = 0;
+  const runner = Engine.createReplayTimerRunner({
+    schedule(callback, delay) {
+      const item = { id: scheduled.length + 1, callback, delay };
+      scheduled.push(item);
+      return item.id;
+    },
+    cancelScheduled(id) {
+      cancelled.push(id);
+    },
+    execute(step) {
+      executed.push(step);
+      if (step === "invalid") throw new Error("synthetic replay failure");
+    },
+    restore() {
+      controlRenders += 1;
+    },
+    complete() {
+      completions += 1;
+    },
+    fail(error) {
+      failures.push(error.message);
+    },
+    delay: (index) => index * 10
+  });
+
+  runner.start(["first", "invalid", "must-not-run"]);
+  assert.equal(runner.isActive(), true);
+  assert.equal(runner.pendingCount(), 3);
+  scheduled[0].callback();
+  scheduled[1].callback();
+  scheduled[2].callback();
+
+  assert.deepEqual(executed, ["first", "invalid"]);
+  assert.deepEqual(cancelled, [1, 2, 3]);
+  assert.deepEqual(failures, ["synthetic replay failure"]);
+  assert.equal(controlRenders, 1);
+  assert.equal(completions, 0);
+  assert.equal(runner.isActive(), false);
+  assert.equal(runner.pendingCount(), 0);
+});
+
 test("containment-first policy beats recovery-first policy across a matched cohort", () => {
   const scores = { containment: 0, recoveryFirst: 0, wins: 0 };
   for (const scenarioId of Object.keys(plans)) {

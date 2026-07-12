@@ -8,7 +8,7 @@ Threat boundary: local browser, invented fixture data, no production integration
 | Attack or failure claim | Test performed | Result / mitigation | Residual risk |
 |---|---|---|---|
 | “The simulator secretly contacts infrastructure.” | Searched the artifact for remote URLs, external tags, and network primitives; enforced by `validate.py`. | No `fetch`, XHR, WebSocket, EventSource, remote URL, SDK, or external asset. Runtime controls only mutate memory. | A modified browser or extension remains outside the artifact boundary. |
-| “Import replay can smuggle a shell command or production host.” | Added extra action fields, unknown action IDs, and non-fixture target IDs. | Strict replay schema accepts only scenario, numeric seed, and allowlisted action/fixture-target pairs; seven-step and 64 KiB limits apply. Tests assert rejection. | JSON parsing can still briefly consume local browser resources below the cap. |
+| “Import replay can smuggle a shell command, production host, or impossible action chain.” | Added extra fields, unknown IDs, non-fixture targets, duplicate state actions, and inventory overuse. Injected a synthetic runtime step failure. | Strict schema accepts only allowlisted pairs; the full sequence is preflighted before scheduling. Runtime failure cancels pending timers, leaves replay mode, and rerenders controls. Seven-step and 64 KiB limits apply. | JSON parsing can still briefly consume local browser resources below the cap. |
 | “The deterministic claim is theater.” | Ran the same scenario, seed, and seven decisions twice; compared full state, events, virtual timestamps, and digest. Reconstructed a third run from export. | Exact equality. Randomness derives from stable hashing; time derives from fixed fixture clocks. | A future engine-version change can alter results; replay records the version but no migration exists yet. |
 | “The agents create false authority.” | Inspected labels and recommendation flow. | UI says advice is opinionated, exposes confidence, and shows explicit Sentinel/Vale/Quill disagreement. Operator remains the only decision-maker. | Players may still anchor on the highest confidence number. Confidence is illustrative, not calibrated. |
 | “The game rewards one scripted answer.” | Compared two policies over 200 matched seeds and inspected score components. | Multiple controls contribute; evidence and uptime trade against containment. Different seeds change spread. | Current scoring strongly rewards early controls by design; broader policies and topologies are needed. |
@@ -24,7 +24,7 @@ Threat boundary: local browser, invented fixture data, no production integration
 2. **Wrong-vector remediation:** credential rotation only partially helps Midnight Canary; release rollback only partially helps Phantom Credential.
 3. **Evidence-only delay:** snapshots preserve forensic value but do not stop spread by themselves.
 4. **Isolation tax:** isolating healthy nodes consumes service-impact budget and can lower the final score.
-5. **Replay mutation:** changing one action or seed changes the digest; adding an unsupported field rejects the import.
+5. **Replay mutation:** changing one action or seed changes the digest; unsupported fields, duplicate controls, and exhausted inventory reject before playback.
 6. **Oversized replay:** text above 64 KiB rejects before parsing.
 
 ## Design weaknesses accepted for this prototype

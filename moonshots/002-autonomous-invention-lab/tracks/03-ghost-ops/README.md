@@ -17,7 +17,7 @@ Open [`index.html`](index.html) directly in a modern browser. There is no instal
    - the complete safe-fixture event log (`.json`); and
    - a deterministic replay (`.json`).
 
-The **Watch a gold replay** control demonstrates the complete loop automatically. Replay imports are schema-checked, allowlisted to fixture IDs/actions, capped at seven steps and 64 KiB, and verified against an event digest.
+The **Watch a gold replay** control demonstrates the complete loop automatically. Replay imports are schema-checked, allowlisted to fixture IDs/actions, capped at seven steps and 64 KiB, and semantically preflighted through the complete action sequence before any timer starts. A runtime failure cancels every pending replay timer and restores enabled controls.
 
 ## Demo
 
@@ -92,7 +92,7 @@ node experiment.mjs
 
 `validate.py` uses Python's standard library and checks the standalone artifact, Clawpilot theme contract, approved fonts, absence of external assets/network clients, deterministic schemas, scenarios, personas, bounded actions, and both exports.
 
-The Node tests use built-in modules only and cover fixtures, determinism, seed variation, action bounds, replay equality, replay rejection, the matched policy experiment, and both finale exports.
+The 12 Node tests use built-in modules only and cover fixtures, determinism, seed variation, action bounds, semantic replay preflight, timer cancellation/control restoration, monotonic event/feed timestamps, legal responder recommendations, replay equality, the matched policy experiment, and both finale exports.
 
 ## Track files
 
@@ -100,7 +100,7 @@ The Node tests use built-in modules only and cover fixtures, determinism, seed v
 |---|---|
 | `index.html` | Complete self-contained application, engine, theme, UI, and exports |
 | `validate.py` | Zero-dependency structural and safety validator |
-| `tests/test_engine.mjs` | Eight deterministic engine and export tests |
+| `tests/test_engine.mjs` | Twelve deterministic engine, replay, recommendation, and export tests |
 | `experiment.mjs` | Reproducible 200-pair policy experiment |
 | `EXPERIMENT.md` | Hypothesis, protocol, measured evidence, limitations |
 | `ADVERSARIAL_REVIEW.md` | Abuse cases, mitigations, residual risk |
@@ -114,4 +114,3 @@ Most incident tooling begins after reality has already become expensive. Ghost O
 ## Build status
 
 `complete · locally validated · zero install`
-

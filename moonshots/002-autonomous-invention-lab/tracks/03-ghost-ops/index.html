@@ -962,7 +962,7 @@
     (() => {
       "use strict";
 
-      const VERSION = "1.0.0";
+      const VERSION = "1.0.1";
       const MAX_TICKS = 7;
       const SCENARIOS = [
         {
@@ -1098,16 +1098,22 @@
         return action;
       }
 
-      function virtualTime(state, tick = state.tick, offset = 0) {
+      function virtualTime(state, tick = state.tick) {
         const scenario = scenarioById(state.scenarioId);
-        return new Date(Date.parse(scenario.startTime) + (tick * 5 + offset) * 60000).toISOString();
+        return new Date(Date.parse(scenario.startTime) + tick * 5 * 60000).toISOString();
       }
 
-      function recordEvent(state, type, detail, offset = 0) {
+      function nextEventTime(state) {
+        const tickFloor = Date.parse(virtualTime(state));
+        const previous = state.events.length ? Date.parse(state.events[state.events.length - 1].at) : tickFloor - 1000;
+        return new Date(Math.max(tickFloor, previous + 1000)).toISOString();
+      }
+
+      function recordEvent(state, type, detail, at = nextEventTime(state)) {
         const event = {
           id: `evt-${String(state.events.length + 1).padStart(3, "0")}`,
           tick: state.tick,
-          at: virtualTime(state, state.tick, offset),
+          at,
           type,
           detail: clone(detail)
         };
@@ -1116,10 +1122,11 @@
       }
 
       function addPost(state, actorType, actor, message, meta = {}) {
+        const at = nextEventTime(state);
         const post = {
           id: `post-${String(state.feed.length + 1).padStart(3, "0")}`,
           tick: state.tick,
-          at: virtualTime(state, state.tick, state.feed.length % 5),
+          at,
           actorType,
           actorId: actor.id,
           actorName: actor.name,
@@ -1135,7 +1142,7 @@
           actorId: actor.id,
           message,
           meta
-        }, state.feed.length % 5);
+        }, at);
         return post;
       }
 
@@ -1168,56 +1175,70 @@
         return `My vitals are settling: ${machine.health}% health and no new unexplained children.`;
       }
 
-      function highestRiskMachine(state) {
-        return [...state.machines].sort((left, right) => {
+      function recommendations(state) {
+        if (state.status !== "active") return [];
+        const scenario = scenarioById(state.scenarioId);
+        const valeAction = scenario.vector === "release" ? "rollback-release" : "rotate-credential";
+        const alternateVectorAction = scenario.vector === "release" ? "rotate-credential" : "rollback-release";
+        const riskOrder = [...state.machines].sort((left, right) => {
           const leftRisk = left.compromise - (left.isolated ? 25 : 0) - (left.egressBlocked ? 10 : 0);
           const rightRisk = right.compromise - (right.isolated ? 25 : 0) - (right.egressBlocked ? 10 : 0);
           return rightRisk - leftRisk || left.id.localeCompare(right.id);
-        })[0];
-      }
+        });
+        const evidenceOrder = [...state.machines].sort((left, right) =>
+          Number(left.snapshot) - Number(right.snapshot)
+          || right.compromise - left.compromise
+          || left.id.localeCompare(right.id)
+        );
 
-      function recommendations(state) {
-        const scenario = scenarioById(state.scenarioId);
-        const risk = highestRiskMachine(state);
-        const unisolated = [...state.machines]
-          .filter((machine) => !machine.isolated)
-          .sort((left, right) => right.compromise - left.compromise)[0] || risk;
-        const unsnapped = [...state.machines]
-          .filter((machine) => !machine.snapshot)
-          .sort((left, right) => right.compromise - left.compromise)[0] || risk;
-        const sentinelAction = !unisolated.isolated && state.inventory.isolate > 0 ? "isolate" : "block-egress";
-        const valeAction = scenario.vector === "release" ? "rollback-release" : "rotate-credential";
+        function firstValidPair(actionIds, machines) {
+          for (const actionId of actionIds) {
+            for (const machine of machines) {
+              if (!invalidReason(state, actionId, machine.id)) return { actionId, targetId: machine.id };
+            }
+          }
+          return null;
+        }
+
+        const sentinelChoice = firstValidPair(
+          ["isolate", "block-egress", valeAction, "capture-snapshot", alternateVectorAction, "restart-service"],
+          riskOrder
+        );
+        const valeChoice = firstValidPair(
+          [valeAction, "restart-service", "block-egress", alternateVectorAction, "isolate", "capture-snapshot"],
+          riskOrder
+        );
+        const quillChoice = firstValidPair(
+          ["capture-snapshot", "block-egress", valeAction, "isolate", alternateVectorAction, "restart-service"],
+          evidenceOrder
+        );
+
         return [
-          {
+          sentinelChoice && {
             ...AGENTS.sentinel,
-            actionId: sentinelAction,
-            targetId: unisolated.id,
+            ...sentinelChoice,
             confidence: clamp(91 - state.tick * 2, 65, 91),
-            rationale: `Cut ${unisolated.name}'s paths before the next spread roll. Uptime is already a sunk cost.`,
+            rationale: `Use ${actionById(sentinelChoice.actionId).label.toLowerCase()} on ${state.machines.find((machine) => machine.id === sentinelChoice.targetId).name} before the next spread roll. Uptime is already a sunk cost.`,
             disagreesWith: "Vale",
             disagreement: "Vale is optimizing recovery before the blast radius is known."
           },
-          {
+          valeChoice && {
             ...AGENTS.vale,
-            actionId: state.inventory[valeAction] > 0 ? valeAction : "restart-service",
-            targetId: risk.id,
-            confidence: clamp(78 + (risk.health < 55 ? 8 : 0), 60, 91),
-            rationale: scenario.vector === "release"
-              ? `Reverse the canary change on ${risk.name}; isolation taxes every healthy request.`
-              : `Invalidate the retired identity at ${risk.name}; broad isolation punishes clean traffic.`,
+            ...valeChoice,
+            confidence: clamp(78 + (state.machines.find((machine) => machine.id === valeChoice.targetId).health < 55 ? 8 : 0), 60, 91),
+            rationale: `Use ${actionById(valeChoice.actionId).label.toLowerCase()} on ${state.machines.find((machine) => machine.id === valeChoice.targetId).name}; broad isolation punishes clean traffic.`,
             disagreesWith: "Sentinel",
             disagreement: "Sentinel's isolation plan protects certainty, not availability."
           },
-          {
+          quillChoice && {
             ...AGENTS.quill,
-            actionId: state.inventory["capture-snapshot"] > 0 ? "capture-snapshot" : "block-egress",
-            targetId: unsnapped.id,
+            ...quillChoice,
             confidence: clamp(84 - state.evidence / 6, 58, 84),
-            rationale: `Preserve ${unsnapped.name}'s volatile trail before a destructive recovery move.`,
+            rationale: `Use ${actionById(quillChoice.actionId).label.toLowerCase()} on ${state.machines.find((machine) => machine.id === quillChoice.targetId).name} without spending an action the fixture can no longer honor.`,
             disagreesWith: "Both",
             disagreement: "Both proposals can destroy the causal evidence this drill should teach from."
           }
-        ];
+        ].filter(Boolean);
       }
 
       function postCouncil(state) {
@@ -1598,13 +1619,20 @@
             throw new Error(`Replay action ${index + 1} contains an unsupported field.`);
           }
         });
-        return {
+        const clean = {
           schema: value.schema,
           scenarioId: scenario.id,
           seed: normalizeSeed(value.seed),
           actions: value.actions.map(({ actionId, targetId }) => ({ actionId, targetId })),
           expectedDigest: typeof value.expectedDigest === "string" ? value.expectedDigest : ""
         };
+        let preflightState = createScenario(clean.scenarioId, clean.seed);
+        clean.actions.forEach((step, index) => {
+          const reason = invalidReason(preflightState, step.actionId, step.targetId);
+          if (reason) throw new Error(`Replay action ${index + 1} is invalid: ${reason}`);
+          preflightState = applyAction(preflightState, step.actionId, step.targetId);
+        });
+        return clean;
       }
 
       function replay(value) {
@@ -1614,6 +1642,88 @@
           state = applyAction(state, step.actionId, step.targetId);
         });
         return state;
+      }
+
+      function createReplayTimerRunner(options) {
+        const {
+          schedule,
+          cancelScheduled,
+          execute,
+          restore,
+          complete,
+          fail,
+          delay = (index) => index
+        } = options;
+        let timers = [];
+        let active = false;
+
+        function clearScheduled() {
+          const scheduled = timers;
+          timers = [];
+          scheduled.forEach((timer) => cancelScheduled(timer));
+        }
+
+        function abort(error) {
+          clearScheduled();
+          active = false;
+          try {
+            restore();
+          } finally {
+            fail(error);
+          }
+        }
+
+        function finish() {
+          clearScheduled();
+          active = false;
+          try {
+            restore();
+            complete();
+          } catch (error) {
+            fail(error);
+          }
+        }
+
+        function cancel() {
+          clearScheduled();
+          active = false;
+          restore();
+        }
+
+        function start(steps) {
+          if (!Array.isArray(steps)) throw new Error("Replay timer steps must be an array.");
+          if (active) cancel();
+          else clearScheduled();
+          active = true;
+          if (!steps.length) {
+            finish();
+            return;
+          }
+          try {
+            steps.forEach((step, index) => {
+              const timer = schedule(() => {
+                if (!active) return;
+                try {
+                  execute(step, index);
+                } catch (error) {
+                  abort(error);
+                  return;
+                }
+                if (index === steps.length - 1) finish();
+              }, delay(index));
+              timers.push(timer);
+            });
+          } catch (error) {
+            abort(error);
+          }
+        }
+
+        return Object.freeze({
+          start,
+          cancel,
+          isActive: () => active,
+          pendingCount: () => timers.length
+        });
       }
 
       function makeEventLog(state) {
@@ -1741,6 +1851,7 @@ Generated by Ghost Ops ${VERSION} · event digest \`${digest(state)}\` · no net
         serializeReplay,
         validateReplay,
         replay,
+        createReplayTimerRunner,
         makeEventLog,
         makePlaybook,
         stableSnapshot
@@ -1760,7 +1871,8 @@ Generated by Ghost Ops ${VERSION} · event digest \`${digest(state)}\` · no net
         state: null,
         feedFilter: "all",
         replaying: false,
-        replayTimers: []
+        replayRunner: null,
+        activeReplay: null
       };
 
       function escapeHtml(value) {
@@ -1921,7 +2033,8 @@ Generated by Ghost Ops ${VERSION} · event digest \`${digest(state)}\` · no net
       }
 
       function renderCouncil() {
-        byId("council-list").innerHTML = Engine.recommendations(app.state).map((item) => {
+        const items = Engine.recommendations(app.state);
+        byId("council-list").innerHTML = items.length ? items.map((item) => {
           const action = Engine.actions.find((candidate) => candidate.id === item.actionId);
           const target = app.state.machines.find((machine) => machine.id === item.targetId);
           return `
@@ -1932,7 +2045,7 @@ Generated by Ghost Ops ${VERSION} · event digest \`${digest(state)}\` · no net
               <div class="disagreement">Disagrees with ${escapeHtml(item.disagreesWith)}: ${escapeHtml(item.disagreement)}</div>
             </article>
           `;
-        }).join("");
+        }).join("") : `<div class="feed-empty">No legal recommendations remain.</div>`;
       }
 
       function renderCommands() {
@@ -2059,51 +2172,72 @@ Generated by Ghost Ops ${VERSION} · event digest \`${digest(state)}\` · no net
         ];
       }
 
+      function replayRunner() {
+        if (app.replayRunner) return app.replayRunner;
+        app.replayRunner = Engine.createReplayTimerRunner({
+          schedule: (callback, delay) => window.setTimeout(callback, delay),
+          cancelScheduled: (timer) => window.clearTimeout(timer),
+          execute: (step) => {
+            app.selectedTargetId = step.targetId;
+            app.state = Engine.applyAction(app.state, step.actionId, step.targetId);
+            renderSimulator();
+          },
+          restore: () => {
+            app.replaying = false;
+            if (app.state && !byId("simulator").hidden) renderSimulator();
+          },
+          complete: () => {
+            const replayData = app.activeReplay;
+            const actualDigest = Engine.digest(app.state);
+            if (replayData.expectedDigest && replayData.expectedDigest !== actualDigest) {
+              showToast(`Replay divergence: expected ${replayData.expectedDigest}, got ${actualDigest}.`);
+            } else if (!replayData.actions.length) {
+              showToast("Empty replay loaded. The fixture is ready for a new decision.");
+            } else {
+              showToast(`Replay verified · ${actualDigest}`);
+            }
+            app.activeReplay = null;
+            if (app.state.status === "resolved") {
+              renderFinale();
+              showScreen("finale");
+            }
+          },
+          fail: (error) => {
+            app.activeReplay = null;
+            showToast(`Replay stopped: ${error.message}`);
+          },
+          delay: (index) => 500 + index * 650
+        });
+        return app.replayRunner;
+      }
+
+      function cancelReplay() {
+        if (app.replayRunner) app.replayRunner.cancel();
+        else {
+          app.replaying = false;
+          if (app.state && !byId("simulator").hidden) renderSimulator();
+        }
+        app.activeReplay = null;
+      }
+
       function animateReplay(replayData) {
-        const clean = Engine.validateReplay(replayData);
-        app.replayTimers.forEach((timer) => window.clearTimeout(timer));
-        app.replayTimers = [];
+        cancelReplay();
+        let clean;
+        try {
+          clean = Engine.validateReplay(replayData);
+        } catch (error) {
+          showToast(`Replay rejected: ${error.message}`);
+          return false;
+        }
         app.replaying = true;
+        app.activeReplay = clean;
         app.selectedScenarioId = clean.scenarioId;
         app.state = Engine.createScenario(clean.scenarioId, clean.seed);
         app.selectedTargetId = app.state.machines[0].id;
         showScreen("simulator");
         renderSimulator();
-        clean.actions.forEach((step, index) => {
-          const timer = window.setTimeout(() => {
-            try {
-              app.selectedTargetId = step.targetId;
-              app.state = Engine.applyAction(app.state, step.actionId, step.targetId);
-              renderSimulator();
-              if (index === clean.actions.length - 1) {
-                app.replaying = false;
-                const actualDigest = Engine.digest(app.state);
-                if (clean.expectedDigest && clean.expectedDigest !== actualDigest) {
-                  showToast(`Replay divergence: expected ${clean.expectedDigest}, got ${actualDigest}.`);
-                } else {
-                  showToast(`Replay verified · ${actualDigest}`);
-                }
-                if (app.state.status === "resolved") {
-                  window.setTimeout(() => {
-                    renderFinale();
-                    showScreen("finale");
-                  }, 450);
-                } else {
-                  renderCommands();
-                }
-              }
-            } catch (error) {
-              app.replaying = false;
-              showToast(`Replay stopped: ${error.message}`);
-            }
-          }, 500 + index * 650);
-          app.replayTimers.push(timer);
-        });
-        if (clean.actions.length === 0) {
-          app.replaying = false;
-          renderCommands();
-          showToast("Empty replay loaded. The fixture is ready for a new decision.");
-        }
+        replayRunner().start(clean.actions);
+        return true;
       }
 
       function openReplay() {
@@ -2163,6 +2297,7 @@ Generated by Ghost Ops ${VERSION} · event digest \`${digest(state)}\` · no net
           closeReplay();
           animateReplay(replayData);
         } catch (error) {
+          cancelReplay();
           showToast(`Replay rejected: ${error.message}`);
         }
       });
@@ -2194,7 +2329,7 @@ Generated by Ghost Ops ${VERSION} · event digest \`${digest(state)}\` · no net
         showToast("Playbook copied.");
       });
       byId("restart-button").addEventListener("click", () => {
-        app.replaying = false;
+        cancelReplay();
         app.state = null;
         renderScenarioGrid();
         showScreen("landing");
