@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "taskId": "cobalt-beacon-route-v1",
+  "startedAtMs": 0,
+  "completedAtMs": 12450,
+  "completionMs": 12450,
+  "neutralCalibrationMs": 100,
+  "exactTaskCompletion": true,
+  "commits": 9,
+  "falseCommits": 1,
+  "blockedCommits": 1,
+  "undos": 1,
+  "cancellations": 0,
+  "previews": 9,
+  "dwellCancellations": 0,
+  "voiceRepairs": 1,
+  "gesturesAccepted": 0,
+  "gesturesRejected": 0,
+  "fallbackUses": 0,
+  "voiceCommands": 21,
+  "confirmationSources": {
+    "voice": 9,
+    "switch": 0,
+    "simulation": 0,
+    "other": 0
+  },
+  "sensorLosses": {
+    "camera": 1,
+    "microphone": 0,
+    "unknown": 0
+  },
+  "sensorRecoveryMs": 900,
+  "sensorOnMs": {
+    "camera": 11550,
+    "microphone": 11550
+  },
+  "rawFramesStored": 0,
+  "audioStored": 0,
+  "networkRequestsByApp": 0,
+  "sessionId": "gesture-tunnel-deterministic-v1",
+  "finalDepth": 8,
+  "recoveredFromSensorLoss": true
+}

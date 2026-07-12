@@ -1,0 +1,3320 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Gesture Tunnel: a local-first voice, coarse webcam preview, and camera-motion spatial interface."
+    />
+    <title>Gesture Tunnel — Cobalt Beacon Route</title>
+    <script>
+      (() => {
+        const param = new URLSearchParams(window.location.search).get("scoutTheme");
+        const theme =
+          param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
+    <style>
+:root {
+  color-scheme: light;
+  --cp-bg: #f7f4ef;
+  --cp-bg-elevated: #fcfbf8;
+  --cp-surface: #ffffff;
+  --cp-surface-soft: #f5f5f5;
+  --cp-border: #dedede;
+  --cp-border-strong: #919191;
+  --cp-text: #242424;
+  --cp-text-muted: #5c5c5c;
+  --cp-text-soft: #6f6f6f;
+  --cp-accent: #b11f4b;
+  --cp-accent-hover: #9a1a41;
+  --cp-accent-soft: rgba(177, 31, 75, 0.08);
+  --cp-accent-fg: #ffffff;
+  --cp-success: #16a34a;
+  --cp-danger: #dc2626;
+  --cp-warning: #f59e0b;
+  --cp-link: #0078d4;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+  --cp-overlay: rgba(255, 255, 255, 0.8);
+  --cp-panel: rgba(255, 255, 255, 0.86);
+  --cp-panel-strong: rgba(255, 255, 255, 0.96);
+  --cp-sheen: rgba(255, 255, 255, 0.55);
+  --cp-highlight: rgba(177, 31, 75, 0.12);
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --cp-bg: #3d3b3a;
+  --cp-bg-elevated: #343231;
+  --cp-surface: #292929;
+  --cp-surface-soft: #2e2e2e;
+  --cp-border: #474747;
+  --cp-border-strong: #5f5f5f;
+  --cp-text: #dedede;
+  --cp-text-muted: #919191;
+  --cp-text-soft: #b0b0b0;
+  --cp-accent: #fd8ea1;
+  --cp-accent-hover: #fb7b91;
+  --cp-accent-soft: rgba(253, 142, 161, 0.14);
+  --cp-accent-fg: #1a1a1a;
+  --cp-success: #4ade80;
+  --cp-danger: #f87171;
+  --cp-warning: #fbbf24;
+  --cp-link: #4da6ff;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+  --cp-overlay: rgba(41, 41, 41, 0.88);
+  --cp-panel: rgba(41, 41, 41, 0.72);
+  --cp-panel-strong: rgba(41, 41, 41, 0.96);
+  --cp-sheen: rgba(255, 255, 255, 0.04);
+  --cp-highlight: rgba(253, 142, 161, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 48%, var(--cp-accent-soft), var(--cp-bg) 48%),
+    var(--cp-bg);
+  color: var(--cp-text);
+  font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+button,
+a {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--cp-link);
+  outline-offset: 4px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.gateway {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--cp-overlay);
+}
+
+.gateway[hidden] {
+  display: none;
+}
+
+.gateway-card {
+  width: min(680px, 100%);
+  padding: clamp(24px, 5vw, 48px);
+  border: 1px solid var(--cp-border);
+  border-radius: 16px;
+  background: var(--cp-panel-strong);
+  box-shadow: var(--cp-shadow);
+}
+
+.gateway-mark,
+.eyebrow,
+.status-label,
+.route-kicker,
+.mouth-index,
+.orb-depth {
+  font-family: Consolas, "Courier New", Courier, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.gateway-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  color: var(--cp-accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.gateway-mark::before {
+  width: 28px;
+  height: 2px;
+  background: var(--cp-accent);
+  content: "";
+}
+
+.gateway h1 {
+  max-width: 12ch;
+  margin: 0;
+  font-size: clamp(2.8rem, 10vw, 6.5rem);
+  font-weight: 730;
+  letter-spacing: -0.065em;
+  line-height: 0.82;
+}
+
+.gateway-copy {
+  max-width: 60ch;
+  margin: 28px 0 20px;
+  color: var(--cp-text-muted);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.privacy-disclosure {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  margin: 20px 0 28px;
+  padding: 16px;
+  border-left: 3px solid var(--cp-accent);
+  background: var(--cp-accent-soft);
+  color: var(--cp-text-soft);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.privacy-disclosure strong {
+  color: var(--cp-text);
+}
+
+.launch-control {
+  min-height: 56px;
+  width: 100%;
+  border: 1px solid var(--cp-accent);
+  border-radius: 0.625rem;
+  background: var(--cp-accent);
+  color: var(--cp-accent-fg);
+  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.launch-control:hover {
+  border-color: var(--cp-accent-hover);
+  background: var(--cp-accent-hover);
+}
+
+.launch-note {
+  margin: 12px 0 0;
+  color: var(--cp-text-muted);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.app-shell {
+  position: relative;
+  min-height: 100svh;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.app-shell::before,
+.app-shell::after {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  content: "";
+}
+
+.app-shell::before {
+  background:
+    linear-gradient(90deg, var(--cp-border) 1px, var(--cp-bg) 1px),
+    linear-gradient(var(--cp-border) 1px, var(--cp-bg) 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(circle at center, var(--cp-bg), var(--cp-overlay) 68%);
+  opacity: 0.16;
+}
+
+.app-shell::after {
+  z-index: -1;
+  background: radial-gradient(circle at center, var(--cp-sheen), var(--cp-bg) 66%);
+}
+
+.topbar {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px clamp(20px, 4vw, 56px);
+  pointer-events: none;
+}
+
+.brand {
+  display: grid;
+  gap: 4px;
+}
+
+.eyebrow {
+  color: var(--cp-accent);
+  font-size: 0.67rem;
+  font-weight: 700;
+}
+
+.brand-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.sensor-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sensor-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--cp-border);
+  border-radius: 0.625rem;
+  background: var(--cp-panel);
+  color: var(--cp-text-muted);
+  font-family: Consolas, "Courier New", Courier, monospace;
+  font-size: 0.67rem;
+  text-transform: uppercase;
+}
+
+.sensor-pill::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cp-border-strong);
+  content: "";
+}
+
+.sensor-pill[data-state="ok"]::before {
+  background: var(--cp-success);
+}
+
+.sensor-pill[data-state="warn"]::before {
+  background: var(--cp-warning);
+}
+
+.sensor-pill[data-state="bad"]::before {
+  background: var(--cp-danger);
+}
+
+.tunnel-stage {
+  --orbit-radius: clamp(13.5rem, 31vmin, 22rem);
+  position: absolute;
+  inset: 64px 0 134px;
+  min-height: 480px;
+  overflow: hidden;
+  perspective: 1200px;
+  pointer-events: none;
+}
+
+.depth-axis {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(74vmin, 700px);
+  aspect-ratio: 1;
+  border: 1px solid var(--cp-border);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) rotateX(69deg);
+  opacity: 0.42;
+}
+
+.depth-axis::before,
+.depth-axis::after {
+  position: absolute;
+  border: 1px solid var(--cp-border);
+  border-radius: 50%;
+  content: "";
+}
+
+.depth-axis::before {
+  inset: 13%;
+}
+
+.depth-axis::after {
+  inset: 30%;
+}
+
+.history-shells,
+.mouth-orbit {
+  position: absolute;
+  inset: 0;
+}
+
+.history-shell {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: clamp(180px, 34vmin, 390px);
+  aspect-ratio: 1;
+  border: 1px solid var(--cp-border-strong);
+  border-radius: 50%;
+  transform:
+    translate(-50%, -50%)
+    scale(var(--shell-scale))
+    rotate(var(--shell-turn));
+  opacity: var(--shell-opacity);
+}
+
+.history-shell::before {
+  position: absolute;
+  inset: 10%;
+  border: 1px dashed var(--cp-border);
+  border-radius: 50%;
+  content: "";
+}
+
+.history-shell[data-expected="false"] {
+  border-color: var(--cp-danger);
+}
+
+.shell-label {
+  position: absolute;
+  left: 50%;
+  top: -13px;
+  padding: 3px 8px;
+  border: 1px solid var(--cp-border);
+  border-radius: 0.625rem;
+  background: var(--cp-bg-elevated);
+  color: var(--cp-text-muted);
+  font-family: Consolas, "Courier New", Courier, monospace;
+  font-size: 0.62rem;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.mouth {
+  --angle: 0deg;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: clamp(94px, 14vmin, 142px);
+  height: clamp(70px, 10.5vmin, 104px);
+  padding: 12px;
+  border: 1px solid var(--cp-border);
+  border-radius: 50%;
+  background: var(--cp-panel);
+  box-shadow: 0 0 0 6px var(--cp-sheen);
+  color: var(--cp-text);
+  text-align: center;
+  transform:
+    translate(-50%, -50%)
+    rotate(var(--angle))
+    translateX(var(--orbit-radius))
+    rotate(calc(var(--angle) * -1));
+  transition:
+    transform 220ms ease,
+    border-color 220ms ease,
+    opacity 220ms ease;
+}
+
+.mouth::before,
+.mouth::after {
+  position: absolute;
+  border-radius: 50%;
+  content: "";
+}
+
+.mouth::before {
+  inset: 7px;
+  border: 1px solid var(--cp-border);
+}
+
+.mouth::after {
+  inset: 13px;
+  border: 1px solid var(--cp-border);
+  background: radial-gradient(ellipse, var(--cp-accent-soft), var(--cp-surface));
+  opacity: 0.56;
+}
+
+.mouth[data-preview="true"] {
+  z-index: 4;
+  border-color: var(--cp-accent);
+  box-shadow: 0 0 0 8px var(--cp-accent-soft);
+  transform:
+    translate(-50%, -50%)
+    rotate(var(--angle))
+    translateX(var(--orbit-radius))
+    rotate(calc(var(--angle) * -1))
+    scale(1.12);
+}
+
+.mouth[data-armed="true"] {
+  border-style: double;
+  border-width: 4px;
+}
+
+.mouth-content {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 3px;
+}
+
+.mouth-index {
+  color: var(--cp-text-muted);
+  font-size: 0.55rem;
+}
+
+.mouth-name {
+  overflow: hidden;
+  font-size: clamp(0.72rem, 1.5vmin, 0.92rem);
+  font-weight: 700;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mouth-detail {
+  display: none;
+  color: var(--cp-text-muted);
+  font-size: 0.62rem;
+}
+
+.mouth[data-preview="true"] .mouth-detail {
+  display: block;
+}
+
+.orb-cluster {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  width: clamp(150px, 24vmin, 230px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+}
+
+.orb-halo,
+.orb-halo::before,
+.orb-halo::after {
+  position: absolute;
+  border: 1px solid var(--cp-border-strong);
+  border-radius: 50%;
+}
+
+.orb-halo {
+  inset: 0;
+  animation: slow-turn 18s linear infinite;
+}
+
+.orb-halo::before,
+.orb-halo::after {
+  content: "";
+}
+
+.orb-halo::before {
+  inset: 8%;
+  border-style: dashed;
+}
+
+.orb-halo::after {
+  inset: -7%;
+  border-color: var(--cp-accent);
+  border-bottom-color: var(--cp-border);
+  border-left-color: var(--cp-border);
+}
+
+.orb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 68%;
+  aspect-ratio: 1;
+  padding: 16px;
+  border: 1px solid var(--cp-accent);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 38% 32%, var(--cp-sheen), var(--cp-accent-soft) 26%, var(--cp-surface) 72%);
+  box-shadow: var(--cp-shadow);
+  text-align: center;
+}
+
+.orb::after {
+  position: absolute;
+  inset: 10px;
+  border: 1px solid var(--cp-border);
+  border-radius: 50%;
+  content: "";
+}
+
+.orb-copy {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 5px;
+}
+
+.orb-depth {
+  color: var(--cp-accent);
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+.orb-title {
+  max-width: 11ch;
+  font-size: clamp(0.9rem, 2vmin, 1.18rem);
+  font-weight: 750;
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+
+.orb-state {
+  color: var(--cp-text-muted);
+  font-size: 0.64rem;
+}
+
+.orb-cluster[data-frozen="true"] .orb {
+  border-color: var(--cp-danger);
+  animation: none;
+}
+
+.orb-cluster[data-exact="true"] .orb {
+  border-color: var(--cp-success);
+}
+
+.confidence {
+  position: absolute;
+  left: 50%;
+  bottom: -28px;
+  width: 112px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 0.625rem;
+  background: var(--cp-border);
+  transform: translateX(-50%);
+}
+
+.confidence-fill {
+  width: 100%;
+  height: 100%;
+  background: var(--cp-accent);
+  transform: scaleX(var(--confidence));
+  transform-origin: left;
+  transition: transform 160ms ease;
+}
+
+.voice-rail {
+  position: fixed;
+  left: 50%;
+  bottom: 91px;
+  z-index: 18;
+  width: min(680px, calc(100% - 40px));
+  padding: 12px 16px;
+  border: 1px solid var(--cp-border);
+  border-radius: 0.625rem;
+  background: var(--cp-panel-strong);
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.voice-command {
+  margin: 0;
+  color: var(--cp-text);
+  font-size: clamp(0.82rem, 2vw, 1rem);
+  font-weight: 650;
+}
+
+.voice-caption {
+  min-height: 1.2em;
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--cp-text-muted);
+  font-family: Consolas, "Courier New", Courier, monospace;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bottom-rail {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: end;
+  padding: 14px clamp(20px, 4vw, 56px) 18px;
+  border-top: 1px solid var(--cp-border);
+  background: var(--cp-panel-strong);
+}
+
+.route-summary {
+  min-width: 0;
+}
+
+.route-kicker {
+  margin-bottom: 7px;
+  color: var(--cp-text-muted);
+  font-size: 0.58rem;
+}
+
+.route-sequence {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.route-node {
+  min-width: 8px;
+  height: 23px;
+  padding: 4px 7px;
+  overflow: hidden;
+  border: 1px solid var(--cp-border);
+  border-radius: 0.625rem;
+  background: var(--cp-surface-soft);
+  color: var(--cp-text-muted);
+  font-family: Consolas, "Courier New", Courier, monospace;
+  font-size: 0.59rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-node[data-filled="true"] {
+  border-color: var(--cp-border-strong);
+  background: var(--cp-surface);
+  color: var(--cp-text);
+}
+
+.route-node[data-expected="false"] {
+  border-color: var(--cp-danger);
+  color: var(--cp-danger);
+}
+
+.fallback-hint {
+  max-width: 290px;
+  color: var(--cp-text-muted);
+  font-size: 0.69rem;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.evidence-seal {
+  position: fixed;
+  right: clamp(20px, 4vw, 56px);
+  top: 72px;
+  z-index: 30;
+  display: none;
+  width: min(250px, calc(100% - 40px));
+  padding: 14px;
+  border: 1px solid var(--cp-success);
+  border-radius: 16px;
+  background: var(--cp-panel-strong);
+  box-shadow: var(--cp-shadow);
+}
+
+.evidence-seal[data-visible="true"] {
+  display: block;
+}
+
+.evidence-seal strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 0.83rem;
+}
+
+.evidence-seal p {
+  margin: 0 0 10px;
+  color: var(--cp-text-muted);
+  font-size: 0.69rem;
+  line-height: 1.35;
+}
+
+.evidence-links {
+  display: flex;
+  gap: 6px;
+}
+
+.evidence-links a {
+  flex: 1;
+  padding: 7px 8px;
+  border: 1px solid var(--cp-border);
+  border-radius: 0.625rem;
+  background: var(--cp-surface);
+  color: var(--cp-link);
+  font-size: 0.69rem;
+  font-weight: 650;
+  text-align: center;
+  text-decoration: none;
+}
+
+.privacy-stamp {
+  position: fixed;
+  left: clamp(20px, 4vw, 56px);
+  top: 72px;
+  z-index: 18;
+  max-width: 240px;
+  color: var(--cp-text-muted);
+  font-size: 0.65rem;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.privacy-stamp strong {
+  color: var(--cp-text);
+}
+
+#camera,
+#motion-canvas {
+  display: none;
+}
+
+@keyframes slow-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    padding: 14px 16px;
+  }
+
+  .sensor-pill span {
+    display: none;
+  }
+
+  .privacy-stamp {
+    display: none;
+  }
+
+  .tunnel-stage {
+    --orbit-radius: clamp(10rem, 34vmin, 15rem);
+    bottom: 150px;
+  }
+
+  .mouth {
+    width: clamp(76px, 20vmin, 104px);
+    height: clamp(58px, 15vmin, 78px);
+    padding: 8px;
+  }
+
+  .mouth-detail {
+    display: none !important;
+  }
+
+  .voice-rail {
+    bottom: 119px;
+  }
+
+  .bottom-rail {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 10px 16px 12px;
+  }
+
+  .fallback-hint {
+    max-width: none;
+    text-align: left;
+  }
+
+  .evidence-seal {
+    top: 60px;
+    right: 16px;
+  }
+}
+
+@media (max-height: 690px) {
+  .privacy-stamp,
+  .fallback-hint,
+  .mouth-detail {
+    display: none !important;
+  }
+
+  .tunnel-stage {
+    top: 42px;
+    bottom: 96px;
+  }
+
+  .voice-rail {
+    bottom: 72px;
+  }
+
+  .bottom-rail {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .mouth,
+  .history-shell,
+  .orb,
+  .voice-rail {
+    border-width: 2px;
+  }
+}
+    </style>
+  </head>
+  <body>
+    <section class="gateway" id="gateway" aria-labelledby="gateway-title">
+      <div class="gateway-card">
+        <div class="gateway-mark">Moonshot 003 · Track 03</div>
+        <h1 id="gateway-title">Gesture Tunnel</h1>
+        <p class="gateway-copy" id="gateway-copy">
+          One permission click opens a voice-first route through cumulative spatial layers.
+          After launch, speak, look coarsely toward a tunnel, or use broad camera motion—no
+          pointer is needed.
+        </p>
+        <div class="privacy-disclosure">
+          <strong>Local frame math</strong>
+          <span id="privacy-copy">
+            Video frames are downsampled for ephemeral frame-difference motion only; this app
+            never records, stores, uploads, or makes network requests. Optional browser speech
+            recognition can be vendor/cloud-backed—use the documented accessible mode for a
+            strictly no-microphone path. Speech synthesis uses the browser’s available voices.
+          </span>
+        </div>
+        <button class="launch-control" id="launch-control" type="button">
+          Allow camera + microphone · enter
+        </button>
+        <p class="launch-note">
+          The center is always safe. Gaze preview and motion never commit; “choose” does.
+        </p>
+      </div>
+    </section>
+
+    <main class="app-shell" id="app-shell" tabindex="-1" aria-label="Gesture Tunnel application">
+      <header class="topbar">
+        <div class="brand">
+          <span class="eyebrow">Impossible Interface Tournament</span>
+          <span class="brand-name">Gesture Tunnel</span>
+        </div>
+        <div class="sensor-strip" aria-label="Sensor status">
+          <span class="sensor-pill" id="camera-status" data-state="warn">
+            <span>camera</span> waiting
+          </span>
+          <span class="sensor-pill" id="voice-status" data-state="warn">
+            <span>voice</span> waiting
+          </span>
+          <span class="sensor-pill" id="neutral-status" data-state="warn">
+            <span>neutral</span> gate
+          </span>
+        </div>
+      </header>
+
+      <aside class="privacy-stamp">
+        <strong>Ephemeral by design.</strong><br />
+        96×72 frame difference · no hand classification · no recording · no app network
+      </aside>
+
+      <section
+        class="tunnel-stage"
+        id="tunnel-stage"
+        tabindex="0"
+        aria-label="Six spatial tunnel previews around a central safe orb"
+      >
+        <div class="depth-axis" aria-hidden="true"></div>
+        <div class="history-shells" id="history-shells" aria-hidden="true"></div>
+        <div class="mouth-orbit" id="mouth-orbit" role="group" aria-label="Current tunnel mouths"></div>
+        <div class="orb-cluster" id="orb-cluster" data-frozen="false" data-exact="false">
+          <div class="orb-halo" aria-hidden="true"></div>
+          <div class="orb">
+            <div class="orb-copy">
+              <span class="orb-depth" id="orb-depth">Depth 0 / 8</span>
+              <span class="orb-title" id="orb-title">Safe center</span>
+              <span class="orb-state" id="orb-state">Waiting to launch</span>
+            </div>
+          </div>
+          <div class="confidence" aria-label="Preview confidence">
+            <div class="confidence-fill" id="confidence-fill"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="voice-rail" aria-label="Voice and status captions">
+        <p class="voice-command" id="voice-command">Center holds until permission is granted</p>
+        <p class="voice-caption" id="voice-caption" aria-live="polite">
+          Camera motion is a coarse directional signal, not hand or eye tracking.
+        </p>
+      </section>
+
+      <footer class="bottom-rail">
+        <div class="route-summary">
+          <div class="route-kicker">Cumulative route shells</div>
+          <div class="route-sequence" id="route-sequence" aria-label="Committed route layers"></div>
+        </div>
+        <div class="fallback-hint">
+          Access fallback: ←/→ preview · Enter choose · ↑ undo · Esc cancel · R recover · E export.
+          Primary route needs no keyboard or pointer.
+        </div>
+      </footer>
+
+      <aside class="evidence-seal" id="evidence-seal" data-visible="false" aria-label="Local evidence exports">
+        <strong id="evidence-title">Evidence locked</strong>
+        <p id="evidence-copy">Complete the route before exporting local replay and metrics.</p>
+        <div class="evidence-links">
+          <a id="metrics-download" href="#" download="gesture-tunnel-metrics.json">Metrics JSON</a>
+          <a id="replay-download" href="#" download="gesture-tunnel-replay.json">Replay JSON</a>
+        </div>
+      </aside>
+
+      <p class="visually-hidden" id="sr-state" aria-live="assertive"></p>
+      <video id="camera" muted playsinline aria-hidden="true"></video>
+      <canvas id="motion-canvas" width="96" height="72" aria-hidden="true"></canvas>
+    </main>
+
+    <script type="module">
+const APP_VERSION = "1.0.0";
+const TASK_ID = "cobalt-beacon-route-v1";
+const OPTION_COUNT = 6;
+const COMMIT_CONFIDENCE = 0.58;
+const GESTURE_CONFIDENCE = 0.68;
+const VOICE_INTENT_CONFIDENCE = 0.55;
+const VOICE_CHOOSE_CONFIDENCE = 0.7;
+const CAMERA_DWELL_MS = 600;
+const COMMIT_COOLDOWN_MS = 500;
+const GESTURE_COOLDOWN_MS = 900;
+
+const option = (id, label, detail, aliases) =>
+  Object.freeze({ id, label, detail, aliases: Object.freeze(aliases) });
+
+const TASK_LAYERS = Object.freeze([
+  Object.freeze({
+    id: "intent",
+    title: "Name the operation",
+    prompt: "Say “route”",
+    target: "route",
+    options: Object.freeze([
+      option("route", "Route", "Open a reversible route", ["route", "route beacons"]),
+      option("inspect", "Inspect", "Read beacon telemetry", ["inspect", "inspect beacons"]),
+      option("hold", "Hold", "Keep cargo staged", ["hold", "hold cargo"]),
+      option("recall", "Recall", "Bring a route home", ["recall"]),
+      option("relay", "Relay", "Forward a signal", ["relay"]),
+      option("archive", "Archive", "Preserve a route record", ["archive"]),
+    ]),
+  }),
+  Object.freeze({
+    id: "payload",
+    title: "Shape the payload",
+    prompt: "Say “three cobalt beacons”",
+    target: "cobalt-3",
+    options: Object.freeze([
+      option("amber-2", "2 amber", "Two amber beacons", [
+        "two amber beacons",
+        "2 amber beacons",
+        "two amber",
+        "2 amber",
+      ]),
+      option("cobalt-3", "3 cobalt", "Three cobalt beacons", [
+        "three cobalt beacons",
+        "3 cobalt beacons",
+        "three cobalt",
+        "3 cobalt",
+      ]),
+      option("cobalt-5", "5 cobalt", "Five cobalt beacons", [
+        "five cobalt beacons",
+        "5 cobalt beacons",
+        "five cobalt",
+        "5 cobalt",
+      ]),
+      option("silver-3", "3 silver", "Three silver beacons", [
+        "three silver beacons",
+        "3 silver beacons",
+        "three silver",
+        "3 silver",
+      ]),
+      option("single-cobalt", "1 cobalt", "One cobalt beacon", [
+        "one cobalt beacon",
+        "1 cobalt beacon",
+        "one cobalt",
+        "1 cobalt",
+      ]),
+      option("all-beacons", "All", "Every staged beacon", ["all beacons", "all"]),
+    ]),
+  }),
+  Object.freeze({
+    id: "schedule",
+    title: "Set the departure",
+    prompt: "Say “fourteen thirty”",
+    target: "14:30",
+    options: Object.freeze([
+      option("13:45", "13:45", "Early window", ["thirteen forty five", "13 45"]),
+      option("14:00", "14:00", "Top of the hour", ["fourteen hundred", "14 00"]),
+      option("14:30", "14:30", "Requested departure", [
+        "fourteen thirty",
+        "14 30",
+        "two thirty",
+      ]),
+      option("15:00", "15:00", "Late window", ["fifteen hundred", "15 00", "three o'clock"]),
+      option("16:20", "16:20", "Dusk window", ["sixteen twenty", "16 20"]),
+      option("on-signal", "On signal", "Wait for an external signal", ["on signal"]),
+    ]),
+  }),
+  Object.freeze({
+    id: "handling",
+    title: "Mark handling",
+    prompt: "Say “fragile”",
+    target: "fragile",
+    options: Object.freeze([
+      option("standard", "Standard", "Routine handling", ["standard"]),
+      option("fragile", "Fragile", "Protect from shock", ["fragile", "mark fragile"]),
+      option("priority", "Priority", "Move ahead of queue", ["priority"]),
+      option("sealed", "Sealed", "Do not open", ["sealed"]),
+      option("cold", "Cold", "Maintain cold chain", ["cold"]),
+      option("observe", "Observe", "Continuous telemetry", ["observe"]),
+    ]),
+  }),
+  Object.freeze({
+    id: "destination",
+    title: "Choose the destination",
+    prompt: "Say “Orion seven”",
+    target: "orion-7",
+    options: Object.freeze([
+      option("lyra-2", "LYRA-2", "Lyra receiving station", ["lyra two", "lyra 2"]),
+      option("orion-4", "ORION-4", "Orion inner station", ["orion four", "orion 4"]),
+      option("orion-7", "ORION-7", "Orion seventh station", ["orion seven", "orion 7"]),
+      option("vega-1", "VEGA-1", "Vega receiving station", ["vega one", "vega 1"]),
+      option("atlas-9", "ATLAS-9", "Atlas ninth station", ["atlas nine", "atlas 9"]),
+      option("home-dock", "HOME", "Return to home dock", ["home dock"]),
+    ]),
+  }),
+  Object.freeze({
+    id: "gate",
+    title: "Open a gate",
+    prompt: "Say “North Gate”",
+    target: "north-gate",
+    options: Object.freeze([
+      option("north-gate", "North Gate", "Polar approach corridor", ["north gate", "northern gate"]),
+      option("east-gate", "East Gate", "Sunrise approach corridor", ["east gate", "eastern gate"]),
+      option("south-gate", "South Gate", "Lower approach corridor", ["south gate", "southern gate"]),
+      option("west-gate", "West Gate", "Sunset approach corridor", ["west gate", "western gate"]),
+      option("zenith-gate", "Zenith", "High approach corridor", ["zenith", "zenith gate"]),
+      option("service-gate", "Service", "Maintenance approach", ["service", "service gate"]),
+    ]),
+  }),
+  Object.freeze({
+    id: "review",
+    title: "Review the route",
+    prompt: "Say “confirm route”, then “choose”",
+    target: "confirm-route",
+    options: Object.freeze([
+      option("hold-review", "Hold", "Keep the draft unsent", ["hold route", "hold review"]),
+      option("confirm-route", "Confirm", "Seal this exact route", ["confirm route", "seal route"]),
+      option("recheck-time", "Recheck time", "Return to departure", ["recheck time"]),
+      option("recheck-cargo", "Recheck cargo", "Return to payload", ["recheck cargo"]),
+      option("recheck-gate", "Recheck gate", "Return to gate", ["recheck gate"]),
+      option("discard", "Discard", "Cancel the complete draft", ["discard route"]),
+    ]),
+  }),
+  Object.freeze({
+    id: "return",
+    title: "Return to the anchor",
+    prompt: "Say “home”, then “choose”",
+    target: "home",
+    options: Object.freeze([
+      option("linger", "Linger", "Keep the final shell open", ["linger"]),
+      option("new-route", "New route", "Begin another draft", ["new route"]),
+      option("home", "Home", "Return to the safe center", ["home", "return home"]),
+      option("inspect-sent", "Inspect", "Read the sent route", ["inspect sent"]),
+      option("export", "Evidence", "Prepare local evidence", ["evidence"]),
+      option("sleep", "Sleep", "Dim the tunnel", ["sleep"]),
+    ]),
+  }),
+]);
+
+const EXPECTED_ROUTE = Object.freeze(TASK_LAYERS.map((layer) => layer.target));
+
+function clamp(value, minimum = 0, maximum = 1) {
+  const number = Number.isFinite(Number(value)) ? Number(value) : minimum;
+  return Math.min(maximum, Math.max(minimum, number));
+}
+
+class MediaFrameGate {
+  constructor() {
+    this.lastPresentedFrames = null;
+    this.lastMediaTime = null;
+  }
+
+  accept({ presentedFrames, mediaTime } = {}) {
+    if (Number.isFinite(presentedFrames)) {
+      if (this.lastPresentedFrames !== null && presentedFrames <= this.lastPresentedFrames) {
+        return false;
+      }
+      this.lastPresentedFrames = presentedFrames;
+      if (Number.isFinite(mediaTime)) this.lastMediaTime = mediaTime;
+      return true;
+    }
+    if (!Number.isFinite(mediaTime)) return false;
+    if (this.lastMediaTime !== null && mediaTime <= this.lastMediaTime) return false;
+    this.lastMediaTime = mediaTime;
+    return true;
+  }
+}
+
+class LifecycleGate {
+  constructor() {
+    this.generation = 0;
+    this.active = false;
+  }
+
+  start() {
+    this.generation += 1;
+    this.active = true;
+    return this.generation;
+  }
+
+  stop() {
+    this.generation += 1;
+    this.active = false;
+  }
+
+  capture() {
+    return this.generation;
+  }
+
+  isCurrent(generation) {
+    return this.active && generation === this.generation;
+  }
+}
+
+function isCameraFrameStale(lastFreshFrameAt, now, thresholdMs = 2500) {
+  return (
+    Number.isFinite(lastFreshFrameAt) &&
+    Number.isFinite(now) &&
+    now - lastFreshFrameAt > thresholdMs
+  );
+}
+
+class CameraVisibilityGuard {
+  constructor({ foregroundGraceMs = 2500 } = {}) {
+    this.foregroundGraceMs = foregroundGraceMs;
+    this.suspended = true;
+    this.foregroundAt = null;
+    this.freshFrameSinceForeground = false;
+  }
+
+  suspend() {
+    this.suspended = true;
+    this.foregroundAt = null;
+    this.freshFrameSinceForeground = false;
+  }
+
+  resume(now) {
+    this.suspended = false;
+    this.foregroundAt = Number.isFinite(now) ? now : 0;
+    this.freshFrameSinceForeground = false;
+  }
+
+  noteFreshFrame() {
+    if (!this.suspended) this.freshFrameSinceForeground = true;
+  }
+
+  shouldDeclareStale(lastFreshFrameAt, now) {
+    if (this.suspended) return false;
+    if (
+      !this.freshFrameSinceForeground &&
+      Number.isFinite(now) &&
+      now - this.foregroundAt <= this.foregroundGraceMs
+    ) {
+      return false;
+    }
+    return isCameraFrameStale(lastFreshFrameAt, now);
+  }
+}
+
+class FreshNeutralGate {
+  constructor({ requiredMs = 480 } = {}) {
+    this.requiredMs = requiredMs;
+    this.since = null;
+    this.ready = false;
+  }
+
+  reset() {
+    this.since = null;
+    this.ready = false;
+  }
+
+  observeNeutral(now) {
+    if (!Number.isFinite(now)) {
+      this.reset();
+      return false;
+    }
+    if (this.since === null) this.since = now;
+    this.ready = now - this.since >= this.requiredMs;
+    return this.ready;
+  }
+
+  observeMotion() {
+    this.reset();
+  }
+
+  restartFromNeutral(now) {
+    this.since = Number.isFinite(now) ? now : null;
+    this.ready = false;
+  }
+
+  neutralDuration(now) {
+    return this.since === null || !Number.isFinite(now) ? 0 : Math.max(0, now - this.since);
+  }
+}
+
+function shouldReloadAfterPageShow(event) {
+  return event?.persisted === true;
+}
+
+function normalizeSpeechConfidence(value, fallback = 0) {
+  return Number.isFinite(value) ? clamp(value) : clamp(fallback);
+}
+
+function allowsMediaCapture({ accessibleMode = false, simulationMode = false } = {}) {
+  return !accessibleMode && !simulationMode;
+}
+
+const TUNNEL_SHORTCUT_KEYS = new Set([
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "Escape",
+  "Enter",
+  " ",
+  "u",
+  "U",
+  "r",
+  "R",
+  "e",
+  "E",
+]);
+
+function shouldHandleTunnelShortcut({
+  launched = false,
+  simulationMode = false,
+  targetInTunnel = false,
+  nativeInteractive = false,
+  key = "",
+} = {}) {
+  return (
+    launched &&
+    !simulationMode &&
+    targetInTunnel &&
+    !nativeInteractive &&
+    TUNNEL_SHORTCUT_KEYS.has(key)
+  );
+}
+
+function releaseMediaResources(mediaStream, video) {
+  let tracks = [];
+  try {
+    tracks = mediaStream?.getTracks?.() ?? [];
+  } catch {
+    tracks = [];
+  }
+  tracks.forEach((track) => {
+    try {
+      track.stop();
+    } catch {
+      // Continue releasing every acquired track.
+    }
+  });
+  if (video) video.srcObject = null;
+  return tracks.length;
+}
+
+function completionAnnouncement(snapshot, committedLabel = "Tunnel") {
+  if (!snapshot?.completed) return `${committedLabel} confirmed.`;
+  return snapshot.exact
+    ? "Exact route complete. Home."
+    : "Route complete, but it does not match the cobalt mission. Say undo to repair it.";
+}
+
+function evidencePresentation(snapshot) {
+  if (!snapshot?.completed) {
+    return {
+      visible: false,
+      label: "Evidence locked",
+      description: "Complete the route before exporting local replay and metrics.",
+    };
+  }
+  return snapshot.exact
+    ? {
+        visible: true,
+        label: "Exact route sealed",
+        description: "Exact replay and metrics were generated locally.",
+      }
+    : {
+        visible: true,
+        label: "Route mismatch captured",
+        description: "Replay and metrics show a completed route that differs from the mission.",
+      };
+}
+
+function shouldRestartRecognition({
+  launched = false,
+  restartAllowed = false,
+  speechPaused = false,
+  accessibleMode = false,
+  simulationMode = false,
+  tearingDown = false,
+} = {}) {
+  return (
+    launched &&
+    restartAllowed &&
+    !speechPaused &&
+    !accessibleMode &&
+    !simulationMode &&
+    !tearingDown
+  );
+}
+
+const TERMINAL_SPEECH_ERRORS = new Set([
+  "audio-capture",
+  "bad-grammar",
+  "language-not-supported",
+  "not-allowed",
+  "phrases-not-supported",
+  "service-not-allowed",
+]);
+
+function isTerminalSpeechRecognitionError(error) {
+  return TERMINAL_SPEECH_ERRORS.has(String(error ?? ""));
+}
+
+function preservesVoiceRecoveryOnSensorLoss(kind, terminalSpeechFailure = false) {
+  return kind === "camera" && !terminalSpeechFailure;
+}
+
+function recognitionBackoffMs(
+  failureCount,
+  { baseMs = 250, maximumMs = 4000 } = {},
+) {
+  const safeFailures = Math.max(0, Math.floor(Number(failureCount) || 0));
+  const exponent = Math.min(16, Math.max(0, safeFailures - 1));
+  return Math.min(maximumMs, baseMs * 2 ** exponent);
+}
+
+function wrapIndex(index, count = OPTION_COUNT) {
+  const safeCount = Math.max(1, Math.floor(Number(count) || 1));
+  return ((Math.floor(Number(index) || 0) % safeCount) + safeCount) % safeCount;
+}
+
+function normalizeSpeech(text) {
+  return String(text ?? "")
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function matchVoiceOption(options, text) {
+  const phrase = normalizeSpeech(text);
+  if (!phrase || !Array.isArray(options)) return -1;
+  const paddedPhrase = ` ${phrase} `;
+  const matches = [];
+
+  options.forEach((candidate, index) => {
+    candidate.aliases.forEach((rawAlias) => {
+      const alias = normalizeSpeech(rawAlias);
+      const exact = phrase === alias;
+      if (!exact && !paddedPhrase.includes(` ${alias} `)) return;
+      matches.push({
+        index,
+        exact,
+        tokens: alias.split(" ").length,
+        characters: alias.length,
+      });
+    });
+  });
+
+  matches.sort(
+    (left, right) =>
+      Number(right.exact) - Number(left.exact) ||
+      right.tokens - left.tokens ||
+      right.characters - left.characters,
+  );
+  if (matches.length === 0) return -1;
+  const best = matches[0];
+  const equallySpecific = matches.filter(
+    (match) =>
+      match.exact === best.exact &&
+      match.tokens === best.tokens,
+  );
+  return new Set(equallySpecific.map((match) => match.index)).size === 1 ? best.index : -1;
+}
+
+function coarseSector(point, count = OPTION_COUNT, deadzone = 0.16) {
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return null;
+  const x = clamp(point.x);
+  const y = clamp(point.y);
+  const dx = x - 0.5;
+  const dy = y - 0.5;
+  const radius = Math.hypot(dx, dy);
+  if (radius < deadzone) return null;
+  const slice = (Math.PI * 2) / Math.max(1, count);
+  const angleFromTop = Math.atan2(dy, dx) + Math.PI / 2;
+  const index = wrapIndex(Math.round(angleFromTop / slice), count);
+  return {
+    index,
+    confidence: clamp((radius - deadzone) / 0.34),
+    radius: clamp(radius, 0, Math.SQRT1_2),
+  };
+}
+
+function motionCentroid(previous, current, width, height, threshold = 26) {
+  const safeWidth = Math.max(1, Math.floor(width));
+  const safeHeight = Math.max(1, Math.floor(height));
+  const pixels = safeWidth * safeHeight;
+  if (!previous || !current || previous.length < pixels || current.length < pixels) {
+    return { activePixels: 0, activeRatio: 0, meanDifference: 0, centroid: null };
+  }
+
+  let activePixels = 0;
+  let sumX = 0;
+  let sumY = 0;
+  let differenceTotal = 0;
+  const safeThreshold = clamp(threshold, 1, 255);
+
+  for (let index = 0; index < pixels; index += 1) {
+    const difference = Math.abs(Number(current[index]) - Number(previous[index]));
+    differenceTotal += difference;
+    if (difference >= safeThreshold) {
+      activePixels += 1;
+      sumX += index % safeWidth;
+      sumY += Math.floor(index / safeWidth);
+    }
+  }
+
+  return {
+    activePixels,
+    activeRatio: clamp(activePixels / pixels),
+    meanDifference: clamp(differenceTotal / pixels / 255),
+    centroid:
+      activePixels === 0
+        ? null
+        : {
+            x: clamp(sumX / activePixels / Math.max(1, safeWidth - 1)),
+            y: clamp(sumY / activePixels / Math.max(1, safeHeight - 1)),
+          },
+  };
+}
+
+function classifyMotionGesture(sample = {}) {
+  const start = sample.start;
+  const end = sample.end;
+  const durationMs = Number(sample.durationMs);
+  const activeRatio = clamp(sample.activeRatio);
+  if (
+    !sample.neutralReady ||
+    !start ||
+    !end ||
+    !Number.isFinite(start.x) ||
+    !Number.isFinite(start.y) ||
+    !Number.isFinite(end.x) ||
+    !Number.isFinite(end.y) ||
+    durationMs < 120 ||
+    durationMs > 950 ||
+    activeRatio < 0.018 ||
+    activeRatio > 0.55
+  ) {
+    return null;
+  }
+
+  const dx = clamp(end.x) - clamp(start.x);
+  const dy = clamp(end.y) - clamp(start.y);
+  const distance = Math.hypot(dx, dy);
+  if (distance < 0.22) return null;
+
+  const durationQuality = 1 - Math.abs(durationMs - 420) / 1000;
+  const motionQuality = 1 - Math.abs(activeRatio - 0.12) / 0.43;
+  const confidence = clamp(
+    ((distance - 0.16) / 0.34) * clamp(durationQuality, 0.72, 1) * clamp(motionQuality, 0.35, 1),
+  );
+  if (confidence < GESTURE_CONFIDENCE) return null;
+
+  let type = null;
+  if (Math.abs(dx) > Math.abs(dy) * 1.2) {
+    type = dx > 0 ? "rotate-right" : "rotate-left";
+  } else if (Math.abs(dy) > Math.abs(dx) * 1.12) {
+    type = dy > 0 ? "enter" : "back";
+  }
+  return type ? { type, confidence, dx, dy, durationMs, activeRatio } : null;
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function createMetrics() {
+  return {
+    schemaVersion: 1,
+    taskId: TASK_ID,
+    startedAtMs: null,
+    completedAtMs: null,
+    completionMs: null,
+    neutralCalibrationMs: null,
+    exactTaskCompletion: false,
+    commits: 0,
+    falseCommits: 0,
+    blockedCommits: 0,
+    undos: 0,
+    cancellations: 0,
+    previews: 0,
+    dwellCancellations: 0,
+    voiceRepairs: 0,
+    gesturesAccepted: 0,
+    gesturesRejected: 0,
+    fallbackUses: 0,
+    voiceCommands: 0,
+    confirmationSources: { voice: 0, switch: 0, simulation: 0, other: 0 },
+    sensorLosses: { camera: 0, microphone: 0, unknown: 0 },
+    sensorRecoveryMs: 0,
+    sensorOnMs: { camera: 0, microphone: 0 },
+    rawFramesStored: 0,
+    audioStored: 0,
+    networkRequestsByApp: 0,
+  };
+}
+
+class TunnelEngine {
+  constructor({ clock = () => performance.now(), sessionId = "gesture-tunnel-live" } = {}) {
+    this.clock = clock;
+    this.sessionId = sessionId;
+    this.replay = [];
+    this.metrics = createMetrics();
+    this.sensorActiveSince = { camera: null, microphone: null };
+    this.lastEventAt = 0;
+    this.state = {
+      depth: 0,
+      selections: [],
+      preview: null,
+      armed: false,
+      frozen: false,
+      freezeCauses: [],
+      completed: false,
+      exact: false,
+      lastCommitAt: Number.NEGATIVE_INFINITY,
+      lastGestureAt: Number.NEGATIVE_INFINITY,
+      sensorLostAt: { camera: null, microphone: null, unknown: null },
+    };
+  }
+
+  at(value) {
+    return Number.isFinite(value) ? value : Math.round(this.clock());
+  }
+
+  start(at) {
+    const timestamp = this.at(at);
+    if (this.metrics.startedAtMs === null) this.metrics.startedAtMs = timestamp;
+    this.record("session-start", {}, timestamp);
+    return this.snapshot();
+  }
+
+  currentLayer() {
+    return TASK_LAYERS[this.state.depth] ?? null;
+  }
+
+  record(type, payload = {}, at) {
+    const timestamp = this.at(at);
+    this.lastEventAt = Math.max(this.lastEventAt, timestamp);
+    this.replay.push({
+      sequence: this.replay.length,
+      atMs: timestamp,
+      type,
+      depth: this.state.depth,
+      ...clone(payload),
+    });
+  }
+
+  snapshot() {
+    const layer = this.currentLayer();
+    return clone({
+      depth: this.state.depth,
+      layerId: layer?.id ?? "complete",
+      selections: this.state.selections,
+      preview: this.state.preview,
+      armed: this.state.armed,
+      frozen: this.state.frozen,
+      freezeCauses: this.state.freezeCauses,
+      completed: this.state.completed,
+      exact: this.state.exact,
+    });
+  }
+
+  previewOption(index, { source = "voice", confidence = 1, at } = {}) {
+    const timestamp = this.at(at);
+    const layer = this.currentLayer();
+    if (!layer || this.state.frozen) {
+      this.record(
+        "preview-blocked",
+        { source, reason: this.state.freezeCauses.join("+") || "complete" },
+        timestamp,
+      );
+      return false;
+    }
+    const safeIndex = wrapIndex(index, layer.options.length);
+    const safeConfidence = clamp(confidence);
+    const previous = this.state.preview;
+    if (
+      previous &&
+      previous.index !== safeIndex &&
+      previous.source.includes("camera") &&
+      timestamp - previous.sinceMs < CAMERA_DWELL_MS
+    ) {
+      this.metrics.dwellCancellations += 1;
+    }
+    const preserveSince =
+      previous && previous.index === safeIndex && previous.source === source
+        ? previous.sinceMs
+        : timestamp;
+    this.state.preview = {
+      index: safeIndex,
+      optionId: layer.options[safeIndex].id,
+      source,
+      confidence: safeConfidence,
+      sinceMs: preserveSince,
+    };
+    this.state.armed = false;
+    this.metrics.previews += 1;
+    this.record(
+      "preview",
+      { optionId: layer.options[safeIndex].id, source, confidence: safeConfidence },
+      timestamp,
+    );
+    return true;
+  }
+
+  rotate(delta, { source = "gesture", confidence = 1, at } = {}) {
+    const layer = this.currentLayer();
+    if (!layer) return false;
+    const current = this.state.preview?.index ?? 0;
+    return this.previewOption(current + Math.sign(delta || 1), { source, confidence, at });
+  }
+
+  arm({ source = "gesture", confidence = 1, at } = {}) {
+    const timestamp = this.at(at);
+    const safeConfidence = clamp(confidence);
+    if (
+      this.state.frozen ||
+      !this.state.preview ||
+      safeConfidence < GESTURE_CONFIDENCE
+    ) {
+      this.record("arm-blocked", { source, confidence: safeConfidence }, timestamp);
+      return false;
+    }
+    this.state.armed = true;
+    this.record("armed", { optionId: this.state.preview.optionId, source, confidence: safeConfidence }, timestamp);
+    return true;
+  }
+
+  handleGesture(type, { confidence = 1, neutral = false, at } = {}) {
+    const timestamp = this.at(at);
+    const safeConfidence = clamp(confidence);
+    if (
+      this.state.frozen ||
+      !neutral ||
+      safeConfidence < GESTURE_CONFIDENCE ||
+      timestamp - this.state.lastGestureAt < GESTURE_COOLDOWN_MS
+    ) {
+      this.metrics.gesturesRejected += 1;
+      this.record("gesture-rejected", { gesture: type, confidence: safeConfidence, neutral }, timestamp);
+      return false;
+    }
+
+    this.state.lastGestureAt = timestamp;
+    this.metrics.gesturesAccepted += 1;
+    this.record("gesture", { gesture: type, confidence: safeConfidence }, timestamp);
+    if (type === "rotate-left") return this.rotate(-1, { source: "camera-motion", confidence: safeConfidence, at: timestamp });
+    if (type === "rotate-right") return this.rotate(1, { source: "camera-motion", confidence: safeConfidence, at: timestamp });
+    if (type === "enter") return this.arm({ source: "camera-motion", confidence: safeConfidence, at: timestamp });
+    if (type === "back") return this.undo({ source: "camera-motion", at: timestamp });
+    return false;
+  }
+
+  choose({ source = "voice", at } = {}) {
+    const timestamp = this.at(at);
+    const preview = this.state.preview;
+    const cameraDwellSatisfied =
+      !preview?.source.includes("camera") || timestamp - preview.sinceMs >= CAMERA_DWELL_MS;
+    if (
+      this.state.frozen ||
+      !preview ||
+      preview.confidence < COMMIT_CONFIDENCE ||
+      !cameraDwellSatisfied ||
+      timestamp - this.state.lastCommitAt < COMMIT_COOLDOWN_MS
+    ) {
+      this.metrics.blockedCommits += 1;
+      this.record(
+        "commit-blocked",
+        {
+          source,
+          reason: this.state.frozen
+            ? "frozen"
+            : !preview
+              ? "no-preview"
+              : !cameraDwellSatisfied
+                ? "dwell"
+                : preview.confidence < COMMIT_CONFIDENCE
+                  ? "confidence"
+                  : "cooldown",
+        },
+        timestamp,
+      );
+      return false;
+    }
+
+    const layer = this.currentLayer();
+    const selected = layer.options[preview.index];
+    const expected = selected.id === layer.target;
+    this.state.selections.push({
+      depth: this.state.depth,
+      layerId: layer.id,
+      optionId: selected.id,
+      label: selected.label,
+      expected,
+      source,
+      atMs: timestamp,
+    });
+    this.metrics.commits += 1;
+    const confirmationSource = Object.hasOwn(this.metrics.confirmationSources, source)
+      ? source
+      : "other";
+    this.metrics.confirmationSources[confirmationSource] += 1;
+    if (!expected) this.metrics.falseCommits += 1;
+    this.record("commit", { layerId: layer.id, optionId: selected.id, expected, source }, timestamp);
+    this.state.depth += 1;
+    this.state.preview = null;
+    this.state.armed = false;
+    this.state.lastCommitAt = timestamp;
+
+    if (this.state.depth >= TASK_LAYERS.length) {
+      this.state.completed = true;
+      this.state.exact =
+        this.state.selections.length === EXPECTED_ROUTE.length &&
+        this.state.selections.every((selection, index) => selection.optionId === EXPECTED_ROUTE[index]);
+      this.metrics.completedAtMs = timestamp;
+      this.metrics.completionMs =
+        this.metrics.startedAtMs === null ? null : timestamp - this.metrics.startedAtMs;
+      this.metrics.exactTaskCompletion = this.state.exact;
+      this.record("task-complete", { exact: this.state.exact }, timestamp);
+    }
+    return true;
+  }
+
+  cancel({ source = "voice", at } = {}) {
+    const timestamp = this.at(at);
+    const hadPending = Boolean(this.state.preview || this.state.armed);
+    this.state.preview = null;
+    this.state.armed = false;
+    this.metrics.cancellations += 1;
+    this.record("cancel", { source, hadPending }, timestamp);
+    return hadPending;
+  }
+
+  centerRest({ source = "camera-center-rest", at } = {}) {
+    const timestamp = this.at(at);
+    const preview = this.state.preview;
+    if (!preview?.source.includes("camera")) return false;
+    if (timestamp - preview.sinceMs < CAMERA_DWELL_MS) {
+      this.metrics.dwellCancellations += 1;
+    }
+    this.state.preview = null;
+    this.state.armed = false;
+    this.metrics.cancellations += 1;
+    this.record("center-rest", { source }, timestamp);
+    return true;
+  }
+
+  undo({ source = "voice", at } = {}) {
+    const timestamp = this.at(at);
+    if (this.state.frozen || this.state.selections.length === 0) {
+      this.record(
+        "undo-blocked",
+        { source, reason: this.state.freezeCauses.join("+") || "at-root" },
+        timestamp,
+      );
+      return false;
+    }
+    const removed = this.state.selections.pop();
+    this.state.depth = this.state.selections.length;
+    this.state.preview = null;
+    this.state.armed = false;
+    this.state.completed = false;
+    this.state.exact = false;
+    this.metrics.undos += 1;
+    this.metrics.completedAtMs = null;
+    this.metrics.completionMs = null;
+    this.metrics.exactTaskCompletion = false;
+    this.record("undo", { source, removedOptionId: removed.optionId }, timestamp);
+    return true;
+  }
+
+  sensorLost(kind = "unknown", at) {
+    const timestamp = this.at(at);
+    const safeKind = Object.hasOwn(this.metrics.sensorLosses, kind) ? kind : "unknown";
+    const cause = `${safeKind}-lost`;
+    this.closeSensorWindow(safeKind, timestamp);
+    if (!this.state.freezeCauses.includes(cause)) {
+      this.state.freezeCauses.push(cause);
+      this.state.sensorLostAt[safeKind] = timestamp;
+      this.metrics.sensorLosses[safeKind] += 1;
+    }
+    this.syncFrozen();
+    this.state.preview = null;
+    this.state.armed = false;
+    this.record(
+      "sensor-lost",
+      { sensor: safeKind, freezeCauses: this.state.freezeCauses },
+      timestamp,
+    );
+  }
+
+  sensorRecovered(kind = "unknown", at) {
+    const timestamp = this.at(at);
+    const safeKind = Object.hasOwn(this.state.sensorLostAt, kind) ? kind : "unknown";
+    const lostAt = this.state.sensorLostAt[safeKind];
+    if (lostAt !== null) {
+      this.metrics.sensorRecoveryMs += Math.max(0, timestamp - lostAt);
+    }
+    this.state.sensorLostAt[safeKind] = null;
+    this.removeFreezeCause(`${safeKind}-lost`);
+    this.state.preview = null;
+    this.state.armed = false;
+    if (
+      Object.hasOwn(this.sensorActiveSince, safeKind) &&
+      this.sensorActiveSince[safeKind] === null
+    ) {
+      this.sensorActiveSince[safeKind] = timestamp;
+    }
+    this.record(
+      "sensor-recovered",
+      { sensor: safeKind, freezeCauses: this.state.freezeCauses },
+      timestamp,
+    );
+  }
+
+  syncFrozen() {
+    this.state.frozen = this.state.freezeCauses.length > 0;
+  }
+
+  addFreezeCause(cause) {
+    if (!this.state.freezeCauses.includes(cause)) this.state.freezeCauses.push(cause);
+    this.syncFrozen();
+  }
+
+  removeFreezeCause(cause) {
+    this.state.freezeCauses = this.state.freezeCauses.filter((candidate) => candidate !== cause);
+    this.syncFrozen();
+  }
+
+  closeSensorWindow(kind, at) {
+    if (!Object.hasOwn(this.sensorActiveSince, kind)) return;
+    const startedAt = this.sensorActiveSince[kind];
+    if (startedAt !== null) {
+      this.metrics.sensorOnMs[kind] += Math.max(0, at - startedAt);
+      this.sensorActiveSince[kind] = null;
+    }
+  }
+
+  sensorStarted(kind, at) {
+    const timestamp = this.at(at);
+    if (!Object.hasOwn(this.sensorActiveSince, kind)) return false;
+    if (this.sensorActiveSince[kind] === null) this.sensorActiveSince[kind] = timestamp;
+    this.record("sensor-started", { sensor: kind }, timestamp);
+    return true;
+  }
+
+  sensorStopped(kind, at) {
+    const timestamp = this.at(at);
+    if (!Object.hasOwn(this.sensorActiveSince, kind)) return false;
+    this.closeSensorWindow(kind, timestamp);
+    this.record("sensor-stopped", { sensor: kind }, timestamp);
+    return true;
+  }
+
+  noteNeutralReady(at) {
+    const timestamp = this.at(at);
+    if (this.metrics.neutralCalibrationMs === null) {
+      this.metrics.neutralCalibrationMs =
+        this.metrics.startedAtMs === null ? 0 : Math.max(0, timestamp - this.metrics.startedAtMs);
+      this.record("neutral-ready", { calibrationMs: this.metrics.neutralCalibrationMs }, timestamp);
+    }
+  }
+
+  stop(at) {
+    const timestamp = this.at(at);
+    this.addFreezeCause("user-stop");
+    this.state.preview = null;
+    this.state.armed = false;
+    this.record("stop", { freezeCauses: this.state.freezeCauses }, timestamp);
+  }
+
+  resume(at) {
+    const timestamp = this.at(at);
+    if (!this.state.freezeCauses.includes("user-stop")) return false;
+    this.removeFreezeCause("user-stop");
+    this.record("resume", { freezeCauses: this.state.freezeCauses }, timestamp);
+    return true;
+  }
+
+  noteFallback(at) {
+    this.metrics.fallbackUses += 1;
+    this.record("fallback", {}, this.at(at));
+  }
+
+  voice(text, { confidence, at } = {}) {
+    const timestamp = this.at(at);
+    const phrase = normalizeSpeech(text);
+    const safeConfidence = normalizeSpeechConfidence(confidence);
+    const source = "voice";
+    this.metrics.voiceCommands += 1;
+    this.record("voice-input", { confidence: safeConfidence }, timestamp);
+
+    if (/\bstop\b/.test(phrase)) {
+      this.stop(timestamp);
+      return { command: "stop", accepted: true };
+    }
+    if (/\bresume\b/.test(phrase)) {
+      return { command: "resume", accepted: this.resume(timestamp) };
+    }
+    if (/\brecover\b/.test(phrase)) {
+      return { command: "recover", accepted: false };
+    }
+    if (/\b(cancel|never mind)\b/.test(phrase)) {
+      return { command: "cancel", accepted: this.cancel({ source, at: timestamp }) };
+    }
+    if (/\b(undo|go back|back up)\b/.test(phrase)) {
+      return { command: "undo", accepted: this.undo({ source, at: timestamp }) };
+    }
+    if (/\b(choose|select this)\b/.test(phrase)) {
+      if (safeConfidence < VOICE_CHOOSE_CONFIDENCE) {
+        this.metrics.blockedCommits += 1;
+        this.record(
+          "commit-blocked",
+          { source, reason: "voice-confidence", confidence: safeConfidence },
+          timestamp,
+        );
+        return { command: "choose", accepted: false };
+      }
+      return { command: "choose", accepted: this.choose({ source, at: timestamp }) };
+    }
+
+    const layer = this.currentLayer();
+    if (!layer || this.state.frozen || safeConfidence < VOICE_INTENT_CONFIDENCE) {
+      this.metrics.voiceRepairs += 1;
+      if (safeConfidence < VOICE_INTENT_CONFIDENCE) {
+        this.record("voice-repair", { reason: "confidence" }, timestamp);
+      }
+      return { command: "intent", accepted: false };
+    }
+    const index = matchVoiceOption(layer.options, phrase);
+    if (index < 0) {
+      this.metrics.voiceRepairs += 1;
+      this.record("voice-repair", { reason: "unmatched" }, timestamp);
+      return { command: "intent", accepted: false };
+    }
+    const accepted = this.previewOption(index, {
+      source,
+      confidence: Math.max(COMMIT_CONFIDENCE, safeConfidence),
+      at: timestamp,
+    });
+    return { command: "intent", accepted, index };
+  }
+
+  exportMetrics() {
+    const endAt =
+      this.metrics.completedAtMs ??
+      Math.max(this.lastEventAt, Number.isFinite(this.clock()) ? Math.round(this.clock()) : this.lastEventAt);
+    const sensorOnMs = clone(this.metrics.sensorOnMs);
+    for (const [kind, startedAt] of Object.entries(this.sensorActiveSince)) {
+      if (startedAt !== null) sensorOnMs[kind] += Math.max(0, endAt - startedAt);
+    }
+    return clone({
+      ...this.metrics,
+      sensorOnMs,
+      sessionId: this.sessionId,
+      finalDepth: this.state.depth,
+      recoveredFromSensorLoss:
+        Object.values(this.metrics.sensorLosses).some((count) => count > 0) &&
+        this.metrics.sensorRecoveryMs > 0,
+    });
+  }
+
+  exportReplay() {
+    return clone({
+      schemaVersion: 1,
+      appVersion: APP_VERSION,
+      taskId: TASK_ID,
+      sessionId: this.sessionId,
+      expectedRoute: EXPECTED_ROUTE,
+      replay: this.replay,
+      finalState: this.snapshot(),
+    });
+  }
+}
+
+const DETERMINISTIC_ACTIONS = Object.freeze([
+  Object.freeze({ at: 0, type: "start", caption: "Simulation begins at the safe center" }),
+  Object.freeze({ at: 0, type: "sensor-started", sensor: "camera", caption: "Ephemeral camera clock begins" }),
+  Object.freeze({ at: 0, type: "sensor-started", sensor: "microphone", caption: "Browser voice clock begins" }),
+  Object.freeze({ at: 100, type: "neutral-ready", caption: "Neutral gate calibrated" }),
+  Object.freeze({ at: 200, type: "voice", text: "route", caption: "Voice names Route" }),
+  Object.freeze({ at: 850, type: "voice", text: "choose", caption: "Choose confirms Route" }),
+  Object.freeze({ at: 1450, type: "voice", text: "three cobalt beacons", caption: "Three cobalt beacons" }),
+  Object.freeze({ at: 2100, type: "voice", text: "choose", caption: "Payload confirmed" }),
+  Object.freeze({ at: 2700, type: "voice", text: "fifteen hundred", caption: "Intentional wrong tunnel: 15:00" }),
+  Object.freeze({ at: 3350, type: "voice", text: "choose", caption: "Wrong tunnel intentionally committed" }),
+  Object.freeze({ at: 3900, type: "voice", text: "undo", caption: "Undo restores the schedule shell" }),
+  Object.freeze({ at: 4400, type: "sensor-stopped", sensor: "camera", caption: "Runtime camera track stops" }),
+  Object.freeze({ at: 4400, type: "sensor-stopped", sensor: "microphone", caption: "Runtime microphone track stops with the stream" }),
+  Object.freeze({ at: 4400, type: "sensor-lost", sensor: "camera", caption: "Camera loss freezes every layer" }),
+  Object.freeze({ at: 4650, type: "voice", text: "fourteen thirty", caption: "Input is safely blocked while frozen" }),
+  Object.freeze({ at: 4850, type: "voice", text: "choose", caption: "Choose is rejected while the camera is lost" }),
+  Object.freeze({ at: 5300, type: "sensor-started", sensor: "camera", caption: "Recovered camera track starts" }),
+  Object.freeze({ at: 5300, type: "sensor-started", sensor: "microphone", caption: "Recovered microphone track starts" }),
+  Object.freeze({ at: 5300, type: "sensor-recovered", sensor: "camera", caption: "Camera recovered; pending input stays canceled" }),
+  Object.freeze({ at: 5300, type: "sensor-recovered", sensor: "microphone", caption: "Microphone lifecycle matches runtime recovery" }),
+  Object.freeze({ at: 5550, type: "voice", text: "fourteen thirty", caption: "Correct schedule previewed" }),
+  Object.freeze({ at: 6200, type: "voice", text: "choose", caption: "14:30 confirmed" }),
+  Object.freeze({ at: 6800, type: "voice", text: "fragile", caption: "Fragile handling" }),
+  Object.freeze({ at: 7450, type: "voice", text: "choose", caption: "Handling confirmed" }),
+  Object.freeze({ at: 8050, type: "voice", text: "orion seven", caption: "ORION-7 destination" }),
+  Object.freeze({ at: 8700, type: "voice", text: "choose", caption: "Destination confirmed" }),
+  Object.freeze({ at: 9300, type: "voice", text: "north gate", caption: "North Gate" }),
+  Object.freeze({ at: 9950, type: "voice", text: "choose", caption: "Gate confirmed" }),
+  Object.freeze({ at: 10550, type: "voice", text: "confirm route", caption: "Exact route reviewed" }),
+  Object.freeze({ at: 11200, type: "voice", text: "choose", caption: "Route sent" }),
+  Object.freeze({ at: 11800, type: "voice", text: "home", caption: "Return tunnel named" }),
+  Object.freeze({ at: 12450, type: "voice", text: "choose", caption: "Home reached; evidence sealed" }),
+]);
+
+function applyDeterministicAction(engine, action) {
+  switch (action.type) {
+    case "start":
+      engine.start(action.at);
+      break;
+    case "voice":
+      engine.voice(action.text, { confidence: 0.96, at: action.at });
+      break;
+    case "sensor-lost":
+      engine.sensorLost(action.sensor, action.at);
+      break;
+    case "sensor-recovered":
+      engine.sensorRecovered(action.sensor, action.at);
+      break;
+    case "sensor-started":
+      engine.sensorStarted(action.sensor, action.at);
+      break;
+    case "sensor-stopped":
+      engine.sensorStopped(action.sensor, action.at);
+      break;
+    case "neutral-ready":
+      engine.noteNeutralReady(action.at);
+      break;
+    default:
+      throw new Error(`Unknown deterministic action: ${action.type}`);
+  }
+  return engine.snapshot();
+}
+
+function runDeterministicSimulation() {
+  const engine = new TunnelEngine({
+    clock: () => 0,
+    sessionId: "gesture-tunnel-deterministic-v1",
+  });
+  DETERMINISTIC_ACTIONS.forEach((action) => applyDeterministicAction(engine, action));
+  return {
+    state: engine.snapshot(),
+    metrics: engine.exportMetrics(),
+    replay: engine.exportReplay(),
+  };
+}
+
+const query = new URLSearchParams(window.location.search);
+const simulationMode = query.get("simulate") === "1";
+const accessibleMode = query.get("accessible") === "1";
+const frameWidth = 96;
+const frameHeight = 72;
+
+const elements = {
+  gateway: document.querySelector("#gateway"),
+  gatewayCopy: document.querySelector("#gateway-copy"),
+  privacyCopy: document.querySelector("#privacy-copy"),
+  launch: document.querySelector("#launch-control"),
+  app: document.querySelector("#app-shell"),
+  tunnelStage: document.querySelector("#tunnel-stage"),
+  cameraStatus: document.querySelector("#camera-status"),
+  voiceStatus: document.querySelector("#voice-status"),
+  neutralStatus: document.querySelector("#neutral-status"),
+  history: document.querySelector("#history-shells"),
+  mouths: document.querySelector("#mouth-orbit"),
+  orbCluster: document.querySelector("#orb-cluster"),
+  orbDepth: document.querySelector("#orb-depth"),
+  orbTitle: document.querySelector("#orb-title"),
+  orbState: document.querySelector("#orb-state"),
+  confidence: document.querySelector("#confidence-fill"),
+  voiceCommand: document.querySelector("#voice-command"),
+  caption: document.querySelector("#voice-caption"),
+  route: document.querySelector("#route-sequence"),
+  evidence: document.querySelector("#evidence-seal"),
+  evidenceTitle: document.querySelector("#evidence-title"),
+  evidenceCopy: document.querySelector("#evidence-copy"),
+  metricsDownload: document.querySelector("#metrics-download"),
+  replayDownload: document.querySelector("#replay-download"),
+  srState: document.querySelector("#sr-state"),
+  video: document.querySelector("#camera"),
+  canvas: document.querySelector("#motion-canvas"),
+};
+
+let launchEpoch = performance.now();
+let engine = null;
+let stream = null;
+let tracker = null;
+let recognition = null;
+let recognitionActive = false;
+let recognitionRestartAllowed = false;
+let recognitionRecoveryRequired = false;
+let recognitionRecoveryOnly = false;
+let recognitionTerminalFailure = false;
+let recognitionTransientFailures = 0;
+let recognitionRestartTimer = 0;
+let speechPaused = false;
+let launched = false;
+let tearingDown = false;
+let replacingSensors = false;
+let recoveryInFlight = false;
+let frameWatchdog = 0;
+const evidenceUrls = [];
+
+const elapsed = () => Math.round(performance.now() - launchEpoch);
+const wait = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+
+function clearRecognitionRestartTimer() {
+  if (recognitionRestartTimer) window.clearTimeout(recognitionRestartTimer);
+  recognitionRestartTimer = 0;
+}
+
+function configureGateway() {
+  if (simulationMode) {
+    elements.gatewayCopy.textContent =
+      "A deterministic local replay will route the same cobalt-beacon task, intentionally enter and undo a wrong tunnel, freeze on camera loss, recover, and return home.";
+    elements.privacyCopy.textContent =
+      "Simulation requests no sensors. It executes the same confidence, cooldown, freeze, replay, and task-completion state machine with fixed timestamps.";
+    elements.launch.textContent = "Run deterministic cobalt route";
+    return;
+  }
+  if (accessibleMode) {
+    elements.gatewayCopy.textContent =
+      "The switch-access path preserves every route and safety gate without camera or microphone. After this one start action, use arrow keys, Enter, Escape, U, R, and E.";
+    elements.privacyCopy.textContent =
+      "Accessible mode never requests media. Browser speech synthesis can announce major state changes; disable device audio if you prefer captions only. No state is persisted or sent.";
+    elements.launch.textContent = "Begin accessible switch path";
+  }
+}
+
+function setSensor(element, label, state) {
+  element.textContent = label;
+  element.dataset.state = state;
+}
+
+function setCaption(message, transcript = "") {
+  elements.caption.textContent = transcript ? `heard “${transcript}” · ${message}` : message;
+}
+
+function announce(message) {
+  if (!("speechSynthesis" in window) || simulationMode) return;
+  window.speechSynthesis.cancel();
+  speechPaused = true;
+  if (recognitionActive) recognition.abort();
+  const utterance = new SpeechSynthesisUtterance(message);
+  utterance.rate = 1.02;
+  utterance.pitch = 0.94;
+  utterance.onend = () => {
+    speechPaused = false;
+    startRecognition();
+  };
+  utterance.onerror = () => {
+    speechPaused = false;
+    startRecognition();
+  };
+  window.speechSynthesis.speak(utterance);
+}
+
+function makeNode(tag, className, text) {
+  const node = document.createElement(tag);
+  node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function clearEvidenceUrls() {
+  evidenceUrls.splice(0).forEach((url) => URL.revokeObjectURL(url));
+  elements.metricsDownload.removeAttribute("href");
+  elements.replayDownload.removeAttribute("href");
+}
+
+function renderEvidenceState(snapshot) {
+  const presentation = evidencePresentation(snapshot);
+  elements.evidence.dataset.visible = String(presentation.visible);
+  elements.evidenceTitle.textContent = presentation.label;
+  elements.evidenceCopy.textContent = presentation.description;
+  if (!presentation.visible) clearEvidenceUrls();
+  return presentation;
+}
+
+function renderHistory(snapshot) {
+  elements.history.replaceChildren();
+  snapshot.selections.forEach((selection, index) => {
+    const shell = makeNode("div", "history-shell");
+    shell.dataset.expected = String(selection.expected);
+    shell.style.setProperty("--shell-scale", String(0.58 + index * 0.085));
+    shell.style.setProperty("--shell-turn", `${index * 17 - 23}deg`);
+    shell.style.setProperty("--shell-opacity", String(Math.min(0.76, 0.26 + index * 0.07)));
+    const label = makeNode(
+      "span",
+      "shell-label",
+      `${String(index + 1).padStart(2, "0")} · ${selection.label}`,
+    );
+    shell.append(label);
+    elements.history.append(shell);
+  });
+}
+
+function renderMouths(snapshot) {
+  elements.mouths.replaceChildren();
+  const layer = engine.currentLayer();
+  if (!layer) return;
+  layer.options.forEach((candidate, index) => {
+    const mouth = makeNode("div", "mouth");
+    mouth.setAttribute("role", "img");
+    mouth.setAttribute(
+      "aria-label",
+      `Tunnel ${index + 1}: ${candidate.label}. ${candidate.detail}${
+        snapshot.preview?.index === index ? ". Previewed" : ""
+      }`,
+    );
+    mouth.dataset.preview = String(snapshot.preview?.index === index);
+    mouth.dataset.armed = String(snapshot.armed && snapshot.preview?.index === index);
+    mouth.style.setProperty("--angle", `${index * 60 - 90}deg`);
+    const content = makeNode("span", "mouth-content");
+    content.append(
+      makeNode("span", "mouth-index", `T-${String(index + 1).padStart(2, "0")}`),
+      makeNode("span", "mouth-name", candidate.label),
+      makeNode("span", "mouth-detail", candidate.detail),
+    );
+    mouth.append(content);
+    elements.mouths.append(mouth);
+  });
+}
+
+function renderRoute(snapshot) {
+  elements.route.replaceChildren();
+  TASK_LAYERS.forEach((layer, index) => {
+    const selection = snapshot.selections[index];
+    const node = makeNode("span", "route-node", selection?.label ?? `· ${index + 1}`);
+    node.dataset.filled = String(Boolean(selection));
+    node.dataset.expected = String(selection?.expected ?? true);
+    node.title = selection ? `${layer.title}: ${selection.label}` : layer.title;
+    elements.route.append(node);
+  });
+}
+
+function render() {
+  if (!engine) return;
+  const snapshot = engine.snapshot();
+  const layer = engine.currentLayer();
+  const confidence = snapshot.preview?.confidence ?? 0;
+  renderHistory(snapshot);
+  renderMouths(snapshot);
+  renderRoute(snapshot);
+  elements.orbCluster.dataset.frozen = String(snapshot.frozen);
+  elements.orbCluster.dataset.exact = String(snapshot.exact);
+  elements.confidence.style.setProperty("--confidence", String(confidence));
+
+  if (snapshot.completed) {
+    elements.orbDepth.textContent = "Depth 8 / 8";
+    elements.orbTitle.textContent = snapshot.exact ? "Home · exact" : "Home · review";
+    elements.orbState.textContent = snapshot.exact ? "Cobalt route sealed" : "Route differs";
+    elements.voiceCommand.textContent = snapshot.exact
+      ? "Task complete · say “export” for local evidence"
+      : "Task ended with a mismatch · say “undo”";
+  } else if (snapshot.frozen) {
+    const causes = snapshot.freezeCauses.join(" + ");
+    const userStopped = snapshot.freezeCauses.includes("user-stop");
+    const sensorLost = snapshot.freezeCauses.some((cause) => cause.endsWith("-lost"));
+    elements.orbDepth.textContent = `Depth ${snapshot.depth} / ${TASK_LAYERS.length}`;
+    elements.orbTitle.textContent = "Input frozen";
+    elements.orbState.textContent = causes || "safety gate";
+    elements.voiceCommand.textContent =
+      userStopped && sensorLost
+        ? "State held · say “recover,” then “resume”"
+        : userStopped
+          ? "Say “resume” to clear the user stop"
+          : recognitionRecoveryOnly
+            ? "Voice recovery only · say “recover” or press R"
+            : "Voice unavailable · press R to recover";
+  } else {
+    elements.orbDepth.textContent = `Depth ${snapshot.depth} / ${TASK_LAYERS.length}`;
+    elements.orbTitle.textContent = snapshot.preview
+      ? layer.options[snapshot.preview.index].label
+      : layer.title;
+    elements.orbState.textContent = snapshot.armed
+      ? "Threshold open · choose to commit"
+      : snapshot.preview
+        ? `${snapshot.preview.source} · ${Math.round(confidence * 100)}%`
+        : "Safe center · no pending action";
+    elements.voiceCommand.textContent = snapshot.preview
+      ? `Preview: ${layer.options[snapshot.preview.index].label} · say “choose”`
+      : layer.prompt;
+  }
+
+  const optionSummary = layer
+    ? layer.options.map((candidate, index) => `${index + 1}, ${candidate.label}`).join("; ")
+    : "No remaining tunnels";
+  elements.srState.textContent = snapshot.completed
+    ? `Task complete. Exact route ${snapshot.exact ? "confirmed" : "not confirmed"}.`
+    : `Depth ${snapshot.depth + 1}. ${snapshot.frozen ? "Input frozen. " : ""}${layer.title}. ${optionSummary}.`;
+
+  const evidenceState = renderEvidenceState(snapshot);
+  if (evidenceState.visible) prepareEvidence(snapshot);
+}
+
+class LocalMotionTracker {
+  constructor(video, canvas, callbacks) {
+    this.video = video;
+    this.canvas = canvas;
+    this.context = canvas.getContext("2d", { willReadFrequently: true });
+    this.callbacks = callbacks;
+    this.previous = null;
+    this.running = false;
+    this.frameRequest = 0;
+    this.usesVideoFrameCallback =
+      typeof this.video.requestVideoFrameCallback === "function";
+    this.frameGate = new MediaFrameGate();
+    this.visibilityGuard = new CameraVisibilityGuard();
+    this.lifecycle = new LifecycleGate();
+    this.neutralGate = new FreshNeutralGate();
+    this.gestureWindow = null;
+    this.lastPreviewAt = 0;
+    this.lastFaceAt = 0;
+    this.lastFrameAt = performance.now();
+    this.centerRestSent = false;
+    this.faceDetector = null;
+    this.faceDetectionPending = false;
+    if ("FaceDetector" in window) {
+      try {
+        this.faceDetector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+      } catch {
+        this.faceDetector = null;
+      }
+    }
+  }
+
+  start() {
+    this.running = true;
+    if (document.visibilityState === "hidden") {
+      this.suspendForVisibility();
+    } else {
+      this.resumeFromVisibility(performance.now());
+    }
+    this.scheduleFrame();
+  }
+
+  stop() {
+    this.running = false;
+    this.lifecycle.stop();
+    this.visibilityGuard.suspend();
+    this.faceDetectionPending = false;
+    if (
+      this.usesVideoFrameCallback &&
+      typeof this.video.cancelVideoFrameCallback === "function"
+    ) {
+      this.video.cancelVideoFrameCallback(this.frameRequest);
+    } else {
+      window.cancelAnimationFrame(this.frameRequest);
+    }
+  }
+
+  scheduleFrame() {
+    if (!this.running) return;
+    this.frameRequest = this.usesVideoFrameCallback
+      ? this.video.requestVideoFrameCallback(this.onVideoFrame)
+      : window.requestAnimationFrame(this.onAnimationFrame);
+  }
+
+  resetMotionState() {
+    this.previous = null;
+    this.gestureWindow = null;
+    this.neutralGate.reset();
+    this.centerRestSent = false;
+  }
+
+  suspendForVisibility() {
+    this.visibilityGuard.suspend();
+    this.lifecycle.stop();
+    this.faceDetectionPending = false;
+    this.resetMotionState();
+  }
+
+  resumeFromVisibility(now) {
+    this.visibilityGuard.resume(now);
+    this.lifecycle.start();
+    this.faceDetectionPending = false;
+    this.lastFaceAt = now;
+    this.resetMotionState();
+  }
+
+  shouldDeclareCameraLoss(now) {
+    return this.visibilityGuard.shouldDeclareStale(this.lastFrameAt, now);
+  }
+
+  onVideoFrame = (now, metadata) => {
+    if (!this.running) return;
+    try {
+      this.processFrame(now, metadata);
+    } finally {
+      this.scheduleFrame();
+    }
+  };
+
+  onAnimationFrame = (now) => {
+    if (!this.running) return;
+    try {
+      const playbackQuality = this.video.getVideoPlaybackQuality?.();
+      const presentedFrames = Number.isFinite(playbackQuality?.totalVideoFrames)
+        ? playbackQuality.totalVideoFrames
+        : this.video.webkitDecodedFrameCount;
+      this.processFrame(now, {
+        presentedFrames,
+        mediaTime: this.video.currentTime,
+      });
+    } finally {
+      this.scheduleFrame();
+    }
+  };
+
+  processFrame(now, metadata = {}) {
+    if (!this.running) return;
+    if (this.visibilityGuard.suspended) return;
+    if (this.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+    const fresh = this.frameGate.accept({
+      presentedFrames: metadata.presentedFrames,
+      mediaTime: Number.isFinite(metadata.mediaTime)
+        ? metadata.mediaTime
+        : this.video.currentTime,
+    });
+    if (!fresh) return;
+
+    this.context.save();
+    this.context.translate(frameWidth, 0);
+    this.context.scale(-1, 1);
+    this.context.drawImage(this.video, 0, 0, frameWidth, frameHeight);
+    this.context.restore();
+    const rgba = this.context.getImageData(0, 0, frameWidth, frameHeight).data;
+    const grayscale = new Uint8Array(frameWidth * frameHeight);
+    for (let pixel = 0, offset = 0; pixel < grayscale.length; pixel += 1, offset += 4) {
+      grayscale[pixel] = Math.round(
+        rgba[offset] * 0.299 + rgba[offset + 1] * 0.587 + rgba[offset + 2] * 0.114,
+      );
+    }
+    if (this.previous) {
+      this.consumeFrame(
+        motionCentroid(this.previous, grayscale, frameWidth, frameHeight),
+        now,
+      );
+    }
+    this.previous = grayscale;
+    this.lastFrameAt = now;
+    this.visibilityGuard.noteFreshFrame();
+    if (this.faceDetector && now - this.lastFaceAt > 620) this.detectFace(now);
+  }
+
+  consumeFrame(motion, now) {
+    const neutral = motion.activeRatio < 0.012;
+    if (neutral) {
+      this.neutralGate.observeNeutral(now);
+      if (this.neutralGate.neutralDuration(now) >= 1200 && !this.centerRestSent) {
+        this.centerRestSent = true;
+        this.callbacks.onCenterRest("camera-motion-rest");
+      }
+      if (this.gestureWindow) {
+        const sample = {
+          start: this.gestureWindow.start,
+          end: this.gestureWindow.end,
+          durationMs: now - this.gestureWindow.startedAt,
+          activeRatio: this.gestureWindow.ratioTotal / this.gestureWindow.frames,
+          neutralReady: this.gestureWindow.neutralReady,
+        };
+        const gesture = classifyMotionGesture(sample);
+        this.gestureWindow = null;
+        this.neutralGate.restartFromNeutral(now);
+        if (gesture) this.callbacks.onGesture(gesture);
+      }
+    } else {
+      const wasNeutralReady = this.neutralGate.ready;
+      this.neutralGate.observeMotion();
+      this.centerRestSent = false;
+      if (motion.activeRatio > 0.55) {
+        this.gestureWindow = null;
+      } else if (motion.centroid && motion.activeRatio >= 0.018) {
+        if (!this.gestureWindow && wasNeutralReady) {
+          this.gestureWindow = {
+            start: motion.centroid,
+            end: motion.centroid,
+            startedAt: now,
+            ratioTotal: 0,
+            frames: 0,
+            neutralReady: true,
+          };
+        }
+        if (this.gestureWindow) {
+          this.gestureWindow.end = motion.centroid;
+          this.gestureWindow.ratioTotal += motion.activeRatio;
+          this.gestureWindow.frames += 1;
+        }
+        if (now - this.lastPreviewAt > 340) {
+          const sector = coarseSector(motion.centroid);
+          if (sector && sector.confidence >= 0.58) {
+            this.lastPreviewAt = now;
+            this.callbacks.onCoarsePreview(sector, "camera-motion-gaze");
+          }
+        }
+      }
+    }
+    this.callbacks.onNeutral(this.neutralGate.ready, motion);
+  }
+
+  async detectFace(now) {
+    if (this.faceDetectionPending) return;
+    this.faceDetectionPending = true;
+    this.lastFaceAt = now;
+    const detectionGeneration = this.lifecycle.capture();
+    const detector = this.faceDetector;
+    try {
+      const faces = await detector.detect(this.video);
+      if (
+        !this.lifecycle.isCurrent(detectionGeneration) ||
+        detector !== this.faceDetector
+      ) {
+        return;
+      }
+      const box = faces[0]?.boundingBox;
+      if (box && this.video.videoWidth && this.video.videoHeight) {
+        const point = {
+          x: 1 - (box.x + box.width / 2) / this.video.videoWidth,
+          y: (box.y + box.height / 2) / this.video.videoHeight,
+        };
+        const sector = coarseSector(point);
+        if (sector && sector.confidence >= 0.58) {
+          this.callbacks.onCoarsePreview(sector, "camera-head-position");
+        } else if (!sector) {
+          this.callbacks.onCenterRest("camera-head-center");
+        }
+      }
+    } catch {
+      if (
+        this.lifecycle.isCurrent(detectionGeneration) &&
+        detector === this.faceDetector
+      ) {
+        this.faceDetector = null;
+      }
+    } finally {
+      if (this.lifecycle.isCurrent(detectionGeneration)) {
+        this.faceDetectionPending = false;
+      }
+    }
+  }
+}
+
+function onGesture(gesture) {
+  const accepted = engine.handleGesture(gesture.type, {
+    confidence: gesture.confidence,
+    neutral: true,
+    at: elapsed(),
+  });
+  if (!accepted) return;
+  const descriptions = {
+    "rotate-left": "Motion rotated one tunnel left",
+    "rotate-right": "Motion rotated one tunnel right",
+    enter: "Motion crossed the threshold; say “choose” to commit",
+    back: "Upward motion returned one shell",
+  };
+  setCaption(descriptions[gesture.type]);
+  render();
+}
+
+function onCoarsePreview(sector, source) {
+  if (!engine || engine.state.frozen || engine.state.completed) return;
+  const accepted = engine.previewOption(sector.index, {
+    source,
+    confidence: sector.confidence,
+    at: elapsed(),
+  });
+  if (accepted) render();
+}
+
+function onNeutral(ready, motion) {
+  if (ready) engine?.noteNeutralReady(elapsed());
+  setSensor(
+    elements.neutralStatus,
+    ready ? "neutral · ready" : `motion · ${Math.round(motion.activeRatio * 100)}%`,
+    ready ? "ok" : "warn",
+  );
+}
+
+function onCenterRest(source) {
+  if (!engine || engine.state.frozen) return;
+  if (engine.centerRest({ source, at: elapsed() })) {
+    setCaption("Center rest canceled the coarse camera preview");
+    render();
+  }
+}
+
+function cancelPendingForVisibility(source) {
+  if (!engine) return false;
+  const snapshot = engine.snapshot();
+  if (!snapshot.preview && !snapshot.armed) return false;
+  engine.cancel({ source, at: elapsed() });
+  return true;
+}
+
+function stopMedia({ preserveVoiceRecovery = false } = {}) {
+  clearRecognitionRestartTimer();
+  const keepRecoveryListener = preserveVoiceRecovery && !recognitionTerminalFailure;
+  recognitionRestartAllowed = keepRecoveryListener;
+  recognitionRecoveryRequired = true;
+  recognitionRecoveryOnly = keepRecoveryListener;
+  if (!keepRecoveryListener && recognitionActive) recognition.abort();
+  replacingSensors = true;
+  const activeStream = stream;
+  try {
+    try {
+      tracker?.stop();
+    } catch {
+      // Media release must continue even if frame processing teardown fails.
+    }
+    tracker = null;
+    releaseMediaResources(activeStream, elements.video);
+    stream = null;
+    if (engine && activeStream) {
+      engine.sensorStopped("camera", elapsed());
+      engine.sensorStopped("microphone", elapsed());
+    }
+  } finally {
+    stream = null;
+    elements.video.srcObject = null;
+    replacingSensors = false;
+  }
+}
+
+function handleSensorLoss(kind, { terminalSpeechFailure = false, speechError = "" } = {}) {
+  if (!engine || replacingSensors) return;
+  if (terminalSpeechFailure) {
+    recognitionTerminalFailure = true;
+    recognitionRestartAllowed = false;
+    recognitionRecoveryOnly = false;
+    clearRecognitionRestartTimer();
+  }
+  const cause = `${kind}-lost`;
+  const alreadyFrozenForSensor = engine.state.freezeCauses.includes(cause);
+  const lostAt = elapsed();
+  const preserveVoiceRecovery = preservesVoiceRecoveryOnSensorLoss(
+    kind,
+    recognitionTerminalFailure,
+  );
+  stopMedia({ preserveVoiceRecovery });
+  if (!alreadyFrozenForSensor) engine.sensorLost(kind, lostAt);
+  setSensor(
+    kind === "camera" ? elements.cameraStatus : elements.voiceStatus,
+    `${kind} · lost`,
+    "bad",
+  );
+  if (preserveVoiceRecovery) {
+    setSensor(elements.voiceStatus, "voice · recovery only", "warn");
+  } else {
+    setSensor(elements.voiceStatus, "voice · unavailable", "bad");
+  }
+  setSensor(elements.neutralStatus, "neutral · canceled", "bad");
+  setCaption(
+    terminalSpeechFailure
+      ? `Voice recognition stopped permanently (${speechError}); press R for explicit recovery`
+      : `${kind} lost; state frozen and every pending preview canceled`,
+  );
+  announce(
+    preserveVoiceRecovery
+      ? "Camera lost. State frozen. Say recover, or press R."
+      : "Voice recognition unavailable. State frozen. Press R to recover.",
+  );
+  if (preserveVoiceRecovery) startRecognition();
+  render();
+}
+
+async function startSensors({ recovery = false } = {}) {
+  if (!allowsMediaCapture({ accessibleMode, simulationMode })) return false;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    handleSensorLoss("camera");
+    setCaption("Media APIs unavailable; reload with ?accessible=1 for switch access");
+    return false;
+  }
+  setSensor(elements.cameraStatus, recovery ? "camera · recovering" : "camera · requesting", "warn");
+  setSensor(elements.voiceStatus, recovery ? "voice · recovering" : "voice · requesting", "warn");
+  try {
+    if (stream) stopMedia();
+    const acquiredStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        facingMode: "user",
+        frameRate: { ideal: 24, max: 30 },
+      },
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+    stream = acquiredStream;
+    elements.video.srcObject = stream;
+    await elements.video.play();
+    const cameraTrack = stream.getVideoTracks()[0];
+    const microphoneTrack = stream.getAudioTracks()[0];
+    if (cameraTrack) engine.sensorStarted("camera", elapsed());
+    if (microphoneTrack) engine.sensorStarted("microphone", elapsed());
+    if (cameraTrack) {
+      cameraTrack.addEventListener(
+        "ended",
+        () => {
+          if (stream === acquiredStream) handleSensorLoss("camera");
+        },
+        { once: true },
+      );
+    }
+    if (microphoneTrack) {
+      microphoneTrack.addEventListener(
+        "ended",
+        () => {
+          if (stream === acquiredStream) handleSensorLoss("microphone");
+        },
+        { once: true },
+      );
+    }
+    setSensor(elements.cameraStatus, "camera · local 96×72", "ok");
+    setSensor(
+      elements.voiceStatus,
+      microphoneTrack ? "voice · browser service" : "voice · fallback",
+      microphoneTrack ? "ok" : "warn",
+    );
+    tracker = new LocalMotionTracker(elements.video, elements.canvas, {
+      onGesture,
+      onCoarsePreview,
+      onNeutral,
+      onCenterRest,
+    });
+    tracker.start();
+    if (recovery) {
+      if (cameraTrack) engine.sensorRecovered("camera", elapsed());
+      if (microphoneTrack) engine.sensorRecovered("microphone", elapsed());
+      if (engine.state.freezeCauses.includes("unknown-lost") && cameraTrack && microphoneTrack) {
+        engine.sensorRecovered("unknown", elapsed());
+      }
+    }
+    recognitionRestartAllowed = true;
+    recognitionRecoveryRequired = false;
+    recognitionRecoveryOnly = false;
+    recognitionTerminalFailure = false;
+    recognitionTransientFailures = 0;
+    clearRecognitionRestartTimer();
+    startRecognition();
+    setCaption(
+      tracker.faceDetector
+        ? "Ready · optional face position gives coarse preview; no eye tracking"
+        : "Ready · frame-difference centroid gives coarse preview; no hand classification",
+    );
+    render();
+    return true;
+  } catch (error) {
+    const kind =
+      error?.name === "NotAllowedError" || error?.name === "NotFoundError" ? "camera" : "unknown";
+    handleSensorLoss(kind);
+    setCaption(`Sensor permission unavailable (${error?.name ?? "error"}); switch fallback remains available`);
+    render();
+    return false;
+  }
+}
+
+async function recoverSensors({ explicit = false } = {}) {
+  if (recoveryInFlight) return;
+  if (!allowsMediaCapture({ accessibleMode, simulationMode })) {
+    setCaption("This mode never requests camera or microphone access");
+    return;
+  }
+  if (recognitionRecoveryRequired && !explicit) return;
+  const sensorCauses = engine.state.freezeCauses.filter((cause) => cause.endsWith("-lost"));
+  if (sensorCauses.length === 0) {
+    setCaption(
+      engine.state.freezeCauses.includes("user-stop")
+        ? "User stop remains; say “resume”"
+        : "No lost sensor needs recovery",
+    );
+    return;
+  }
+  recoveryInFlight = true;
+  const recovered = await startSensors({ recovery: true });
+  recoveryInFlight = false;
+  if (recovered) {
+    const remaining = engine.snapshot().freezeCauses;
+    setCaption(
+      remaining.length
+        ? `Sensors recovered; still frozen by ${remaining.join(" + ")}`
+        : "Sensors recovered; pending input stayed canceled",
+    );
+    announce(
+      remaining.length
+        ? "Sensors recovered. The user stop remains."
+        : "Sensors recovered. Pending input remained canceled.",
+    );
+    render();
+  }
+}
+
+function startRecognition() {
+  if (
+    recognitionActive ||
+    !shouldRestartRecognition({
+      launched,
+      restartAllowed: recognitionRestartAllowed,
+      speechPaused,
+      accessibleMode,
+      simulationMode,
+      tearingDown,
+    })
+  ) {
+    return;
+  }
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    setSensor(elements.voiceStatus, "voice · switch fallback", "warn");
+    return;
+  }
+  if (!recognition) {
+    recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => {
+      if (
+        !shouldRestartRecognition({
+          launched,
+          restartAllowed: recognitionRestartAllowed,
+          speechPaused,
+          accessibleMode,
+          simulationMode,
+          tearingDown,
+        })
+      ) {
+        recognitionActive = false;
+        recognition.abort();
+        return;
+      }
+      recognitionActive = true;
+      setSensor(
+        elements.voiceStatus,
+        recognitionRecoveryOnly ? "voice · recovery only" : "voice · listening",
+        recognitionRecoveryOnly ? "warn" : "ok",
+      );
+    };
+    recognition.onresult = (event) => {
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const alternative = result[0];
+        recognitionTransientFailures = 0;
+        if (result.isFinal) {
+          handleVoice(alternative.transcript, alternative.confidence);
+        } else {
+          setCaption("listening", alternative.transcript);
+        }
+      }
+    };
+    recognition.onerror = (event) => {
+      if (isTerminalSpeechRecognitionError(event.error)) {
+        recognitionRestartAllowed = false;
+        recognitionRecoveryRequired = true;
+        recognitionRecoveryOnly = false;
+        recognitionTerminalFailure = true;
+        recognitionActive = false;
+        clearRecognitionRestartTimer();
+        handleSensorLoss("microphone", {
+          terminalSpeechFailure: true,
+          speechError: event.error,
+        });
+      } else {
+        const expectedAbort =
+          event.error === "aborted" &&
+          (speechPaused || tearingDown || !recognitionRestartAllowed);
+        if (!expectedAbort) recognitionTransientFailures += 1;
+        setSensor(elements.voiceStatus, `voice · ${event.error}`, "warn");
+      }
+    };
+    recognition.onend = () => {
+      recognitionActive = false;
+      if (
+        shouldRestartRecognition({
+          launched,
+          restartAllowed: recognitionRestartAllowed,
+          speechPaused,
+          accessibleMode,
+          simulationMode,
+          tearingDown,
+        })
+      ) {
+        clearRecognitionRestartTimer();
+        const delay = recognitionBackoffMs(recognitionTransientFailures);
+        recognitionRestartTimer = window.setTimeout(() => {
+          recognitionRestartTimer = 0;
+          startRecognition();
+        }, delay);
+      }
+    };
+  }
+  try {
+    recognition.start();
+  } catch {
+    recognitionActive = false;
+  }
+}
+
+function handleVoice(transcript, confidence) {
+  const phrase = normalizeSpeech(transcript);
+  if (!phrase) return;
+  if (recognitionRecoveryOnly) {
+    if (/\brecover\b/.test(phrase)) {
+      setCaption("Restricted voice recovery requested", transcript);
+      recoverSensors({ explicit: true });
+    } else {
+      setCaption("Camera is lost; restricted voice listener accepts only “recover”", transcript);
+    }
+    return;
+  }
+  if (/\bexport\b/.test(phrase)) {
+    if (prepareEvidence()) {
+      setCaption("Local metrics and replay exports are ready", transcript);
+      announce("Local evidence is ready.");
+    } else {
+      setCaption("Evidence remains locked until the route is complete", transcript);
+    }
+    return;
+  }
+  if (/\brecover\b/.test(phrase) && engine.state.frozen) {
+    setCaption("Recovery requested", transcript);
+    recoverSensors({ explicit: true });
+    return;
+  }
+  if (/\bresume\b/.test(phrase)) {
+    const result = engine.voice(phrase, { confidence, at: elapsed() });
+    const remaining = engine.snapshot().freezeCauses;
+    setCaption(
+      result.accepted
+        ? remaining.length
+          ? `User stop cleared; still frozen by ${remaining.join(" + ")}`
+          : "Route resumed at the same committed depth"
+        : "No user stop is active",
+      transcript,
+    );
+    if (result.accepted && remaining.length === 0) announce("Route resumed.");
+    render();
+    return;
+  }
+
+  const before = engine.snapshot();
+  const result = engine.voice(phrase, { confidence, at: elapsed() });
+  const after = engine.snapshot();
+  if (result.command === "intent" && result.accepted) {
+    const selected = engine.currentLayer().options[after.preview.index];
+    setCaption(`Previewing ${selected.label}; say “choose” to confirm`, transcript);
+  } else if (result.command === "choose" && result.accepted) {
+    const committed = after.selections.at(-1);
+    setCaption(`${committed.label} entered; prior shells remain visible`, transcript);
+    announce(completionAnnouncement(after, committed.label));
+  } else if (result.command === "undo" && result.accepted) {
+    setCaption("Last committed tunnel undone", transcript);
+    announce("Last tunnel undone.");
+  } else if (result.command === "cancel") {
+    setCaption("Pending preview canceled; committed shells unchanged", transcript);
+  } else if (result.command === "stop") {
+    setCaption("Stopped; state frozen. The voice listener remains only for “resume”.", transcript);
+    announce("Stopped. Say resume when ready.");
+  } else if (!result.accepted) {
+    const reason = before.frozen ? "input is frozen" : "repeat the intent or build confidence";
+    setCaption(`Not committed: ${reason}`, transcript);
+  }
+  render();
+}
+
+function prepareEvidence(snapshot = engine?.snapshot()) {
+  if (!engine) return;
+  const presentation = renderEvidenceState(snapshot);
+  if (!presentation.visible) return false;
+  clearEvidenceUrls();
+  const pairs = [
+    [elements.metricsDownload, engine.exportMetrics()],
+    [elements.replayDownload, engine.exportReplay()],
+  ];
+  pairs.forEach(([anchor, payload]) => {
+    const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    evidenceUrls.push(url);
+    anchor.href = url;
+  });
+  elements.evidence.dataset.visible = "true";
+  return true;
+}
+
+function useFallback(action) {
+  if (!engine || !launched || simulationMode) return;
+  engine.noteFallback(elapsed());
+  const snapshot = engine.snapshot();
+  if (action === "recover") {
+    recoverSensors({ explicit: true });
+    return;
+  }
+  if (snapshot.frozen) {
+    setCaption("State is frozen; press R to recover");
+    return;
+  }
+  if (action === "left") engine.rotate(-1, { source: "switch", confidence: 1, at: elapsed() });
+  if (action === "right") engine.rotate(1, { source: "switch", confidence: 1, at: elapsed() });
+  if (action === "choose") engine.choose({ source: "switch", at: elapsed() });
+  if (action === "undo") engine.undo({ source: "switch", at: elapsed() });
+  if (action === "cancel") engine.cancel({ source: "switch", at: elapsed() });
+  if (action === "export" && !prepareEvidence()) {
+    setCaption("Accessibility fallback: evidence remains locked until completion");
+    render();
+    return;
+  }
+  setCaption(`Accessibility fallback: ${action}`);
+  render();
+}
+
+async function runSimulation() {
+  setSensor(elements.cameraStatus, "camera · simulated", "ok");
+  setSensor(elements.voiceStatus, "voice · scripted", "ok");
+  setSensor(elements.neutralStatus, "neutral · deterministic", "ok");
+  let priorAt = 0;
+  for (const action of DETERMINISTIC_ACTIONS) {
+    await wait(Math.max(120, (action.at - priorAt) * 0.18));
+    priorAt = action.at;
+    applyDeterministicAction(engine, action);
+    if (action.type === "sensor-lost") {
+      setSensor(elements.cameraStatus, "camera · lost", "bad");
+      setSensor(elements.neutralStatus, "neutral · canceled", "bad");
+    }
+    if (action.type === "sensor-stopped") {
+      setSensor(
+        action.sensor === "camera" ? elements.cameraStatus : elements.voiceStatus,
+        `${action.sensor} · stopped`,
+        "warn",
+      );
+    }
+    if (action.type === "sensor-started") {
+      setSensor(
+        action.sensor === "camera" ? elements.cameraStatus : elements.voiceStatus,
+        `${action.sensor} · restarted`,
+        "ok",
+      );
+    }
+    if (action.type === "sensor-recovered") {
+      setSensor(
+        action.sensor === "camera" ? elements.cameraStatus : elements.voiceStatus,
+        `${action.sensor} · recovered`,
+        "ok",
+      );
+      setSensor(elements.neutralStatus, "neutral · deterministic", "ok");
+    }
+    setCaption(action.caption, action.text ?? "");
+    render();
+  }
+  const metrics = engine.exportMetrics();
+  setCaption(
+    `Exact task complete · ${metrics.falseCommits} intentional wrong commit · ${metrics.undos} undo · ${metrics.sensorRecoveryMs}ms recovery`,
+  );
+  prepareEvidence();
+}
+
+async function launch() {
+  if (launched) return;
+  launched = true;
+  launchEpoch = performance.now();
+  elements.gateway.hidden = true;
+  elements.tunnelStage.focus({ preventScroll: true });
+  if (simulationMode) {
+    engine = new TunnelEngine({
+      clock: () => 0,
+      sessionId: "gesture-tunnel-deterministic-v1",
+    });
+    render();
+    await runSimulation();
+    return;
+  }
+
+  engine = new TunnelEngine({
+    clock: elapsed,
+    sessionId: accessibleMode ? "gesture-tunnel-accessible" : "gesture-tunnel-live",
+  });
+  engine.start(0);
+  if (accessibleMode) {
+    engine.noteFallback(0);
+    setSensor(elements.cameraStatus, "camera · disabled", "warn");
+    setSensor(elements.voiceStatus, "voice · captions", "warn");
+    setSensor(elements.neutralStatus, "neutral · switch", "ok");
+    setCaption("Accessible path ready; use arrows and Enter");
+    render();
+    announce("Gesture Tunnel accessible path ready.");
+    return;
+  }
+
+  render();
+  const sensorsReady = await startSensors();
+  if (sensorsReady) announce("Gesture Tunnel ready. Say route.");
+}
+
+elements.launch.addEventListener("click", launch, { once: true });
+window.addEventListener("keydown", (event) => {
+  const nativeInteractive = Boolean(
+    event.target?.closest?.("button, a[href], input, select, textarea, [contenteditable]"),
+  );
+  const targetInTunnel = Boolean(
+    event.target?.nodeType && elements.tunnelStage.contains(event.target),
+  );
+  if (
+    !shouldHandleTunnelShortcut({
+      launched,
+      simulationMode,
+      targetInTunnel,
+      nativeInteractive,
+      key: event.key,
+    })
+  ) {
+    return;
+  }
+  const actions = {
+    ArrowLeft: "left",
+    ArrowRight: "right",
+    ArrowUp: "undo",
+    Escape: "cancel",
+    Enter: "choose",
+    " ": "choose",
+    u: "undo",
+    U: "undo",
+    r: "recover",
+    R: "recover",
+    e: "export",
+    E: "export",
+  };
+  const action = actions[event.key];
+  event.preventDefault();
+  useFallback(action);
+});
+
+if (navigator.mediaDevices?.addEventListener) {
+  navigator.mediaDevices.addEventListener("devicechange", () => {
+    if (launched && engine?.state.frozen && !accessibleMode && !simulationMode) {
+      recoverSensors({ explicit: false });
+    }
+  });
+}
+
+document.addEventListener("visibilitychange", () => {
+  const liveSensorMode = launched && !accessibleMode && !simulationMode;
+  if (document.visibilityState === "hidden") {
+    if (!liveSensorMode) return;
+    tracker?.suspendForVisibility();
+    cancelPendingForVisibility("visibility-hidden");
+    setSensor(elements.neutralStatus, "camera · suspended", "warn");
+    setCaption("Camera liveness suspended while the document is hidden");
+    render();
+    return;
+  }
+  if (!liveSensorMode) return;
+  const foregroundAt = performance.now();
+  tracker?.resumeFromVisibility(foregroundAt);
+  cancelPendingForVisibility("visibility-foreground");
+  setSensor(elements.neutralStatus, "camera · awaiting fresh frame", "warn");
+  if (engine?.state.frozen) {
+    recoverSensors({ explicit: false });
+  } else {
+    setCaption("Foreground restored; waiting for a fresh camera frame");
+  }
+  render();
+});
+
+frameWatchdog = window.setInterval(() => {
+  if (
+    launched &&
+    tracker?.running &&
+    document.visibilityState === "visible" &&
+    tracker.shouldDeclareCameraLoss(performance.now())
+  ) {
+    handleSensorLoss("camera");
+  }
+}, 1000);
+
+window.addEventListener("pageshow", (event) => {
+  if (shouldReloadAfterPageShow(event)) window.location.reload();
+});
+
+window.addEventListener(
+  "pagehide",
+  () => {
+    tearingDown = true;
+    launched = false;
+    recognitionRestartAllowed = false;
+    recognitionRecoveryRequired = true;
+    recognitionRecoveryOnly = false;
+    recognitionTerminalFailure = true;
+    clearRecognitionRestartTimer();
+    window.clearInterval(frameWatchdog);
+    recognition?.abort();
+    recognitionActive = false;
+    stopMedia();
+    clearEvidenceUrls();
+  },
+  { once: true },
+);
+
+configureGateway();
+render();
+    </script>
+  </body>
+</html>
