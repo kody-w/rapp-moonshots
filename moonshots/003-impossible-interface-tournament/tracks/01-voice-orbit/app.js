@@ -1,0 +1,942 @@
+(function runVoiceOrbit() {
+  "use strict";
+
+  const Core = window.VoiceOrbitCore;
+  if (!Core) {
+    throw new Error("Voice Orbit core failed to load.");
+  }
+
+  const machine = new Core.VoiceOrbitMachine();
+  const elements = {
+    launch: document.getElementById("launch-screen"),
+    workspace: document.getElementById("workspace"),
+    startLive: document.getElementById("start-live"),
+    startSimulation: document.getElementById("start-simulation"),
+    cameraIndicator: document.getElementById("camera-indicator"),
+    microphoneIndicator: document.getElementById("microphone-indicator"),
+    estimatorIndicator: document.getElementById("estimator-indicator"),
+    modeLabel: document.getElementById("mode-label"),
+    sessionTime: document.getElementById("session-time"),
+    stageLabel: document.getElementById("stage-label"),
+    stageChip: document.getElementById("stage-chip"),
+    manifest: document.getElementById("manifest"),
+    lastHeard: document.getElementById("last-heard"),
+    orbitPrompt: document.getElementById("orbit-prompt"),
+    interactionMode: document.getElementById("interaction-mode"),
+    orbitShell: document.getElementById("orbit-shell"),
+    petalLayer: document.getElementById("petal-layer"),
+    aimVector: document.getElementById("aim-vector"),
+    centerOrb: document.getElementById("center-orb"),
+    dwellRing: document.getElementById("dwell-ring"),
+    orbState: document.getElementById("orb-state"),
+    cameraPreview: document.getElementById("camera-preview"),
+    canvas: document.getElementById("analysis-canvas"),
+    estimatorLabel: document.getElementById("estimator-label"),
+    metricTime: document.getElementById("metric-time"),
+    metricErrors: document.getElementById("metric-errors"),
+    metricRepairs: document.getElementById("metric-repairs"),
+    metricDwell: document.getElementById("metric-dwell"),
+    metricGestures: document.getElementById("metric-gestures"),
+    metricLoss: document.getElementById("metric-loss"),
+    exportJson: document.getElementById("export-json"),
+    fallbackConfirm: document.getElementById("fallback-confirm"),
+    fallbackCancel: document.getElementById("fallback-cancel"),
+    fallbackUndo: document.getElementById("fallback-undo"),
+    fallbackStop: document.getElementById("fallback-stop"),
+    freezeBanner: document.getElementById("freeze-banner"),
+    freezeReason: document.getElementById("freeze-reason"),
+    announcer: document.getElementById("announcer"),
+  };
+
+  const runtime = {
+    started: false,
+    simulation: false,
+    stream: null,
+    recognition: null,
+    recognitionWanted: false,
+    recognitionRestart: null,
+    detector: null,
+    detectorBusy: false,
+    estimatorKind: "waiting",
+    analysisFrame: null,
+    lastAnalysisAt: 0,
+    lastFaceAt: 0,
+    baseline: null,
+    baselineSamples: 0,
+    previousFrame: null,
+    lastMotionAt: 0,
+    stableIndex: null,
+    stableSince: 0,
+    lastDwellSample: 0,
+    dwellProgress: 0,
+    nodPhase: "ready",
+    nodPhaseAt: 0,
+    gestureCooldownUntil: 0,
+    petalSignature: "",
+    lastExportRequest: 0,
+    simulationTimers: [],
+    lastRenderSecond: -1,
+  };
+
+  const stageNames = {
+    intent: "Awaiting intent",
+    collect: "Building route",
+    review: "Reviewing draft",
+    committed: "Route confirmed",
+    complete: "Mission complete",
+  };
+
+  function announce(message) {
+    elements.announcer.textContent = "";
+    window.setTimeout(() => {
+      elements.announcer.textContent = message;
+    }, 20);
+  }
+
+  function showWorkspace(mode) {
+    runtime.started = true;
+    runtime.simulation = mode === "simulation";
+    elements.launch.hidden = true;
+    elements.workspace.hidden = false;
+    document.body.classList.toggle("simulation-mode", runtime.simulation);
+    elements.orbitPrompt.setAttribute("tabindex", "-1");
+    elements.orbitPrompt.focus({ preventScroll: true });
+  }
+
+  function updateIndicator(element, status, override) {
+    const displayState = ["head-fallback", "motion-fallback"].includes(status) ? "active" : status;
+    element.dataset.state = displayState;
+    const text = element.querySelector("strong");
+    text.textContent = (override || status || "off").replace(/-/g, " ").toUpperCase();
+  }
+
+  function elapsedMilliseconds() {
+    if (machine.state.startedAt === null) {
+      return 0;
+    }
+    if (machine.state.status === "stopped") {
+      return machine.state.metrics.elapsedMs;
+    }
+    const end = machine.state.completedAt || Date.now();
+    return Math.max(0, end - machine.state.startedAt);
+  }
+
+  function formatClock(milliseconds) {
+    const totalTenths = Math.floor(milliseconds / 100);
+    const minutes = Math.floor(totalTenths / 600);
+    const seconds = Math.floor((totalTenths % 600) / 10);
+    const tenths = totalTenths % 10;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${tenths}`;
+  }
+
+  function fieldValue(field, value) {
+    const target = elements.manifest.querySelector(`[data-field="${field}"]`);
+    target.textContent = value === null || value === undefined || value === "" ? "—" : String(value);
+    target.classList.toggle("is-set", value !== null && value !== undefined && value !== "");
+  }
+
+  function petalRadius() {
+    return Math.max(122, Math.min(252, elements.orbitShell.clientWidth * 0.36));
+  }
+
+  function positionPetals() {
+    const petals = Array.from(elements.petalLayer.querySelectorAll(".petal"));
+    const count = petals.length || 1;
+    const radius = petalRadius();
+    petals.forEach((petal, index) => {
+      const angle = -Math.PI / 2 + (index * Math.PI * 2) / count;
+      petal.style.setProperty("--petal-x", `${Math.cos(angle) * radius}px`);
+      petal.style.setProperty("--petal-y", `${Math.sin(angle) * radius}px`);
+    });
+    updateAimVector();
+  }
+
+  function rebuildPetals() {
+    const signature = machine.state.options
+      .map((option) => `${option.id}:${option.label}:${option.hint || ""}`)
+      .join("|");
+    if (signature === runtime.petalSignature) {
+      return;
+    }
+    runtime.petalSignature = signature;
+    elements.petalLayer.replaceChildren();
+
+    machine.state.options.forEach((option, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "petal";
+      button.setAttribute("role", "option");
+      button.setAttribute("aria-selected", "false");
+      button.dataset.optionId = option.id;
+
+      const number = document.createElement("span");
+      number.className = "petal-index";
+      number.textContent = String(index + 1).padStart(2, "0");
+
+      const copy = document.createElement("span");
+      copy.className = "petal-copy";
+      const label = document.createElement("strong");
+      label.textContent = option.label;
+      const hint = document.createElement("small");
+      hint.textContent = option.hint || "prediction";
+      copy.append(label, hint);
+      button.append(number, copy);
+
+      button.addEventListener("click", () => {
+        dispatch({ type: "HIGHLIGHT", index, source: "touch-aim" });
+        announce(`${option.label} highlighted. Use Confirm highlighted to activate.`);
+      });
+      elements.petalLayer.append(button);
+    });
+
+    window.requestAnimationFrame(positionPetals);
+  }
+
+  function updateAimVector() {
+    const index = machine.state.highlight;
+    const count = machine.state.options.length;
+    const petals = Array.from(elements.petalLayer.querySelectorAll(".petal"));
+    petals.forEach((petal, petalIndex) => {
+      petal.setAttribute("aria-selected", String(index === petalIndex));
+    });
+
+    if (index === null || !count) {
+      elements.aimVector.style.setProperty("--aim-length", "0px");
+      elements.centerOrb.dataset.state = machine.state.frozen ? "frozen" : "rest";
+      elements.orbState.textContent = machine.state.frozen ? "FROZEN" : "RELAXED";
+      elements.dwellRing.style.setProperty("--dwell-progress", "0deg");
+      return;
+    }
+
+    const angle = -90 + (index * 360) / count;
+    elements.aimVector.style.setProperty("--aim-angle", `${angle}deg`);
+    elements.aimVector.style.setProperty("--aim-length", `${Math.max(70, petalRadius() - 78)}px`);
+    elements.centerOrb.dataset.state = machine.state.frozen ? "frozen" : "aiming";
+    elements.orbState.textContent = machine.state.frozen ? "FROZEN" : "HIGHLIGHTING";
+    elements.dwellRing.style.setProperty(
+      "--dwell-progress",
+      `${Math.round(runtime.dwellProgress * 360)}deg`,
+    );
+  }
+
+  function render() {
+    const state = machine.state;
+    const task = state.task;
+    rebuildPetals();
+    updateAimVector();
+
+    elements.stageChip.textContent = state.stage.toUpperCase();
+    elements.stageLabel.textContent = stageNames[state.stage] || state.stage;
+    elements.orbitPrompt.textContent = state.prompt;
+    elements.modeLabel.textContent = state.mode
+      ? `${state.mode.toUpperCase()} · ${state.status.toUpperCase()}`
+      : "NOT STARTED";
+
+    fieldValue("action", task.action);
+    fieldValue(
+      "payload",
+      task.count && task.color ? `${task.color.toUpperCase()} × ${task.count}` : task.count || task.color,
+    );
+    fieldValue("time", task.time);
+    fieldValue(
+      "fragile",
+      task.fragile === true ? "FRAGILE" : task.fragile === false ? "STANDARD" : null,
+    );
+    fieldValue("destination", task.destination);
+    fieldValue("gate", task.gate);
+
+    updateIndicator(elements.cameraIndicator, state.sensors.camera);
+    updateIndicator(elements.microphoneIndicator, state.sensors.microphone);
+    updateIndicator(
+      elements.estimatorIndicator,
+      state.sensors.estimator,
+      state.sensors.estimator === "head-fallback"
+        ? "head"
+        : state.sensors.estimator === "motion-fallback"
+          ? "motion"
+          : null,
+    );
+
+    const metrics = state.metrics;
+    elements.metricTime.textContent = `${(elapsedMilliseconds() / 1000).toFixed(1)}s`;
+    elements.metricErrors.textContent = String(metrics.errors);
+    elements.metricRepairs.textContent = String(metrics.voiceRepairs);
+    elements.metricDwell.textContent = `${(metrics.dwellMs / 1000).toFixed(1)}s`;
+    elements.metricGestures.textContent = String(metrics.gesturesSeen);
+    elements.metricLoss.textContent = String(metrics.sensorLosses);
+
+    elements.freezeBanner.hidden = !state.frozen || state.status === "stopped";
+    elements.freezeReason.textContent = state.freezeReason
+      ? `${state.freezeReason}. No selection can execute; stop, cancel, and undo remain available.`
+      : "A required sensor was lost. No selection can execute.";
+    document.body.classList.toggle("session-complete", state.stage === "complete");
+    elements.fallbackConfirm.disabled = state.frozen || state.highlight === null;
+    elements.exportJson.disabled = state.status === "idle";
+  }
+
+  function downloadRecord() {
+    const record = machine.exportRecord();
+    const contents = JSON.stringify(record, null, 2);
+    const blob = new Blob([contents], { type: "application/json" });
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = `voice-orbit-${record.mode || "session"}-${Date.now()}.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    announce("Local instrumentation JSON exported.");
+  }
+
+  function stopRuntimeSensors() {
+    runtime.recognitionWanted = false;
+    if (runtime.recognitionRestart) {
+      window.clearTimeout(runtime.recognitionRestart);
+      runtime.recognitionRestart = null;
+    }
+    if (runtime.recognition) {
+      runtime.recognition.onend = null;
+      try {
+        runtime.recognition.stop();
+      } catch (error) {
+        void error;
+      }
+      runtime.recognition = null;
+    }
+    if (runtime.analysisFrame !== null) {
+      window.cancelAnimationFrame(runtime.analysisFrame);
+      runtime.analysisFrame = null;
+    }
+    runtime.simulationTimers.forEach((timer) => window.clearTimeout(timer));
+    runtime.simulationTimers = [];
+    if (runtime.stream) {
+      runtime.stream.getTracks().forEach((track) => {
+        track.onended = null;
+        track.onmute = null;
+        track.onunmute = null;
+        track.stop();
+      });
+      runtime.stream = null;
+    }
+    elements.cameraPreview.srcObject = null;
+    runtime.previousFrame = null;
+    runtime.detector = null;
+    runtime.baseline = null;
+    runtime.stableIndex = null;
+    runtime.dwellProgress = 0;
+  }
+
+  function dispatch(action) {
+    const previousExport = machine.state.exportRequested;
+    const previousStatus = machine.state.status;
+    machine.dispatch(action);
+    render();
+
+    if (machine.state.exportRequested > previousExport) {
+      downloadRecord();
+    }
+    if (previousStatus !== "stopped" && machine.state.status === "stopped") {
+      stopRuntimeSensors();
+      elements.lastHeard.textContent = "Sensors stopped. Session data remains only in memory.";
+      announce("Camera and microphone stopped.");
+    }
+    return machine.state;
+  }
+
+  function setSensor(sensor, status, reason) {
+    if (machine.state.sensors[sensor] === status) {
+      return;
+    }
+    dispatch({ type: "SENSOR", sensor, status, reason });
+  }
+
+  function resetDwell() {
+    runtime.stableIndex = null;
+    runtime.stableSince = 0;
+    runtime.lastDwellSample = 0;
+    runtime.dwellProgress = 0;
+    elements.dwellRing.style.setProperty("--dwell-progress", "0deg");
+  }
+
+  function updateDirectionalAim(dx, dy, source, now) {
+    if (machine.state.frozen || machine.state.status !== "active") {
+      resetDwell();
+      return;
+    }
+    const magnitude = Math.hypot(dx, dy);
+    if (magnitude < 0.15) {
+      if (machine.state.highlight !== null || runtime.stableIndex !== null) {
+        dispatch({ type: "HIGHLIGHT", index: null, source: "center" });
+      }
+      resetDwell();
+      return;
+    }
+
+    const count = machine.state.options.length;
+    if (!count) {
+      return;
+    }
+    const angle = Math.atan2(dy, dx);
+    const step = (Math.PI * 2) / count;
+    const index = ((Math.round((angle + Math.PI / 2) / step) % count) + count) % count;
+
+    if (runtime.stableIndex !== index) {
+      runtime.stableIndex = index;
+      runtime.stableSince = now;
+      runtime.lastDwellSample = now;
+      runtime.dwellProgress = 0;
+      dispatch({ type: "HIGHLIGHT", index, source });
+      return;
+    }
+
+    const dwellElapsed = Math.max(0, now - runtime.stableSince);
+    runtime.dwellProgress = Math.min(1, dwellElapsed / 1400);
+    if (now - runtime.lastDwellSample >= 250) {
+      const duration = now - runtime.lastDwellSample;
+      runtime.lastDwellSample = now;
+      dispatch({ type: "DWELL", duration });
+    } else {
+      updateAimVector();
+    }
+  }
+
+  function detectNod(verticalDisplacement, now) {
+    if (
+      now < runtime.gestureCooldownUntil ||
+      machine.state.highlight === null ||
+      machine.state.frozen
+    ) {
+      return false;
+    }
+    if (runtime.nodPhase === "ready" && verticalDisplacement > 0.22) {
+      runtime.nodPhase = "down";
+      runtime.nodPhaseAt = now;
+      return true;
+    }
+    if (runtime.nodPhase === "down") {
+      if (now - runtime.nodPhaseAt > 1200) {
+        runtime.nodPhase = "ready";
+        return false;
+      } else if (Math.abs(verticalDisplacement) < 0.07) {
+        runtime.nodPhase = "ready";
+        runtime.gestureCooldownUntil = now + 2400;
+        dispatch({ type: "GESTURE", gesture: "nod", source: "camera-motion" });
+        announce("Deliberate nod confirmed the highlighted choice.");
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function landmarkCenter(face) {
+    const landmarks = Array.isArray(face.landmarks) ? face.landmarks : [];
+    const eyePoints = [];
+    landmarks.forEach((landmark) => {
+      if (!String(landmark.type || "").toLowerCase().includes("eye")) {
+        return;
+      }
+      const locations = Array.isArray(landmark.locations)
+        ? landmark.locations
+        : landmark.location
+          ? [landmark.location]
+          : [];
+      locations.forEach((point) => {
+        if (Number.isFinite(point.x) && Number.isFinite(point.y)) {
+          eyePoints.push(point);
+        }
+      });
+    });
+    if (!eyePoints.length) {
+      return null;
+    }
+    return {
+      x: eyePoints.reduce((sum, point) => sum + point.x, 0) / eyePoints.length,
+      y: eyePoints.reduce((sum, point) => sum + point.y, 0) / eyePoints.length,
+    };
+  }
+
+  function processFace(face, now) {
+    const box = face.boundingBox;
+    if (!box || !elements.cameraPreview.videoWidth || !elements.cameraPreview.videoHeight) {
+      return;
+    }
+
+    runtime.lastFaceAt = now;
+    const eyes = landmarkCenter(face);
+    const sourcePoint = eyes || {
+      x: box.x + box.width / 2,
+      y: box.y + box.height / 2,
+    };
+    const x = 1 - sourcePoint.x / elements.cameraPreview.videoWidth;
+    const y = sourcePoint.y / elements.cameraPreview.videoHeight;
+    const estimatorStatus = eyes ? "active" : "head-fallback";
+    runtime.estimatorKind = eyes ? "face-landmark" : "head-position";
+    elements.estimatorLabel.textContent = eyes ? "LANDMARK PROXY" : "HEAD POSITION";
+    elements.interactionMode.textContent = eyes
+      ? "COARSE LANDMARK GAZE PROXY"
+      : "COARSE HEAD-POSITION FALLBACK";
+    setSensor("estimator", estimatorStatus, eyes ? "landmarks available" : "bounding box only");
+
+    if (!runtime.baseline || runtime.baselineSamples < 16) {
+      const samples = runtime.baselineSamples;
+      runtime.baseline = {
+        x: runtime.baseline ? (runtime.baseline.x * samples + x) / (samples + 1) : x,
+        y: runtime.baseline ? (runtime.baseline.y * samples + y) / (samples + 1) : y,
+      };
+      runtime.baselineSamples += 1;
+      elements.estimatorLabel.textContent = `CALIBRATING ${runtime.baselineSamples}/16`;
+      if (machine.state.highlight !== null) {
+        dispatch({ type: "HIGHLIGHT", index: null, source: "center" });
+      }
+      return;
+    }
+
+    const dx = (x - runtime.baseline.x) * 3.4;
+    const dy = (y - runtime.baseline.y) * 3.4;
+    const magnitude = Math.hypot(dx, dy);
+    if (magnitude < 0.07) {
+      runtime.baseline.x = runtime.baseline.x * 0.996 + x * 0.004;
+      runtime.baseline.y = runtime.baseline.y * 0.996 + y * 0.004;
+    }
+    const gestureInProgress = detectNod(dy, now);
+    if (!gestureInProgress) {
+      updateDirectionalAim(dx, dy, eyes ? "face-landmark-gaze" : "head-position-fallback", now);
+    }
+  }
+
+  async function analyzeFace(now) {
+    if (runtime.detectorBusy || !runtime.detector) {
+      return;
+    }
+    runtime.detectorBusy = true;
+    try {
+      const faces = await runtime.detector.detect(elements.cameraPreview);
+      if (faces.length) {
+        processFace(faces[0], now);
+      } else if (now - runtime.lastFaceAt > 1100) {
+        if (machine.state.highlight !== null) {
+          dispatch({ type: "HIGHLIGHT", index: null, source: "center" });
+        }
+        runtime.baseline = null;
+        runtime.baselineSamples = 0;
+        runtime.nodPhase = "ready";
+        setSensor("estimator", "lost", "face not visible");
+        elements.estimatorLabel.textContent = "FACE LOST";
+      }
+    } catch (error) {
+      setSensor("estimator", "error", "FaceDetector failed");
+      dispatch({ type: "ERROR", area: "estimator", code: error.name || "face-detector" });
+    } finally {
+      runtime.detectorBusy = false;
+    }
+  }
+
+  function analyzeMotion(now) {
+    const context = elements.canvas.getContext("2d", { willReadFrequently: true });
+    context.drawImage(elements.cameraPreview, 0, 0, elements.canvas.width, elements.canvas.height);
+    const pixels = context.getImageData(0, 0, elements.canvas.width, elements.canvas.height).data;
+    const luminance = new Uint8Array(elements.canvas.width * elements.canvas.height);
+    let weightedX = 0;
+    let weightedY = 0;
+    let totalDifference = 0;
+
+    for (let index = 0; index < luminance.length; index += 1) {
+      const offset = index * 4;
+      const value = Math.round(
+        pixels[offset] * 0.299 + pixels[offset + 1] * 0.587 + pixels[offset + 2] * 0.114,
+      );
+      luminance[index] = value;
+      if (runtime.previousFrame) {
+        const difference = Math.abs(value - runtime.previousFrame[index]);
+        if (difference > 18) {
+          const x = index % elements.canvas.width;
+          const y = Math.floor(index / elements.canvas.width);
+          weightedX += x * difference;
+          weightedY += y * difference;
+          totalDifference += difference;
+        }
+      }
+    }
+
+    runtime.previousFrame = luminance;
+    setSensor("estimator", "motion-fallback", "FaceDetector unavailable");
+    runtime.estimatorKind = "frame-motion";
+    elements.estimatorLabel.textContent = "MOTION FALLBACK";
+    elements.interactionMode.textContent = "COARSE FRAME-MOTION FALLBACK · NOT EYE TRACKING";
+
+    if (totalDifference > 1500) {
+      const centerX = weightedX / totalDifference;
+      const centerY = weightedY / totalDifference;
+      const dx = ((centerX / (elements.canvas.width - 1)) * 2 - 1) * -1;
+      const dy = (centerY / (elements.canvas.height - 1)) * 2 - 1;
+      runtime.lastMotionAt = now;
+      const gestureInProgress = detectNod(dy, now);
+      if (!gestureInProgress) {
+        updateDirectionalAim(dx, dy, "frame-motion-fallback", now);
+      }
+    } else if (now - runtime.lastMotionAt > 420 && machine.state.highlightSource === "frame-motion-fallback") {
+      dispatch({ type: "HIGHLIGHT", index: null, source: "center" });
+      resetDwell();
+    }
+  }
+
+  function analysisLoop(timestamp) {
+    if (!runtime.stream || machine.state.status === "stopped") {
+      return;
+    }
+    const now = Date.now();
+    if (elements.cameraPreview.readyState >= 2 && timestamp - runtime.lastAnalysisAt > 110) {
+      runtime.lastAnalysisAt = timestamp;
+      if (runtime.detector) {
+        void analyzeFace(now);
+      } else {
+        analyzeMotion(now);
+      }
+    }
+    runtime.analysisFrame = window.requestAnimationFrame(analysisLoop);
+  }
+
+  function startEstimator() {
+    runtime.lastFaceAt = Date.now();
+    runtime.baseline = null;
+    runtime.baselineSamples = 0;
+    runtime.previousFrame = null;
+    if ("FaceDetector" in window) {
+      try {
+        runtime.detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+        runtime.estimatorKind = "face-detector";
+        elements.estimatorLabel.textContent = "CALIBRATING FACE";
+      } catch (error) {
+        runtime.detector = null;
+        void error;
+      }
+    }
+    if (!runtime.detector) {
+      elements.estimatorLabel.textContent = "MOTION FALLBACK";
+      elements.interactionMode.textContent = "COARSE FRAME-MOTION FALLBACK · NOT EYE TRACKING";
+    }
+    runtime.analysisFrame = window.requestAnimationFrame(analysisLoop);
+  }
+
+  function speechErrorCode(event) {
+    return event && event.error ? event.error : "unknown";
+  }
+
+  function startSpeechRecognition() {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) {
+      setSensor("speech", "unavailable", "Web Speech API not supported");
+      elements.lastHeard.textContent =
+        "Web Speech API unavailable. Use camera gesture, keyboard, or touch fallback.";
+      return;
+    }
+
+    const recognition = new Recognition();
+    runtime.recognition = recognition;
+    runtime.recognitionWanted = true;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = document.documentElement.lang || "en-US";
+
+    recognition.onstart = () => {
+      setSensor("speech", "active", "recognizer listening");
+      elements.lastHeard.textContent = "Listening…";
+    };
+    recognition.onresult = (event) => {
+      let interim = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const text = event.results[index][0].transcript.trim();
+        if (event.results[index].isFinal) {
+          elements.lastHeard.textContent = `Heard: “${text}”`;
+          dispatch({ type: "VOICE", text, source: "speech" });
+          if (machine.state.status === "stopped") {
+            return;
+          }
+        } else {
+          interim += `${text} `;
+        }
+      }
+      if (interim.trim()) {
+        elements.lastHeard.textContent = `Hearing: “${interim.trim()}”`;
+      }
+    };
+    recognition.onerror = (event) => {
+      const code = speechErrorCode(event);
+      setSensor("speech", "error", code);
+      dispatch({ type: "ERROR", area: "speech", code });
+      elements.lastHeard.textContent = `Speech service error: ${code}. Camera gesture remains available.`;
+      if (code === "audio-capture" || code === "not-allowed" || code === "service-not-allowed") {
+        runtime.recognitionWanted = false;
+        setSensor("microphone", "lost", code);
+      }
+    };
+    recognition.onend = () => {
+      if (!runtime.recognitionWanted || machine.state.status === "stopped") {
+        return;
+      }
+      runtime.recognitionRestart = window.setTimeout(() => {
+        try {
+          recognition.start();
+        } catch (error) {
+          dispatch({ type: "ERROR", area: "speech", code: error.name || "restart" });
+        }
+      }, 350);
+    };
+
+    try {
+      recognition.start();
+    } catch (error) {
+      setSensor("speech", "error", error.name || "start");
+      dispatch({ type: "ERROR", area: "speech", code: error.name || "start" });
+    }
+  }
+
+  function bindTrackSafety(track, sensor) {
+    track.onended = () => {
+      setSensor(sensor, "lost", "media track ended");
+      announce(`${sensor} lost. Inputs frozen.`);
+    };
+    track.onmute = () => {
+      setSensor(sensor, "lost", "media track muted");
+    };
+    track.onunmute = () => {
+      setSensor(sensor, "active", "media track resumed");
+    };
+  }
+
+  async function startLive() {
+    if (runtime.started) {
+      return;
+    }
+    showWorkspace("live");
+    dispatch({ type: "START", mode: "live" });
+    announce("Requesting local camera and microphone permission.");
+    elements.startLive.disabled = true;
+    elements.startSimulation.disabled = true;
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setSensor("camera", "unavailable", "getUserMedia unsupported");
+      setSensor("microphone", "unavailable", "getUserMedia unsupported");
+      elements.lastHeard.textContent = "This browser does not expose getUserMedia.";
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "user",
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 15, max: 24 },
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      if (machine.state.status === "stopped") {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      runtime.stream = stream;
+      elements.cameraPreview.srcObject = stream;
+      const videoTrack = stream.getVideoTracks()[0];
+      const audioTrack = stream.getAudioTracks()[0];
+
+      if (videoTrack) {
+        bindTrackSafety(videoTrack, "camera");
+        setSensor("camera", "active", "local media track");
+      } else {
+        setSensor("camera", "lost", "no video track");
+      }
+      if (audioTrack) {
+        bindTrackSafety(audioTrack, "microphone");
+        setSensor("microphone", "active", "local media track");
+      } else {
+        setSensor("microphone", "lost", "no audio track");
+      }
+
+      try {
+        await elements.cameraPreview.play();
+      } catch (error) {
+        dispatch({
+          type: "ERROR",
+          area: "camera-preview",
+          code: error.name || "autoplay",
+        });
+      }
+      startEstimator();
+      startSpeechRecognition();
+      announce("Sensors active. Speak a broad intent.");
+    } catch (error) {
+      const code = error && error.name ? error.name : "permission-error";
+      setSensor("camera", "denied", code);
+      setSensor("microphone", "denied", code);
+      setSensor("speech", "unavailable", "permission denied");
+      elements.lastHeard.textContent =
+        "Permission was not granted. Inputs are frozen; keyboard stop, cancel, and undo remain safe.";
+      dispatch({ type: "ERROR", area: "permission", code });
+    }
+  }
+
+  function simulationStep(delay, label, action, spokenText) {
+    const timer = window.setTimeout(() => {
+      if (machine.state.status !== "active") {
+        return;
+      }
+      if (spokenText) {
+        elements.lastHeard.textContent = `Simulated voice: “${spokenText}”`;
+      }
+      if (label) {
+        elements.estimatorLabel.textContent = label;
+      }
+      dispatch(action);
+    }, delay);
+    runtime.simulationTimers.push(timer);
+  }
+
+  function startSimulation() {
+    if (runtime.started) {
+      return;
+    }
+    showWorkspace("simulation");
+    dispatch({ type: "START", mode: "simulation" });
+    elements.interactionMode.textContent = "DETERMINISTIC COARSE-GAZE SIMULATION";
+    elements.estimatorLabel.textContent = "SIMULATION READY";
+    elements.lastHeard.textContent = "Simulation will complete the shared mission hands-free.";
+    announce("Deterministic mission simulation started.");
+
+    simulationStep(
+      700,
+      "VOICE INTENT",
+      {
+        type: "VOICE",
+        source: "simulation",
+        text: "Route three cobalt beacons at 14:30, fragile, to ORION-7 through North Gate",
+      },
+      "Route three cobalt beacons at 14:30, fragile, to ORION-7 through North Gate",
+    );
+    simulationStep(1800, "GAZE → CONFIRM", {
+      type: "HIGHLIGHT",
+      index: 0,
+      source: "simulation-gaze",
+    });
+    simulationStep(2700, "DWELL · NO COMMIT", {
+      type: "DWELL",
+      duration: 900,
+      source: "simulation-gaze",
+    });
+    simulationStep(3400, "CENTER REST", {
+      type: "HIGHLIGHT",
+      index: null,
+      source: "center",
+    });
+    simulationStep(4200, "GAZE → CONFIRM", {
+      type: "HIGHLIGHT",
+      index: 0,
+      source: "simulation-gaze",
+    });
+    simulationStep(
+      5000,
+      "VOICE SELECT",
+      { type: "VOICE", source: "simulation", text: "select" },
+      "select",
+    );
+    simulationStep(6100, "GAZE → HOME", {
+      type: "HIGHLIGHT",
+      index: 0,
+      source: "simulation-gaze",
+    });
+    simulationStep(7300, "NOD CONFIRM", {
+      type: "GESTURE",
+      gesture: "nod",
+      source: "simulation-camera",
+    });
+    const finishTimer = window.setTimeout(() => {
+      const record = machine.exportRecord();
+      if (record.complete && record.taskExact) {
+        elements.lastHeard.textContent =
+          "Simulation complete: exact route confirmed and returned home.";
+        announce("Exact tournament mission complete. Voice Orbit returned home.");
+      }
+    }, 7450);
+    runtime.simulationTimers.push(finishTimer);
+  }
+
+  function cycleHighlight(direction) {
+    const count = machine.state.options.length;
+    if (!count) {
+      return;
+    }
+    const current = machine.state.highlight;
+    const next =
+      current === null ? (direction > 0 ? 0 : count - 1) : (current + direction + count) % count;
+    dispatch({ type: "HIGHLIGHT", index: next, source: "keyboard" });
+    announce(`${machine.state.options[next].label} highlighted.`);
+  }
+
+  elements.startLive.addEventListener("click", () => void startLive());
+  elements.startSimulation.addEventListener("click", startSimulation);
+  elements.exportJson.addEventListener("click", () => {
+    dispatch({ type: "VOICE", text: "export", source: "touch" });
+  });
+  elements.fallbackConfirm.addEventListener("click", () => {
+    dispatch({ type: "CONFIRM", source: "touch" });
+  });
+  elements.fallbackCancel.addEventListener("click", () => {
+    dispatch({ type: "CANCEL", source: "touch" });
+  });
+  elements.fallbackUndo.addEventListener("click", () => {
+    dispatch({ type: "UNDO", source: "touch" });
+  });
+  elements.fallbackStop.addEventListener("click", () => {
+    dispatch({ type: "STOP", source: "touch" });
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (!runtime.started) {
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      dispatch({ type: "UNDO", source: "keyboard" });
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      dispatch({ type: "CANCEL", source: "keyboard" });
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      dispatch({ type: "CONFIRM", source: "keyboard" });
+      return;
+    }
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      event.preventDefault();
+      cycleHighlight(1);
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      event.preventDefault();
+      cycleHighlight(-1);
+    }
+  });
+
+  window.addEventListener("resize", positionPetals);
+  window.addEventListener("pagehide", stopRuntimeSensors);
+  window.setInterval(() => {
+    if (!runtime.started) {
+      return;
+    }
+    const elapsed = elapsedMilliseconds();
+    elements.sessionTime.textContent = formatClock(elapsed);
+    elements.metricTime.textContent = `${(elapsed / 1000).toFixed(1)}s`;
+  }, 100);
+
+  render();
+  const query = new URLSearchParams(window.location.search);
+  if (query.get("simulate") === "1") {
+    window.setTimeout(startSimulation, 0);
+  }
+})();
