@@ -1,0 +1,401 @@
+{
+  "schemaVersion": 1,
+  "mode": "deterministic-simulation",
+  "taskId": "cobalt-beacon-route",
+  "exactTaskCompletion": true,
+  "route": {
+    "verb": "route",
+    "beaconCount": 3,
+    "beaconColor": "cobalt",
+    "departure": "14:30",
+    "handling": "fragile",
+    "destination": "ORION-7",
+    "gate": "North Gate",
+    "confirmed": true,
+    "returnedHome": true
+  },
+  "calibration": {
+    "method": "center-plus-four-radial-timed",
+    "durationMs": 3000,
+    "quality": 0.9575,
+    "sampleCounts": {
+      "center": 10,
+      "north": 10,
+      "east": 10,
+      "south": 10,
+      "west": 10
+    }
+  },
+  "timing": {
+    "dwellMs": 900,
+    "candidateSpeechMs": 400,
+    "completionMs": 11100,
+    "totalMs": 14100
+  },
+  "safety": {
+    "falseCommits": 0,
+    "gazeOnlyExecutions": 0,
+    "blockedConfirmations": 0,
+    "dwellCancellations": 1,
+    "confidencePauses": 0,
+    "sensorLosses": 1,
+    "sensorRecoveries": 1
+  },
+  "interaction": {
+    "focusEvents": 8,
+    "candidateAnnouncements": 8,
+    "arms": 7,
+    "explicitConfirmations": 7,
+    "confirmationSources": {
+      "voice": 4,
+      "gesture": 3
+    }
+  },
+  "privacy": {
+    "cameraOnMs": 0,
+    "microphoneOnMs": 0,
+    "rawFramesStored": 0,
+    "rawAudioStored": 0,
+    "networkRequests": 0
+  },
+  "trace": [
+    {
+      "atMs": 3100,
+      "type": "voice-guide",
+      "phrase": "Route",
+      "direction": "north"
+    },
+    {
+      "atMs": 3100,
+      "type": "focus",
+      "direction": "north",
+      "step": "intent"
+    },
+    {
+      "atMs": 3500,
+      "type": "candidate",
+      "direction": "north",
+      "label": "Route"
+    },
+    {
+      "atMs": 4000,
+      "type": "armed",
+      "direction": "north"
+    },
+    {
+      "atMs": 4200,
+      "type": "gaze-dwell-complete",
+      "executionsBeforeConfirm": 0,
+      "armed": true
+    },
+    {
+      "atMs": 4200,
+      "type": "execute",
+      "direction": "north",
+      "source": "voice",
+      "step": "intent",
+      "option": "route"
+    },
+    {
+      "atMs": 4300,
+      "type": "center",
+      "reason": "post-confirm"
+    },
+    {
+      "atMs": 4400,
+      "type": "voice-guide",
+      "phrase": "three",
+      "direction": "east"
+    },
+    {
+      "atMs": 4400,
+      "type": "focus",
+      "direction": "north",
+      "step": "quantity"
+    },
+    {
+      "atMs": 4800,
+      "type": "candidate",
+      "direction": "north",
+      "label": "1 cobalt beacon"
+    },
+    {
+      "atMs": 5000,
+      "type": "cancel",
+      "reason": "center",
+      "direction": "north"
+    },
+    {
+      "atMs": 5000,
+      "type": "center",
+      "reason": "gaze-center"
+    },
+    {
+      "atMs": 5100,
+      "type": "voice-guide",
+      "phrase": "3 cobalt beacons",
+      "direction": "east"
+    },
+    {
+      "atMs": 5100,
+      "type": "focus",
+      "direction": "east",
+      "step": "quantity"
+    },
+    {
+      "atMs": 5500,
+      "type": "candidate",
+      "direction": "east",
+      "label": "3 cobalt beacons"
+    },
+    {
+      "atMs": 6000,
+      "type": "armed",
+      "direction": "east"
+    },
+    {
+      "atMs": 6200,
+      "type": "gaze-dwell-complete",
+      "executionsBeforeConfirm": 1,
+      "armed": true
+    },
+    {
+      "atMs": 6200,
+      "type": "execute",
+      "direction": "east",
+      "source": "gesture",
+      "step": "quantity",
+      "option": "three"
+    },
+    {
+      "atMs": 6300,
+      "type": "center",
+      "reason": "post-confirm"
+    },
+    {
+      "atMs": 6400,
+      "type": "voice-guide",
+      "phrase": "14:30",
+      "direction": "south"
+    },
+    {
+      "atMs": 6400,
+      "type": "focus",
+      "direction": "south",
+      "step": "schedule"
+    },
+    {
+      "atMs": 6800,
+      "type": "candidate",
+      "direction": "south",
+      "label": "14:30"
+    },
+    {
+      "atMs": 7300,
+      "type": "armed",
+      "direction": "south"
+    },
+    {
+      "atMs": 7500,
+      "type": "gaze-dwell-complete",
+      "executionsBeforeConfirm": 2,
+      "armed": true
+    },
+    {
+      "atMs": 7500,
+      "type": "execute",
+      "direction": "south",
+      "source": "voice",
+      "step": "schedule",
+      "option": "1430"
+    },
+    {
+      "atMs": 7600,
+      "type": "center",
+      "reason": "post-confirm"
+    },
+    {
+      "atMs": 7700,
+      "type": "voice-guide",
+      "phrase": "Fragile",
+      "direction": "west"
+    },
+    {
+      "atMs": 7700,
+      "type": "focus",
+      "direction": "west",
+      "step": "handling"
+    },
+    {
+      "atMs": 8100,
+      "type": "candidate",
+      "direction": "west",
+      "label": "Fragile"
+    },
+    {
+      "atMs": 8600,
+      "type": "armed",
+      "direction": "west"
+    },
+    {
+      "atMs": 8800,
+      "type": "gaze-dwell-complete",
+      "executionsBeforeConfirm": 3,
+      "armed": true
+    },
+    {
+      "atMs": 8800,
+      "type": "execute",
+      "direction": "west",
+      "source": "gesture",
+      "step": "handling",
+      "option": "fragile"
+    },
+    {
+      "atMs": 8900,
+      "type": "center",
+      "reason": "post-confirm"
+    },
+    {
+      "atMs": 10000,
+      "type": "sensor-lost",
+      "reason": "sample-timeout"
+    },
+    {
+      "atMs": 10100,
+      "type": "sensor-recovered"
+    },
+    {
+      "atMs": 10100,
+      "type": "center",
+      "reason": "sensor-loss"
+    },
+    {
+      "atMs": 10200,
+      "type": "voice-guide",
+      "phrase": "ORION-7",
+      "direction": "north"
+    },
+    {
+      "atMs": 10200,
+      "type": "focus",
+      "direction": "north",
+      "step": "destination"
+    },
+    {
+      "atMs": 10600,
+      "type": "candidate",
+      "direction": "north",
+      "label": "ORION-7"
+    },
+    {
+      "atMs": 11100,
+      "type": "armed",
+      "direction": "north"
+    },
+    {
+      "atMs": 11300,
+      "type": "gaze-dwell-complete",
+      "executionsBeforeConfirm": 4,
+      "armed": true
+    },
+    {
+      "atMs": 11300,
+      "type": "execute",
+      "direction": "north",
+      "source": "voice",
+      "step": "destination",
+      "option": "orion-7"
+    },
+    {
+      "atMs": 11400,
+      "type": "center",
+      "reason": "post-confirm"
+    },
+    {
+      "atMs": 11500,
+      "type": "voice-guide",
+      "phrase": "North Gate",
+      "direction": "east"
+    },
+    {
+      "atMs": 11500,
+      "type": "focus",
+      "direction": "east",
+      "step": "gate"
+    },
+    {
+      "atMs": 11900,
+      "type": "candidate",
+      "direction": "east",
+      "label": "North Gate"
+    },
+    {
+      "atMs": 12400,
+      "type": "armed",
+      "direction": "east"
+    },
+    {
+      "atMs": 12600,
+      "type": "gaze-dwell-complete",
+      "executionsBeforeConfirm": 5,
+      "armed": true
+    },
+    {
+      "atMs": 12600,
+      "type": "execute",
+      "direction": "east",
+      "source": "gesture",
+      "step": "gate",
+      "option": "north-gate"
+    },
+    {
+      "atMs": 12700,
+      "type": "center",
+      "reason": "post-confirm"
+    },
+    {
+      "atMs": 12800,
+      "type": "voice-guide",
+      "phrase": "Send route",
+      "direction": "south"
+    },
+    {
+      "atMs": 12800,
+      "type": "focus",
+      "direction": "south",
+      "step": "release"
+    },
+    {
+      "atMs": 13200,
+      "type": "candidate",
+      "direction": "south",
+      "label": "Send route"
+    },
+    {
+      "atMs": 13700,
+      "type": "armed",
+      "direction": "south"
+    },
+    {
+      "atMs": 13900,
+      "type": "gaze-dwell-complete",
+      "executionsBeforeConfirm": 6,
+      "armed": true
+    },
+    {
+      "atMs": 13900,
+      "type": "execute",
+      "direction": "south",
+      "source": "voice",
+      "step": "release",
+      "option": "send"
+    },
+    {
+      "atMs": 14000,
+      "type": "center",
+      "reason": "post-confirm"
+    }
+  ],
+  "deterministicFingerprint": "5916d674"
+}

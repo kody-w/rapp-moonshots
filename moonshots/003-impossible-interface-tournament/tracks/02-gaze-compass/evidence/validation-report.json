@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "validator": "gaze-compass-track-02",
+  "passed": true,
+  "tests": {
+    "total": 8,
+    "passed": 8
+  },
+  "gates": {
+    "exactTaskCompletion": true,
+    "deterministicReplay": true,
+    "falseCommits": 0,
+    "gazeOnlyExecutions": 0,
+    "centerCancellationObserved": true,
+    "sensorLossRecovered": true,
+    "localEphemeralProcessing": true,
+    "clawpilotTheme": true,
+    "keyboardTouchSwitchParity": true
+  },
+  "deterministicFingerprint": "5916d674"
+}
