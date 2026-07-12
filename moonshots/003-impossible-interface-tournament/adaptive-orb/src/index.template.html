@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' data: blob:; connect-src 'none'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>Adaptive Orb · Impossible Interface Tournament</title>
+    <script>
+      (() => {
+        const param = new URLSearchParams(window.location.search).get("scoutTheme");
+        const theme =
+          param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
+    <style>
+      :root {
+        color-scheme: light;
+        --cp-bg: #f7f4ef;
+        --cp-bg-elevated: #fcfbf8;
+        --cp-surface: #ffffff;
+        --cp-surface-soft: #f5f5f5;
+        --cp-border: #dedede;
+        --cp-border-strong: #919191;
+        --cp-text: #242424;
+        --cp-text-muted: #5c5c5c;
+        --cp-text-soft: #6f6f6f;
+        --cp-accent: #b11f4b;
+        --cp-accent-hover: #9a1a41;
+        --cp-accent-soft: rgba(177, 31, 75, 0.08);
+        --cp-accent-fg: #ffffff;
+        --cp-success: #16a34a;
+        --cp-danger: #dc2626;
+        --cp-warning: #f59e0b;
+        --cp-link: #0078d4;
+        --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+        --cp-overlay: rgba(255, 255, 255, 0.8);
+        --cp-panel: rgba(255, 255, 255, 0.86);
+        --cp-panel-strong: rgba(255, 255, 255, 0.96);
+        --cp-sheen: rgba(255, 255, 255, 0.55);
+        --cp-highlight: rgba(177, 31, 75, 0.12);
+      }
+      html[data-theme="dark"] {
+        color-scheme: dark;
+        --cp-bg: #3d3b3a;
+        --cp-bg-elevated: #343231;
+        --cp-surface: #292929;
+        --cp-surface-soft: #2e2e2e;
+        --cp-border: #474747;
+        --cp-border-strong: #5f5f5f;
+        --cp-text: #dedede;
+        --cp-text-muted: #919191;
+        --cp-text-soft: #b0b0b0;
+        --cp-accent: #fd8ea1;
+        --cp-accent-hover: #fb7b91;
+        --cp-accent-soft: rgba(253, 142, 161, 0.14);
+        --cp-accent-fg: #1a1a1a;
+        --cp-success: #4ade80;
+        --cp-danger: #f87171;
+        --cp-warning: #fbbf24;
+        --cp-link: #4da6ff;
+        --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+        --cp-overlay: rgba(41, 41, 41, 0.88);
+        --cp-panel: rgba(41, 41, 41, 0.72);
+        --cp-panel-strong: rgba(41, 41, 41, 0.96);
+        --cp-sheen: rgba(255, 255, 255, 0.04);
+        --cp-highlight: rgba(253, 142, 161, 0.12);
+      }
+      /*__ADAPTIVE_ORB_STYLES__*/
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#orbStage">Skip to the Adaptive Orb</a>
+
+    <section class="launch-screen" id="launchScreen" aria-labelledby="launchTitle">
+      <div class="launch-card">
+        <p class="eyebrow">Moonshot 003 · unified finalist</p>
+        <h1 id="launchTitle">Adaptive Orb</h1>
+        <p class="launch-lede">
+          One shared route moves between Voice Orbit, Gaze Compass, and Gesture
+          Tunnel. After this single start action, the live path is designed for
+          voice and coarse camera motion without normal keyboard or pointer use.
+        </p>
+        <div class="disclosure" role="note" aria-label="Sensor and speech disclosure">
+          <strong>Before permission:</strong> camera frames are analyzed only in
+          ephemeral local memory and are never recorded. The Web Speech API is a
+          browser service and may send audio to a browser or OS vendor for
+          processing. This app cannot audit or control that vendor processing.
+          Choose sensor-free access to request neither camera nor microphone.
+        </div>
+        <div class="launch-actions">
+          <button class="primary-action" id="startLive" type="button">
+            Start voice + camera
+          </button>
+          <button id="startAccessible" type="button">Start sensor-free access</button>
+          <button id="startSimulation" type="button">
+            Run deterministic all-mode task
+          </button>
+        </div>
+        <p class="small-note">
+          This is a coarse webcam gaze/head/frame-motion estimate—not eye tracking,
+          medical sensing, or an accessibility certification.
+        </p>
+      </div>
+    </section>
+
+    <main class="app-shell" id="app" hidden>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Impossible Interface Tournament</p>
+          <h1>Adaptive Orb</h1>
+        </div>
+        <div class="status-cluster" aria-label="Session status">
+          <span class="status-chip" id="modeStatus">Orbit · auto</span>
+          <span class="status-chip" id="sensorStatus">Sensors preparing</span>
+          <span class="status-chip privacy-chip">Local frames · no storage</span>
+        </div>
+      </header>
+
+      <div class="safety-banner" id="safetyBanner" role="status">
+        <strong id="safetyTitle">Safe to explore.</strong>
+        <span id="safetyDetail">Gaze highlights; explicit voice or gesture confirms.</span>
+      </div>
+
+      <section class="task-ribbon" aria-labelledby="taskTitle">
+        <div>
+          <p class="eyebrow" id="taskTitle">Shared cobalt-beacon task</p>
+          <p id="taskPrompt">
+            Route three cobalt beacons at 14:30, mark them fragile, send them to
+            ORION-7 through North Gate, confirm, then return home.
+          </p>
+        </div>
+        <ol class="task-values" id="taskValues" aria-label="Current route values"></ol>
+      </section>
+
+      <section class="experience-grid">
+        <aside class="context-card" aria-labelledby="grammarTitle">
+          <p class="eyebrow">Adaptive grammar</p>
+          <h2 id="grammarTitle">Voice Orbit</h2>
+          <p id="grammarDescription">
+            Speak broad intent. Predictions orbit the same central rest point.
+          </p>
+          <dl class="sensor-ledger">
+            <div>
+              <dt>Camera</dt>
+              <dd id="cameraState">off</dd>
+            </div>
+            <div>
+              <dt>Microphone</dt>
+              <dd id="microphoneState">off</dd>
+            </div>
+            <div>
+              <dt>Speech service</dt>
+              <dd id="speechState">off</dd>
+            </div>
+            <div>
+              <dt>Estimator</dt>
+              <dd id="estimatorState">not started</dd>
+            </div>
+          </dl>
+          <p class="sensor-freshness" id="freshnessState">Freshness: waiting</p>
+          <video id="sensorPreview" muted playsinline aria-label="Local camera preview"></video>
+        </aside>
+
+        <section class="orb-card" aria-labelledby="stageTitle">
+          <div class="stage-heading">
+            <div>
+              <p class="eyebrow" id="stageKicker">Broad intent · depth 0</p>
+              <h2 id="stageTitle">Speak the route intent</h2>
+            </div>
+            <div class="mode-meter" id="modeMeter" aria-label="Mode progression">
+              <span data-mode-meter="orbit">Orbit</span>
+              <span data-mode-meter="compass">Compass</span>
+              <span data-mode-meter="tunnel">Tunnel</span>
+            </div>
+          </div>
+
+          <div
+            class="orb-stage mode-orbit"
+            id="orbStage"
+            tabindex="0"
+            role="application"
+            aria-label="Adaptive radial choices. Arrow keys cycle, Enter confirms, Escape centers."
+          >
+            <div class="compass-axes" aria-hidden="true">
+              <span>N</span><span>E</span><span>S</span><span>W</span>
+            </div>
+            <div class="tunnel-shells" id="tunnelShells" aria-hidden="true"></div>
+            <div class="choice-layer" id="choiceLayer"></div>
+            <button
+              class="center-orb"
+              id="centerOrb"
+              type="button"
+              aria-label="Center rest. Cancel aim and relax."
+            >
+              <span class="orb-core" aria-hidden="true"></span>
+              <strong id="orbLabel">REST</strong>
+              <small id="orbSubLabel">center cancels</small>
+            </button>
+            <div class="dwell-ring" id="dwellRing" aria-hidden="true"></div>
+          </div>
+
+          <p class="caption" id="caption" aria-live="polite">
+            Start at center. Speak the full broad intent.
+          </p>
+          <div class="parity-controls" aria-label="Keyboard, touch, and switch parity">
+            <button id="previousChoice" type="button">Previous</button>
+            <button id="nextChoice" type="button">Cycle choice</button>
+            <button class="primary-action" id="confirmChoice" type="button">
+              Confirm highlighted
+            </button>
+            <button id="restChoice" type="button">Center / cancel aim</button>
+            <button id="undoChoice" type="button">Undo</button>
+          </div>
+          <p class="key-hint">
+            Fallback: ←/→ cycle · Enter confirm · Esc center · U undo · S stop ·
+            spoken “orbit,” “compass,” or “tunnel” switches grammar.
+          </p>
+        </section>
+
+        <aside class="context-card" aria-labelledby="historyTitle">
+          <p class="eyebrow">One task · one history</p>
+          <h2 id="historyTitle">Safety ledger</h2>
+          <dl class="metric-ledger">
+            <div><dt>Mode transitions</dt><dd id="modeTransitions">0</dd></div>
+            <div><dt>False commits</dt><dd id="falseCommits">0</dd></div>
+            <div><dt>Center cancels</dt><dd id="centerCancels">0</dd></div>
+            <div><dt>Voice repairs</dt><dd id="voiceRepairs">0</dd></div>
+            <div><dt>Sensor loss / recovery</dt><dd id="sensorRecovery">0 / 0</dd></div>
+          </dl>
+          <ol class="event-trace" id="eventTrace" aria-label="Recent semantic events"></ol>
+        </aside>
+      </section>
+
+      <section class="mode-summary" aria-labelledby="modeSummaryTitle">
+        <div>
+          <p class="eyebrow">Shared instrumentation</p>
+          <h2 id="modeSummaryTitle">Per-mode dwell and confirmation</h2>
+        </div>
+        <div class="mode-stats" id="modeStats"></div>
+      </section>
+
+      <details class="detail-card" id="comparisonPanel">
+        <summary>Tournament comparison · imported deterministic evidence</summary>
+        <p>
+          The build reads public-safe results from all three merged prototypes.
+          Scripted timings validate logic only and must not be compared as human speed.
+        </p>
+        <div class="comparison-wrap" id="comparisonTable"></div>
+      </details>
+
+      <details class="detail-card">
+        <summary>Privacy, sensing, and recovery boundary</summary>
+        <div class="disclosure-grid">
+          <p>
+            <strong>Ephemeral frames:</strong> a 48×36 analysis canvas is cleared
+            every processing turn. Raw pixel bytes are zeroed. Only a derived
+            grayscale comparison survives until the next frame, then is zeroed.
+          </p>
+          <p>
+            <strong>Honest estimate:</strong> FaceDetector supplies a transient face
+            box/head-position proxy when available. Otherwise local frame motion is
+            used. Neither path is precise gaze or identity inference.
+          </p>
+          <p>
+            <strong>Freshness:</strong> new media frames, valid changing image
+            content, and processed estimates expire independently. Any stale signal
+            clears the arm and freezes sensor-derived confirmation.
+          </p>
+          <p>
+            <strong>Speech boundary:</strong> Web Speech may use browser/vendor
+            processing. No transcript, audio, frame, analytics identifier, or
+            application network request is stored or exported.
+          </p>
+        </div>
+      </details>
+
+      <footer class="footer-actions">
+        <button id="exportMetrics" type="button">Export local JSON metrics</button>
+        <button id="useAccessible" type="button">Continue sensor-free</button>
+        <button id="stopSensors" type="button">End sensors</button>
+        <button id="resumeSession" type="button">Resume safety pause</button>
+      </footer>
+
+      <div class="sr-only" id="assertiveStatus" aria-live="assertive"></div>
+    </main>
+
+    <noscript>This application needs JavaScript for its local state machine.</noscript>
+    <script type="module">
+      /*__ADAPTIVE_ORB_SCRIPT__*/
+    </script>
+  </body>
+</html>

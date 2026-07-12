@@ -1,0 +1,363 @@
+{
+  "schemaVersion": 1,
+  "taskId": "cobalt-beacon-route",
+  "deterministicFingerprint": "c1b6e39f",
+  "eventCount": 35,
+  "events": [
+    {
+      "seq": 1,
+      "atMs": 0,
+      "type": "session.started",
+      "detail": {
+        "kind": "simulation"
+      }
+    },
+    {
+      "seq": 2,
+      "atMs": 100,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "accept-intent",
+        "source": "prediction",
+        "changed": true,
+        "mode": "orbit"
+      }
+    },
+    {
+      "seq": 3,
+      "atMs": 100,
+      "type": "voice.intent-captured",
+      "detail": {
+        "fields": [
+          "action",
+          "color",
+          "handling",
+          "quantity",
+          "time"
+        ]
+      }
+    },
+    {
+      "seq": 4,
+      "atMs": 400,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "accept-intent",
+        "source": "voice",
+        "mode": "orbit",
+        "reversible": true
+      }
+    },
+    {
+      "seq": 5,
+      "atMs": 400,
+      "type": "mode.changed",
+      "detail": {
+        "from": "orbit",
+        "to": "compass",
+        "source": "auto:task-advanced"
+      }
+    },
+    {
+      "seq": 6,
+      "atMs": 550,
+      "type": "voice.repair",
+      "detail": {
+        "reason": "choice-unrecognized"
+      }
+    },
+    {
+      "seq": 7,
+      "atMs": 600,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "destination-orion",
+        "source": "gaze",
+        "changed": true,
+        "mode": "compass"
+      }
+    },
+    {
+      "seq": 8,
+      "atMs": 1525,
+      "type": "choice.armed",
+      "detail": {
+        "id": "destination-orion",
+        "mode": "compass",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 9,
+      "atMs": 1600,
+      "type": "action.blocked",
+      "detail": {
+        "reason": "gaze-never-confirms",
+        "source": "gaze"
+      }
+    },
+    {
+      "seq": 10,
+      "atMs": 1700,
+      "type": "center.rest",
+      "detail": {
+        "source": "gaze-center",
+        "canceledPending": true
+      }
+    },
+    {
+      "seq": 11,
+      "atMs": 1825,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "destination-orion",
+        "source": "gaze",
+        "changed": true,
+        "mode": "compass"
+      }
+    },
+    {
+      "seq": 12,
+      "atMs": 2725,
+      "type": "choice.armed",
+      "detail": {
+        "id": "destination-orion",
+        "mode": "compass",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 13,
+      "atMs": 2800,
+      "type": "safety.freeze-added",
+      "detail": {
+        "cause": "content-stale",
+        "sensorCause": true
+      }
+    },
+    {
+      "seq": 14,
+      "atMs": 2800,
+      "type": "sensor.loss",
+      "detail": {
+        "cause": "content-stale",
+        "sensor": "estimator"
+      }
+    },
+    {
+      "seq": 15,
+      "atMs": 2850,
+      "type": "action.blocked",
+      "detail": {
+        "reason": "frozen",
+        "source": "voice"
+      }
+    },
+    {
+      "seq": 16,
+      "atMs": 3150,
+      "type": "safety.freeze-removed",
+      "detail": {
+        "cause": "content-stale",
+        "sensorCause": true
+      }
+    },
+    {
+      "seq": 17,
+      "atMs": 3150,
+      "type": "sensor.recovered",
+      "detail": {
+        "cause": "content-stale",
+        "removed": true
+      }
+    },
+    {
+      "seq": 18,
+      "atMs": 3150,
+      "type": "sensor.status",
+      "detail": {
+        "sensor": "estimator",
+        "status": "simulated"
+      }
+    },
+    {
+      "seq": 19,
+      "atMs": 3225,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "destination-orion",
+        "source": "gaze",
+        "changed": true,
+        "mode": "compass"
+      }
+    },
+    {
+      "seq": 20,
+      "atMs": 4125,
+      "type": "choice.armed",
+      "detail": {
+        "id": "destination-orion",
+        "mode": "compass",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 21,
+      "atMs": 4200,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "destination-orion",
+        "source": "voice",
+        "mode": "compass",
+        "reversible": true
+      }
+    },
+    {
+      "seq": 22,
+      "atMs": 4325,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "gate-north",
+        "source": "gaze",
+        "changed": true,
+        "mode": "compass"
+      }
+    },
+    {
+      "seq": 23,
+      "atMs": 5225,
+      "type": "choice.armed",
+      "detail": {
+        "id": "gate-north",
+        "mode": "compass",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 24,
+      "atMs": 5300,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "gate-north",
+        "source": "gesture",
+        "mode": "compass",
+        "reversible": true
+      }
+    },
+    {
+      "seq": 25,
+      "atMs": 5300,
+      "type": "mode.changed",
+      "detail": {
+        "from": "compass",
+        "to": "tunnel",
+        "source": "auto:task-advanced"
+      }
+    },
+    {
+      "seq": 26,
+      "atMs": 5425,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "amend-route",
+        "source": "gesture",
+        "changed": true,
+        "mode": "tunnel"
+      }
+    },
+    {
+      "seq": 27,
+      "atMs": 6325,
+      "type": "choice.armed",
+      "detail": {
+        "id": "amend-route",
+        "mode": "tunnel",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 28,
+      "atMs": 6400,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "amend-route",
+        "source": "gesture",
+        "mode": "tunnel",
+        "reversible": true
+      }
+    },
+    {
+      "seq": 29,
+      "atMs": 6500,
+      "type": "history.undo",
+      "detail": {
+        "source": "voice",
+        "restored": "confirm:amend-route"
+      }
+    },
+    {
+      "seq": 30,
+      "atMs": 6625,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "confirm-route",
+        "source": "gesture",
+        "changed": true,
+        "mode": "tunnel"
+      }
+    },
+    {
+      "seq": 31,
+      "atMs": 7525,
+      "type": "choice.armed",
+      "detail": {
+        "id": "confirm-route",
+        "mode": "tunnel",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 32,
+      "atMs": 7600,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "confirm-route",
+        "source": "voice",
+        "mode": "tunnel",
+        "reversible": true
+      }
+    },
+    {
+      "seq": 33,
+      "atMs": 7725,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "return-home",
+        "source": "gesture",
+        "changed": true,
+        "mode": "tunnel"
+      }
+    },
+    {
+      "seq": 34,
+      "atMs": 8625,
+      "type": "choice.armed",
+      "detail": {
+        "id": "return-home",
+        "mode": "tunnel",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 35,
+      "atMs": 8700,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "return-home",
+        "source": "gesture",
+        "mode": "tunnel",
+        "reversible": true
+      }
+    }
+  ]
+}
