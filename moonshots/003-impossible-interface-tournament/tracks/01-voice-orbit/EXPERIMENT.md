@@ -59,6 +59,7 @@ participants or media.
 | Correction precedence | Directed target wins over supported IDs in “instead of” context |
 | Handling negation | Negation applies to fragile, delicate, and handle-with-care only |
 | Repeated safety | Repeated stop preserves first stop time; non-voice empty undo is not a voice repair |
+| Speech separation | Service denial disables retries but leaves an active mic and non-speech confirmations available |
 | Theme | Exact Clawpilot variables and required fonts present |
 
 ## Metrics

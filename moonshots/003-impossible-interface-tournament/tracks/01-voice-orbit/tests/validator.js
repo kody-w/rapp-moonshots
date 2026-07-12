@@ -167,6 +167,21 @@ check("preview and recognition stop races fail closed", () => {
   assert.match(dispatcher, /if \(machine\.state\.status === "stopped"\)\s*{\s*stopRuntimeSensors\(\)/);
 });
 
+check("speech denial cannot mark the physical microphone lost or retry", () => {
+  const speech = section(app, "function startSpeechRecognition()", "function bindTrackSafety(");
+  const tracks = section(app, "function bindTrackSafety(", "function startFallback()");
+  assert.match(speech, /code === "not-allowed" \|\| code === "service-not-allowed"/);
+  assert.match(speech, /runtime\.recognitionWanted = false/);
+  assert.match(speech, /window\.clearTimeout\(runtime\.recognitionRestart\)/);
+  assert.match(speech, /serviceDenied\s*\?\s*"denied"/);
+  assert.match(speech, /!runtime\.recognitionWanted/);
+  assert.match(speech, /Camera gesture, keyboard, and touch remain available/);
+  assert.doesNotMatch(speech, /setSensor\("microphone"/);
+  assert.doesNotMatch(app, /setSensor\("microphone", "lost"/);
+  assert.match(tracks, /track\.onended[\s\S]+setSensor\(sensor, "lost"/);
+  assert.match(tracks, /track\.onmute[\s\S]+setSensor\(sensor, "lost"/);
+});
+
 check("directed destination grammar precedes fallback mentions", () => {
   const parser = section(
     core,

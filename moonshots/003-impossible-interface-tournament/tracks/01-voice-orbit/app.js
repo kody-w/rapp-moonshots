@@ -729,12 +729,27 @@
         return;
       }
       const code = speechErrorCode(event);
-      setSensor("speech", "error", code);
-      dispatch({ type: "ERROR", area: "speech", code });
-      elements.lastHeard.textContent = `Speech service error: ${code}. Camera gesture remains available.`;
-      if (code === "audio-capture" || code === "not-allowed" || code === "service-not-allowed") {
+      const serviceDenied = code === "not-allowed" || code === "service-not-allowed";
+      if (serviceDenied || code === "audio-capture") {
         runtime.recognitionWanted = false;
-        setSensor("microphone", "lost", code);
+        if (runtime.recognitionRestart) {
+          window.clearTimeout(runtime.recognitionRestart);
+          runtime.recognitionRestart = null;
+        }
+      }
+      const speechStatus = serviceDenied
+        ? "denied"
+        : code === "audio-capture"
+          ? "unavailable"
+          : "error";
+      setSensor("speech", speechStatus, code);
+      dispatch({ type: "ERROR", area: "speech", code });
+      if (serviceDenied) {
+        elements.lastHeard.textContent =
+          "Browser speech service denied. Camera gesture, keyboard, and touch remain available.";
+        announce("Speech service disabled. Other active inputs remain available.");
+      } else {
+        elements.lastHeard.textContent = `Speech service error: ${code}. Camera gesture, keyboard, and touch remain available.`;
       }
     };
     recognition.onend = () => {
@@ -848,7 +863,7 @@
         bindTrackSafety(audioTrack, "microphone");
         setSensor("microphone", "active", "local media track");
       } else {
-        setSensor("microphone", "lost", "no audio track");
+        setSensor("microphone", "unavailable", "no audio track");
       }
 
       try {

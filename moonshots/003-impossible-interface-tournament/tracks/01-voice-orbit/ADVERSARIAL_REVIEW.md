@@ -23,7 +23,7 @@ coarse and browser-dependent.
 | Browser speech is remote | Audio crosses app’s local boundary | Pre-permission and in-session caveat | Vendor behavior is outside app control |
 | Export exposes mission data | Sensitive values saved to disk | User-initiated local download; no automatic export | User controls the downloaded file afterward |
 | Malicious extension/page modification | Media or task interception | No third-party scripts or app network code | Browser/extension trust is out of scope |
-| Repeated speech service errors | Hands-free path degrades | Gesture plus accessible fallback; errors counted | Gesture cannot provide arbitrary values |
+| Speech service denies recognition while mic track is active | Treating service loss as hardware loss could freeze all confirmation | Speech status is separate; denial disables retry and announces gesture/keyboard/touch fallback | Gesture cannot provide arbitrary values |
 | Low light/backlighting | Unstable estimator | Large sectors, calibration, center dead zone | No universal environment guarantee |
 
 ## Privacy inspection

@@ -283,6 +283,35 @@ test("sensor loss freezes commits and restoration preserves the draft", () => {
   assert.equal(taskMatchesTournament(machine.state.task), true);
 });
 
+test("speech service denial leaves physical mic and gesture confirmation available", () => {
+  const machine = new VoiceOrbitMachine();
+  machine.dispatch({ type: "START", mode: "live" });
+  machine.dispatch({ type: "SENSOR", sensor: "camera", status: "active" });
+  machine.dispatch({ type: "SENSOR", sensor: "microphone", status: "active" });
+  machine.dispatch({ type: "SENSOR", sensor: "estimator", status: "active" });
+  machine.dispatch({ type: "SENSOR", sensor: "speech", status: "active" });
+  exactRoute(machine);
+  highlight(machine, "confirm-route", "gaze");
+
+  machine.dispatch({
+    type: "SENSOR",
+    sensor: "speech",
+    status: "denied",
+    reason: "service-not-allowed",
+  });
+  assert.equal(machine.state.sensors.microphone, "active");
+  assert.equal(machine.state.sensors.speech, "denied");
+  assert.equal(machine.state.frozen, false);
+  assert.equal(machine.state.metrics.sensorLosses, 0);
+  machine.dispatch({ type: "GESTURE", gesture: "nod" });
+  assert.equal(machine.state.committed, true);
+  highlight(machine, "return-home", "keyboard");
+  machine.dispatch({ type: "CONFIRM", source: "touch" });
+  assert.equal(machine.state.stage, "complete");
+  assert.equal(machine.state.metrics.gestureConfirmations, 1);
+  assert.equal(machine.state.metrics.touchConfirmations, 1);
+});
+
 test("stop, cancel, and undo win over mixed voice phrases", () => {
   const stopped = new VoiceOrbitMachine();
   stopped.dispatch({ type: "START", mode: "simulation" });

@@ -74,6 +74,9 @@ Negation is scoped to fragile, delicate, and handle-with-care phrasing.
   sample, raw sample bytes are zeroed, and cleanup clears it again.
 - Loss of camera, microphone, or the active estimator freezes activation and
   clears the armed highlight. Stop, cancel, and undo still work.
+- The microphone indicator reflects only its physical media track. Browser
+  speech-service denial disables recognition without marking that track lost,
+  freezing gesture, or blocking keyboard/touch confirmation.
 - Every awaited media step rechecks the active session. Stop cleanup is
   idempotent, removes every recognition callback/restart, and cannot revive
   speech after a delayed preview start.
