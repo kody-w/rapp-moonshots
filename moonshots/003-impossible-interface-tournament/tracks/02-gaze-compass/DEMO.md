@@ -24,9 +24,12 @@ can help while an independent confirmation channel owns commitment.
 6. Cover or freeze the camera after arming, then try to confirm before the next
    watchdog tick. Show the atomic stale-arm rejection, cleared arm, and required
    center reacquisition.
-7. During calibration, choose End Sensors. Show the calibration layer disappear
+7. Stall FaceDetector while raw frames continue. Show processed-sample timeout,
+   arm revocation, and automatic frame-motion fallback recalibration.
+8. During calibration, choose End Sensors. Show the calibration layer disappear
    and complete a parity choice with Center plus keyboard/touch/switch.
-8. Finish the route, return center, and export privacy-safe metrics.
+9. Finish the route across the rebuilt controller, return center, and show all
+   seven confirmations in the aggregated privacy-safe metrics.
 
 ## Deterministic proof
 

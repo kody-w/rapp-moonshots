@@ -49,6 +49,13 @@ assert.equal(frameGate.observe({ presentedFrames: 2 }, 600).resumed, true);
 assert.equal(Core.parseVoiceCommand("do not confirm", Core.TASK_STEPS[0]).type, "rejected-confirm");
 assert.equal(Core.closedIntervalDuration(1000, 900), 0);
 assert.equal(Core.closedIntervalDuration(1000, 1650), 650);
+assert.equal(Core.isTimestampFresh(0, 1200, 1100), false);
+const metricProbe = Core.mergeControllerMetrics(
+  { explicitConfirmations: 3, sensorLosses: 1, confirmationSources: { voice: 2, gesture: 1 } },
+  { explicitConfirmations: 4, sensorRecoveries: 1, confirmationSources: { voice: 2, gesture: 2 } },
+);
+assert.equal(metricProbe.explicitConfirmations, 7);
+assert.deepEqual(metricProbe.confirmationSources, { voice: 4, gesture: 3 });
 
 const report = {
   schemaVersion: 1,
@@ -68,6 +75,8 @@ const report = {
       simulation.safety.confidenceRevocations === 1 &&
       simulation.safety.blockedConfirmations >= 1,
     staleSensorArmRejected: simulation.safety.staleSensorConfirmations === 1,
+    processedGazeFreshnessRequired: true,
+    controllerEpochMetricsAggregated: true,
     armScopedNodGesture: true,
     lifecycleGenerationSafe: true,
     parityPauseRecovery: true,

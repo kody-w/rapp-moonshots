@@ -3,6 +3,7 @@
 
   const Core = window.GazeCompassCore;
   if (!Core) throw new Error("Gaze Compass core failed to load.");
+  const PROCESSED_GAZE_TIMEOUT_MS = 1100;
 
   const elements = {
     activation: document.querySelector("#activation"),
@@ -50,6 +51,9 @@
     mode: "idle",
     task: new Core.TaskModel(),
     controller: null,
+    archivedController: null,
+    controllerMetricsArchive: Core.createControllerMetrics(),
+    controllerEpochs: 0,
     nodDetector: new Core.NodDetector(),
     smoother: null,
     stream: null,
@@ -83,6 +87,10 @@
     lastMappedPoint: { x: 0, y: 0, confidence: 0 },
     lastRawSampleAt: null,
     lastRawFrameAt: null,
+    lastProcessedGazeAt: null,
+    processedGazeExpectedSince: null,
+    processedGazeTimeoutReported: false,
+    processedGazeRecoveryPending: false,
     manualTimer: 0,
     manualDirection: null,
     manualOverrideUntil: 0,
@@ -198,6 +206,7 @@
       this.motion = new FrameMotionEstimator(canvas.width, canvas.height);
       this.detector = null;
       this.detectorBusy = false;
+      this.estimatorGeneration = 0;
       this.faceMisses = 0;
       this.running = false;
       this.frameHandle = 0;
@@ -227,12 +236,14 @@
     }
 
     switchToFallback(reason) {
-      if (!this.detector) return;
+      if (!this.detector) return false;
+      this.estimatorGeneration += 1;
       this.detector = null;
       this.detectorBusy = false;
       this.motion.clear();
       this.mode = "frame-motion head-pose fallback";
       this.callbacks.onMode(this.mode, reason || "FaceDetector unavailable");
+      return true;
     }
 
     scheduleFrame() {
@@ -329,10 +340,17 @@
       if (this.detectorBusy) return;
 
       this.detectorBusy = true;
-      this.detector
+      const detector = this.detector;
+      const estimatorGeneration = this.estimatorGeneration;
+      detector
         .detect(this.video)
         .then((faces) => {
-          if (!this.running) return;
+          if (
+            !this.running ||
+            estimatorGeneration !== this.estimatorGeneration
+          ) {
+            return;
+          }
           const freshness = this.frameGate.check(performance.now());
           this.handleFreshness(freshness);
           if (freshness.frozen) return;
@@ -358,9 +376,15 @@
             if (this.faceMisses >= 8) this.switchToFallback("No stable face box");
           }
         })
-        .catch(() => this.switchToFallback("FaceDetector error"))
+        .catch(() => {
+          if (estimatorGeneration === this.estimatorGeneration) {
+            this.switchToFallback("FaceDetector error");
+          }
+        })
         .finally(() => {
-          this.detectorBusy = false;
+          if (estimatorGeneration === this.estimatorGeneration) {
+            this.detectorBusy = false;
+          }
         });
     }
 
@@ -378,6 +402,7 @@
       this.motion.clear();
       this.frameGate.reset();
       this.freezeReported = false;
+      this.estimatorGeneration += 1;
       this.detector = null;
     }
   }
@@ -608,7 +633,31 @@
     window.speechSynthesis.speak(utterance);
   }
 
+  function archiveCurrentControllerMetrics() {
+    if (
+      !state.controller ||
+      state.controller === state.archivedController
+    ) {
+      return;
+    }
+    state.controllerMetricsArchive = Core.mergeControllerMetrics(
+      state.controllerMetricsArchive,
+      state.controller.metrics,
+    );
+    state.archivedController = state.controller;
+  }
+
+  function combinedControllerMetrics() {
+    return Core.mergeControllerMetrics(
+      state.controllerMetricsArchive,
+      state.controller && state.controller !== state.archivedController
+        ? state.controller.metrics
+        : null,
+    );
+  }
+
   function buildController() {
+    archiveCurrentControllerMetrics();
     state.controller = new Core.GazeIntentController({
       dwellMs: Number(elements.dwellRange.value),
       onFocus(direction) {
@@ -690,6 +739,7 @@
         speak("Signal recovered. Center safe.", true);
       },
     });
+    state.controllerEpochs += 1;
     renderController(state.controller.snapshot());
   }
 
@@ -711,6 +761,13 @@
 
   function onSensorSample(rawPoint, sensorMode, now) {
     state.lastRawSampleAt = now;
+    state.lastProcessedGazeAt = now;
+    state.processedGazeTimeoutReported = false;
+    if (state.processedGazeRecoveryPending) {
+      state.processedGazeRecoveryPending = false;
+      elements.sensorOverlay.classList.add("is-hidden");
+      setStatus("Processed gaze recovered on a fresh frame.");
+    }
     state.sensorModeName = sensorMode;
     elements.sensorMode.textContent = `Sensor: ${sensorMode} · local, ephemeral`;
 
@@ -732,12 +789,56 @@
     updateControllerFromPoint(smoothed, now, true, "sensor");
   }
 
+  function isProcessedGazeFresh(now) {
+    return Core.isTimestampFresh(
+      state.lastProcessedGazeAt,
+      now,
+      PROCESSED_GAZE_TIMEOUT_MS,
+    );
+  }
+
+  function processedGazeHasTimedOut(now) {
+    const reference =
+      state.lastProcessedGazeAt === null
+        ? state.processedGazeExpectedSince
+        : state.lastProcessedGazeAt;
+    return (
+      reference !== null &&
+      now - reference >= PROCESSED_GAZE_TIMEOUT_MS
+    );
+  }
+
+  function handleProcessedGazeTimeout(now) {
+    if (state.processedGazeTimeoutReported) return;
+    state.processedGazeTimeoutReported = true;
+    state.processedGazeRecoveryPending = true;
+    const switchedToFallback =
+      state.visionSensor &&
+      state.visionSensor.switchToFallback("FaceDetector processing timeout");
+    if (state.controller) {
+      state.controller.markSensorLost(now, "processed-gaze-timeout");
+      renderController(state.controller.snapshot());
+    }
+    elements.sensorOverlay.classList.remove("is-hidden");
+    elements.sensorOverlayCopy.textContent =
+      switchedToFallback
+        ? "Video is fresh, but FaceDetector stalled. The old arm was cleared while local frame-motion fallback recalibrates."
+        : "Video is fresh, but gaze processing stalled. The old arm was cleared until center recovery.";
+    setStatus("Processed gaze timed out. Stale selection cleared.", true);
+  }
+
   function monitorSensor() {
     window.clearInterval(state.monitorTimer);
     state.monitorTimer = window.setInterval(() => {
       const now = performance.now();
       if (!shouldRunSensorWatchdog(now)) return;
       state.visionSensor.checkFreshness(now);
+      if (
+        state.visionSensor.isFresh(now) &&
+        processedGazeHasTimedOut(now)
+      ) {
+        handleProcessedGazeTimeout(now);
+      }
     }, 250);
   }
 
@@ -787,6 +888,9 @@
     state.calibrationModel = null;
     state.calibrationQuality = null;
     state.calibrationInterruptedByFreeze = false;
+    state.lastProcessedGazeAt = null;
+    state.processedGazeExpectedSince = now;
+    state.processedGazeTimeoutReported = false;
   }
 
   function finalizeCalibrationLifecycle(status, now, model, preserveEnd) {
@@ -1060,6 +1164,10 @@
     state.smoother = null;
     state.calibrationInterruptedByFreeze = false;
     state.lastRawFrameAt = null;
+    state.lastProcessedGazeAt = null;
+    state.processedGazeExpectedSince = null;
+    state.processedGazeTimeoutReported = false;
+    state.processedGazeRecoveryPending = false;
     state.nodDetector.endArm();
 
     setIndicator(elements.cameraIndicator, "off", "Camera off");
@@ -1153,6 +1261,9 @@
           },
         },
       );
+      state.lastProcessedGazeAt = null;
+      state.processedGazeExpectedSince = performance.now();
+      state.processedGazeTimeoutReported = false;
       state.visionSensor.start();
       monitorSensor();
       initializeRecognition();
@@ -1430,13 +1541,24 @@
     if (!state.controller || state.paused || state.completed) return false;
     const now = performance.now();
     const arm = state.controller.snapshot();
+    const rawFrameFresh =
+      !state.sensorsStopped &&
+      Boolean(state.visionSensor) &&
+      state.visionSensor.isFresh(now);
+    const processedGazeFresh = isProcessedGazeFresh(now);
     const sensorFresh =
       arm.armedSource !== "sensor" ||
-      (!state.sensorsStopped &&
-        Boolean(state.visionSensor) &&
-        state.visionSensor.isFresh(now));
+      (rawFrameFresh && processedGazeFresh);
     state.nodDetector.endArm();
     const confirmed = state.controller.confirm(source, now, { sensorFresh });
+    if (
+      !confirmed &&
+      arm.armedSource === "sensor" &&
+      rawFrameFresh &&
+      !processedGazeFresh
+    ) {
+      handleProcessedGazeTimeout(now);
+    }
     renderController(state.controller.snapshot());
     if (!confirmed) {
       earcon("cancel");
@@ -1482,7 +1604,7 @@
     const completionAt = state.completedAt === null ? now : state.completedAt;
     const task = state.task.snapshot();
     const timing = privacyTiming(now);
-    const metrics = state.controller ? state.controller.metrics : {};
+    const metrics = combinedControllerMetrics();
     return {
       schemaVersion: 1,
       mode: state.mode,
@@ -1537,6 +1659,7 @@
         arms: metrics.arms || 0,
         explicitConfirmations: metrics.explicitConfirmations || 0,
         confirmationSources: { ...(metrics.confirmationSources || {}) },
+        controllerEpochs: state.controllerEpochs,
       },
       privacy: {
         ...timing,
@@ -1836,7 +1959,11 @@
           generation: state.sensorGeneration,
           stopped: state.sensorsStopped,
           lastRawFrameAt: state.lastRawFrameAt,
+          lastProcessedGazeAt: state.lastProcessedGazeAt,
+          processedGazeFresh: isProcessedGazeFresh(performance.now()),
         },
+        controllerMetrics: combinedControllerMetrics(),
+        controllerEpochs: state.controllerEpochs,
         calibration: {
           status: state.calibrationStatus,
           startedAt: state.calibrationStartedAt,

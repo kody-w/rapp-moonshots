@@ -214,8 +214,23 @@ test("stale sensor-derived arms are atomically rejected before watchdog executio
     { source: "sensor" },
   );
   assert.equal(staleController.snapshot().armedSource, "sensor");
+  const rawFrames = new Core.VideoFrameFreshnessGate({ timeoutMs: 1100 });
+  rawFrames.start(0);
+  for (let now = 0, frame = 1; now <= 1200; now += 100, frame += 1) {
+    rawFrames.observe({ presentedFrames: frame }, now);
+  }
+  assert.equal(rawFrames.isFresh(1200), true, "raw video is still advancing");
   assert.equal(
-    staleController.confirm("voice", 950, { sensorFresh: false }),
+    Core.isTimestampFresh(0, 1200, 1100),
+    false,
+    "processed gaze stalled despite fresh raw frames",
+  );
+  assert.equal(
+    staleController.confirm("voice", 1200, {
+      sensorFresh:
+        rawFrames.isFresh(1200) &&
+        Core.isTimestampFresh(0, 1200, 1100),
+    }),
     false,
   );
   assert.equal(staleController.snapshot().centerReason, "sensor-loss");
@@ -239,6 +254,20 @@ test("stale sensor-derived arms are atomically rejected before watchdog executio
     true,
   );
   assert.deepEqual(executions, ["west"]);
+
+  const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
+  assert.match(
+    app,
+    /switchToFallback\("FaceDetector processing timeout"\)/,
+  );
+  assert.match(
+    app,
+    /estimatorGeneration !== this\.estimatorGeneration/,
+  );
+  assert.match(
+    app,
+    /const sensorFresh =[\s\S]*?\(rawFrameFresh && processedGazeFresh\)/,
+  );
 });
 
 test("nod detector requires a complete gesture epoch after each arm begins", () => {
@@ -431,6 +460,83 @@ test("calibration lifecycle closes every attempt without stale duration or quali
   );
 });
 
+test("controller metrics aggregate across rebuild epochs while task progress continues", () => {
+  const task = new Core.TaskModel();
+  const controllers = [];
+  let now = 0;
+  const buildEpoch = () => {
+    const controller = new Core.GazeIntentController({
+      dwellMs: 800,
+      onExecute(direction, source, confirmedAt) {
+        task.choose(direction, source, confirmedAt);
+      },
+    });
+    controllers.push(controller);
+    return controller;
+  };
+  const executeCurrentStep = (controller, source) => {
+    const step = task.currentStep();
+    const expected = step.options.find((option) => option.id === step.expected);
+    hold(
+      controller,
+      Core.DIRECTION_POINTS[expected.direction],
+      now,
+      900,
+      { source: "simulation" },
+    );
+    now += 1000;
+    assert.equal(controller.confirm(source, now), true);
+    now += 100;
+    controller.update(
+      { ...Core.DIRECTION_POINTS.center, confidence: 1 },
+      now,
+      { source: "simulation" },
+    );
+    now += 100;
+  };
+
+  const firstEpoch = buildEpoch();
+  executeCurrentStep(firstEpoch, "voice");
+  executeCurrentStep(firstEpoch, "gesture");
+  executeCurrentStep(firstEpoch, "voice");
+  firstEpoch.markSensorLost(now, "recalibration");
+  now += 100;
+  firstEpoch.update(
+    { ...Core.DIRECTION_POINTS.center, confidence: 1 },
+    now,
+    { source: "simulation" },
+  );
+  now += 100;
+  assert.equal(firstEpoch.confirm("voice", now), false);
+
+  const secondEpoch = buildEpoch();
+  executeCurrentStep(secondEpoch, "gesture");
+  executeCurrentStep(secondEpoch, "voice");
+  executeCurrentStep(secondEpoch, "gesture");
+  executeCurrentStep(secondEpoch, "voice");
+  assert.equal(secondEpoch.confirm("voice", now), false);
+  task.returnHome();
+
+  const merged = Core.mergeControllerMetrics(
+    ...controllers.map((controller) => controller.metrics),
+  );
+  assert.equal(task.isExactComplete(), true);
+  assert.equal(merged.explicitConfirmations, 7);
+  assert.equal(merged.executions, 7);
+  assert.equal(merged.sensorLosses, 1);
+  assert.equal(merged.sensorRecoveries, 1);
+  assert.equal(merged.blockedConfirmations, 2);
+  assert.deepEqual(merged.confirmationSources, { voice: 4, gesture: 3 });
+
+  const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
+  assert.match(
+    app,
+    /function buildController\(\) \{\s*archiveCurrentControllerMetrics\(\)/,
+  );
+  assert.match(app, /const metrics = combinedControllerMetrics\(\)/);
+  assert.match(app, /controllerEpochs: state\.controllerEpochs/);
+});
+
 test("raw-frame watchdog ignores controller suppression and suspends for manual or completion", () => {
   const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
   const monitor = app.match(
@@ -445,7 +551,11 @@ test("raw-frame watchdog ignores controller suppression and suspends for manual 
   assert.match(app, /onFreshFrame\(now\) \{\s*state\.lastRawFrameAt = now/);
   assert.match(
     app,
-    /state\.visionSensor\.isFresh\(now\)[\s\S]*controller\.confirm\(source, now, \{ sensorFresh \}\)/,
+    /state\.visionSensor\.isFresh\(now\)[\s\S]*isProcessedGazeFresh\(now\)[\s\S]*controller\.confirm\(source, now, \{ sensorFresh \}\)/,
+  );
+  assert.match(
+    app,
+    /state\.visionSensor\.isFresh\(now\) &&\s*processedGazeHasTimedOut\(now\)/,
   );
 });
 

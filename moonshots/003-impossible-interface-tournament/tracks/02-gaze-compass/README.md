@@ -68,6 +68,10 @@ The exact tournament route is:
   is suspended during manual override and after completion. Confirmation also
   checks that gate synchronously, so a stale sensor arm is rejected even before
   a watchdog tick.
+- Raw video freshness and processed gaze freshness are independent gates. If
+  frames advance while FaceDetector stalls, the old arm is revoked and the
+  estimator switches to frame-motion fallback with timed recalibration. A
+  sensor-derived confirm requires both timestamps to be fresh.
 - Nod recognition starts a new gesture epoch when an arm begins and ends it on
   every confirm, cancel, center, confidence pause, or sensor loss. Both nod
   phases must occur after the current arm.
@@ -111,6 +115,9 @@ quality.
 - Camera and microphone counters finalize independently when their tracks end.
   Mission completion time freezes when center-home is reached; later exports
   refresh only still-active sensor counters.
+- Controller metrics are archived and summed whenever recalibration rebuilds
+  the controller. Task selections remain intact, so the final seven-step export
+  includes confirmations, blocked attempts, and sensor losses from every epoch.
 - Calibration duration is computed only from a closed start/end interval, so
   later routing or export time cannot extend it.
 - CSP sets `connect-src 'none'`; the source contains no network client,

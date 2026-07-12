@@ -421,6 +421,45 @@
     return rawDirectionForAngle(angle);
   }
 
+  const CONTROLLER_METRIC_FIELDS = Object.freeze([
+    "focusEvents",
+    "candidateAnnouncements",
+    "arms",
+    "explicitConfirmations",
+    "blockedConfirmations",
+    "executions",
+    "falseCommits",
+    "dwellCancellations",
+    "confidencePauses",
+    "confidenceRevocations",
+    "staleSensorConfirmations",
+    "sensorLosses",
+    "sensorRecoveries",
+  ]);
+
+  function createControllerMetrics() {
+    return {
+      ...Object.fromEntries(CONTROLLER_METRIC_FIELDS.map((field) => [field, 0])),
+      confirmationSources: {},
+    };
+  }
+
+  function mergeControllerMetrics(...sources) {
+    const merged = createControllerMetrics();
+    for (const source of sources) {
+      if (!source) continue;
+      for (const field of CONTROLLER_METRIC_FIELDS) {
+        merged[field] += Number.isFinite(source[field]) ? source[field] : 0;
+      }
+      for (const [name, count] of Object.entries(source.confirmationSources || {})) {
+        merged.confirmationSources[name] =
+          (merged.confirmationSources[name] || 0) +
+          (Number.isFinite(count) ? count : 0);
+      }
+    }
+    return merged;
+  }
+
   class GazeIntentController {
     constructor(options) {
       const config = options || {};
@@ -437,22 +476,7 @@
         onSensorLost: config.onSensorLost || function noop() {},
         onRecovered: config.onRecovered || function noop() {},
       };
-      this.metrics = {
-        focusEvents: 0,
-        candidateAnnouncements: 0,
-        arms: 0,
-        explicitConfirmations: 0,
-        blockedConfirmations: 0,
-        executions: 0,
-        falseCommits: 0,
-        dwellCancellations: 0,
-        confidencePauses: 0,
-        confidenceRevocations: 0,
-        staleSensorConfirmations: 0,
-        sensorLosses: 0,
-        sensorRecoveries: 0,
-        confirmationSources: {},
-      };
+      this.metrics = createControllerMetrics();
       this.reset();
     }
 
@@ -879,6 +903,12 @@
     return Math.max(0, endedAt - startedAt);
   }
 
+  function isTimestampFresh(timestamp, now, timeoutMs) {
+    if (!Number.isFinite(timestamp) || !Number.isFinite(now)) return false;
+    const age = now - timestamp;
+    return age >= 0 && age < Math.max(1, finiteNumber(timeoutMs, 1100));
+  }
+
   function parseVoiceCommand(text, step) {
     const phrase = normalizeSpeech(text);
     if (!phrase) return { type: "unknown", phrase };
@@ -1149,8 +1179,11 @@
     VideoFrameFreshnessGate,
     closedIntervalDuration,
     completionDuration,
+    createControllerMetrics,
     fitCalibration,
     mapCalibratedPoint,
+    mergeControllerMetrics,
+    isTimestampFresh,
     optionForDirection,
     parseVoiceCommand,
     runDeterministicSimulation,

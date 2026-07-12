@@ -27,6 +27,10 @@ as a click.
     remain operable.
 15. Every calibration exit closes its timestamp interval and clears stale model
     quality.
+16. Advancing raw frames cannot keep an arm executable when processed gaze
+    samples time out.
+17. Rebuilding the controller mid-route preserves aggregate metrics and exactly
+    seven confirmations.
 
 ## Method
 
@@ -60,6 +64,7 @@ The committed evidence records:
 - gaze-only executions: 0,
 - confidence revocations/blocked stale confirmations: 1/1,
 - stale sensor-arm rejections: 1,
+- controller-epoch metric aggregation: exact 7 confirmations in regression,
 - deliberate center cancellations: at least 1,
 - sensor losses/recoveries: 1/1,
 - raw frames/audio stored: 0/0, and
