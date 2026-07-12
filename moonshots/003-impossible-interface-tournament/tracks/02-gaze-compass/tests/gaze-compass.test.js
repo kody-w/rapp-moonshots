@@ -367,9 +367,68 @@ test("sensor lifecycle generation disposes late streams and End Sensors enables 
   );
   assert.match(
     app,
-    /function enterParityOnlyMode\(message\) \{\s*state\.sensorsStopped = true;\s*state\.calibrationStatus = "accessibility-only"/,
+    /function enterParityOnlyMode\(message\) \{\s*state\.sensorsStopped = true;\s*state\.paused = false;/,
   );
   assert.match(app, /if \(!state\.controller\) buildController\(\)/);
+});
+
+test("parity and center resume voice-paused input and clear calibration overlay", () => {
+  const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
+  assert.match(
+    app,
+    /function enterParityOnlyMode\(message\) \{\s*state\.sensorsStopped = true;\s*state\.paused = false;/,
+  );
+  assert.match(
+    app,
+    /function centerAction\(source\) \{[\s\S]*?const resumedFromPause = state\.paused;\s*state\.paused = false;/,
+  );
+  assert.match(
+    app,
+    /function resetCalibrationOverlay\(\) \{\s*elements\.calibrationLayer\.classList\.add\("is-hidden"\)/,
+  );
+  assert.match(
+    app,
+    /function releaseMediaResources\(options\)[\s\S]*?resetCalibrationOverlay\(\)/,
+  );
+  assert.match(
+    app,
+    /function enterParityOnlyMode\(message\)[\s\S]*?resetCalibrationOverlay\(\)/,
+  );
+});
+
+test("calibration lifecycle closes every attempt without stale duration or quality", () => {
+  assert.equal(Core.closedIntervalDuration(null, 1000), 0);
+  assert.equal(Core.closedIntervalDuration(1000, null), 0);
+  assert.equal(Core.closedIntervalDuration(1000, 900), 0);
+  assert.equal(Core.closedIntervalDuration(1000, 1650), 650);
+
+  const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
+  assert.match(
+    app,
+    /function beginCalibrationLifecycle\(now\) \{[\s\S]*?state\.calibrationEndedAt = null;[\s\S]*?state\.calibrationModel = null;[\s\S]*?state\.calibrationQuality = null;/,
+  );
+  assert.match(
+    app,
+    /finalizeCalibrationLifecycle\("complete", now, model, false\)/,
+  );
+  assert.match(app, /finalizeCalibrationLifecycle\("retrying", now, null, false\)/);
+  assert.match(app, /finalizeCalibrationLifecycle\("failed", now, null, false\)/);
+  assert.match(
+    app,
+    /finalizeCalibrationLifecycle\("frozen", performance\.now\(\), null, false\)/,
+  );
+  assert.match(
+    app,
+    /finalizeCalibrationLifecycle\(\s*"shutdown",\s*performance\.now\(\)/,
+  );
+  assert.match(
+    app,
+    /Core\.closedIntervalDuration\(\s*state\.calibrationStartedAt,\s*state\.calibrationEndedAt/,
+  );
+  assert.doesNotMatch(
+    app,
+    /state\.calibrationEndedAt \|\| now/,
+  );
 });
 
 test("raw-frame watchdog ignores controller suppression and suspends for manual or completion", () => {

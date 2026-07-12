@@ -19,6 +19,9 @@ not eye-tracker precision.
 | Confirmation races the watchdog | `confirm()` synchronously checks raw-frame freshness for sensor-derived arms and atomically enters sensor-loss recovery | Manual/switch arms intentionally do not depend on camera freshness |
 | Motion begins before arming | Nod detector epochs are opened on arm and closed on every arm exit; pre-arm phases are discarded | Deliberate movement entirely after arming can still be ambiguous |
 | End Sensors races permission | A generation token invalidates the request; any late stream is stopped before use, and parity mode replaces interrupted calibration | Browser permission UI itself remains browser-controlled |
+| End Sensors follows voice Stop | Parity transition clears pause, and Center independently resumes without voice | An assistive device must still reach one parity control |
+| Calibration overlay survives interruption | Every lifecycle exit hides and resets the layer before parity is enabled | A browser rendering defect can still require tab reload |
+| Failed calibration duration grows forever | Attempts reset prior model/quality and close a bounded start/end interval on every exit | Cross-attempt aggregate timing is intentionally not reported |
 | Confidence drops after arming | The arm and dwell are revoked immediately; explicit confirm is rejected until a full confident re-dwell | Confidence itself remains heuristic |
 | Negated speech contains “confirm” | Only exact allowlisted confirmation phrases execute | Recognition can still mistranscribe an intended exact phrase |
 | Low confidence later improves | Dwell time pauses rather than accumulating wall-clock time | Confidence itself is heuristic |

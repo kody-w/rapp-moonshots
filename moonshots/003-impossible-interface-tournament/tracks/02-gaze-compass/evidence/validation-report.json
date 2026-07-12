@@ -3,8 +3,8 @@
   "validator": "gaze-compass-track-02",
   "passed": true,
   "tests": {
-    "total": 19,
-    "passed": 19
+    "total": 21,
+    "passed": 21
   },
   "gates": {
     "exactTaskCompletion": true,
@@ -16,6 +16,8 @@
     "staleSensorArmRejected": true,
     "armScopedNodGesture": true,
     "lifecycleGenerationSafe": true,
+    "parityPauseRecovery": true,
+    "calibrationLifecycleClosed": true,
     "fixedCompletionTiming": true,
     "frozenFramesRejected": true,
     "strictConfirmGrammar": true,

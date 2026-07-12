@@ -23,6 +23,10 @@ as a click.
 12. Nod outbound and return phases both occur inside one arm epoch.
 13. Late permission streams are disposed after End Sensors, and completion
     duration does not drift at export.
+14. End Sensors clears voice pause and calibration overlays so parity controls
+    remain operable.
+15. Every calibration exit closes its timestamp interval and clears stale model
+    quality.
 
 ## Method
 

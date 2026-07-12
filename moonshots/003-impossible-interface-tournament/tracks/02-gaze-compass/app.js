@@ -61,6 +61,7 @@
     calibrationAttempts: 0,
     calibrationStartedAt: null,
     calibrationEndedAt: null,
+    calibrationQuality: null,
     calibrationStatus: "not-started",
     calibrationFrame: 0,
     calibrationRetryTimer: 0,
@@ -769,17 +770,54 @@
     speak(`Look ${label}.`, true);
   }
 
+  function resetCalibrationOverlay() {
+    elements.calibrationLayer.classList.add("is-hidden");
+    elements.calibrationFill.style.width = "0%";
+    elements.calibrationTarget.style.left = "50%";
+    elements.calibrationTarget.style.top = "50%";
+    elements.calibrationTarget.style.transform = "translate(-50%, -50%)";
+    elements.calibrationTitle.textContent = "Look at center";
+    elements.calibrationDetail.textContent = "Hold naturally. No click needed.";
+  }
+
+  function beginCalibrationLifecycle(now) {
+    state.calibrationStatus = "running";
+    state.calibrationStartedAt = now;
+    state.calibrationEndedAt = null;
+    state.calibrationModel = null;
+    state.calibrationQuality = null;
+    state.calibrationInterruptedByFreeze = false;
+  }
+
+  function finalizeCalibrationLifecycle(status, now, model, preserveEnd) {
+    const startedAt = state.calibrationStartedAt;
+    if (!preserveEnd || state.calibrationEndedAt === null) {
+      state.calibrationEndedAt = Number.isFinite(startedAt)
+        ? Math.max(startedAt, Number.isFinite(now) ? now : startedAt)
+        : null;
+    }
+    state.calibrationStatus = status;
+    if (status === "complete" && model) {
+      state.calibrationModel = model;
+      state.calibrationQuality = model.quality;
+    } else {
+      state.calibrationModel = null;
+      state.calibrationQuality = null;
+    }
+    state.calibrationSequence = null;
+  }
+
   function startCalibration(reason) {
     if (state.mode === "live" && !state.stream) return;
     cancelAnimationFrame(state.calibrationFrame);
     window.clearTimeout(state.calibrationRetryTimer);
     state.calibrationAttempts += 1;
-    state.calibrationStatus = "running";
-    state.calibrationInterruptedByFreeze = false;
-    state.calibrationStartedAt = performance.now();
+    const startedAt = performance.now();
+    beginCalibrationLifecycle(startedAt);
     state.calibrationSequence = new Core.TimedCalibration({ settleMs: 350, captureMs: 950 });
-    state.calibrationSequence.start(state.calibrationStartedAt);
+    state.calibrationSequence.start(startedAt);
     state.smoother = new PointSmoother();
+    resetCalibrationOverlay();
     elements.calibrationLayer.classList.remove("is-hidden");
     elements.sensorOverlay.classList.add("is-hidden");
     renderTask();
@@ -809,26 +847,28 @@
       }
 
       try {
-        state.calibrationModel = state.calibrationSequence.finish(now);
-        state.calibrationStatus = "complete";
-        state.calibrationEndedAt = now;
-        elements.calibrationLayer.classList.add("is-hidden");
+        const model = state.calibrationSequence.finish(now);
+        finalizeCalibrationLifecycle("complete", now, model, false);
+        resetCalibrationOverlay();
         state.smoother.reset({ x: 0, y: 0, confidence: 1 });
         buildController();
         renderTask();
-        const quality = Math.round(state.calibrationModel.quality * 100);
+        const quality = Math.round(state.calibrationQuality * 100);
         setStatus(`Calibration complete at ${quality}% quality. Center is safe.`);
         speak("Calibration complete. Center is safe. Say route, then look north.", true);
       } catch (error) {
         if (state.calibrationAttempts < 3) {
+          finalizeCalibrationLifecycle("retrying", now, null, false);
+          resetCalibrationOverlay();
           setStatus("Signal was not separated enough. Calibration restarts automatically.", true);
           state.calibrationRetryTimer = window.setTimeout(
             () => startCalibration("automatic retry"),
             700,
           );
         } else {
-          state.calibrationStatus = "accessibility-only";
-          elements.calibrationLayer.classList.add("is-hidden");
+          finalizeCalibrationLifecycle("failed", now, null, false);
+          resetCalibrationOverlay();
+          state.paused = false;
           buildController();
           renderTask();
           elements.sensorOverlay.classList.remove("is-hidden");
@@ -866,8 +906,9 @@
   function handleVideoFreeze(reason) {
     if (state.calibrationStatus === "running") {
       cancelAnimationFrame(state.calibrationFrame);
-      state.calibrationStatus = "frozen";
+      finalizeCalibrationLifecycle("frozen", performance.now(), null, false);
       state.calibrationInterruptedByFreeze = true;
+      resetCalibrationOverlay();
     }
     handleTrackLoss(reason);
     elements.sensorOverlay.classList.remove("is-hidden");
@@ -955,6 +996,15 @@
     state.calibrationRetryTimer = 0;
     window.clearInterval(state.monitorTimer);
     state.monitorTimer = 0;
+    if (["running", "retrying", "frozen"].includes(state.calibrationStatus)) {
+      finalizeCalibrationLifecycle(
+        "shutdown",
+        performance.now(),
+        null,
+        state.calibrationEndedAt !== null,
+      );
+    }
+    resetCalibrationOverlay();
 
     if (state.visionSensor) {
       try {
@@ -1124,7 +1174,21 @@
 
   function enterParityOnlyMode(message) {
     state.sensorsStopped = true;
-    state.calibrationStatus = "accessibility-only";
+    state.paused = false;
+    if (state.calibrationStartedAt === null) {
+      state.calibrationStatus = "parity-only";
+      state.calibrationEndedAt = null;
+      state.calibrationModel = null;
+      state.calibrationQuality = null;
+    } else if (["running", "retrying", "frozen"].includes(state.calibrationStatus)) {
+      finalizeCalibrationLifecycle(
+        "interrupted",
+        performance.now(),
+        null,
+        state.calibrationEndedAt !== null,
+      );
+    }
+    resetCalibrationOverlay();
     state.sensorModeName = "parity controls only";
     elements.sensorMode.textContent = "Sensor: parity controls only · no camera frames";
     setIndicator(elements.cameraIndicator, "off", "Camera off");
@@ -1254,7 +1318,7 @@
         if (state.controller) state.controller.cancel("voice-stop");
         elements.sensorOverlay.classList.remove("is-hidden");
         elements.sensorOverlayCopy.textContent =
-          "Stopped by voice. No input can arm. Say “resume,” then return to center.";
+          "Stopped by voice. No input can arm. Say “resume” or use Center.";
         setIndicator(elements.cameraIndicator, "paused", "Input stopped");
         setStatus("Stopped. All armed input cleared.", true);
         speak("Stopped. All input cleared. Say resume when ready.", true);
@@ -1347,6 +1411,12 @@
 
   function centerAction(source) {
     if (!state.controller) return;
+    const resumedFromPause = state.paused;
+    state.paused = false;
+    if (resumedFromPause) {
+      elements.sensorOverlay.classList.add("is-hidden");
+      if (state.stream) setIndicator(elements.cameraIndicator, "on", "Camera local");
+    }
     state.nodDetector.endArm();
     stopManualHold();
     state.manualOverrideUntil = performance.now() + 600;
@@ -1432,12 +1502,14 @@
       calibration: {
         method: "center-plus-four-radial-timed",
         status: state.calibrationStatus,
-        durationMs:
-          state.calibrationStartedAt === null
-            ? 0
-            : Math.round((state.calibrationEndedAt || now) - state.calibrationStartedAt),
-        quality: state.calibrationModel
-          ? Math.round(state.calibrationModel.quality * 10000) / 10000
+        durationMs: Math.round(
+          Core.closedIntervalDuration(
+            state.calibrationStartedAt,
+            state.calibrationEndedAt,
+          ),
+        ),
+        quality: state.calibrationQuality !== null
+          ? Math.round(state.calibrationQuality * 10000) / 10000
           : null,
         estimator: state.sensorModeName,
       },
@@ -1765,6 +1837,17 @@
           stopped: state.sensorsStopped,
           lastRawFrameAt: state.lastRawFrameAt,
         },
+        calibration: {
+          status: state.calibrationStatus,
+          startedAt: state.calibrationStartedAt,
+          endedAt: state.calibrationEndedAt,
+          quality: state.calibrationQuality,
+          durationMs: Core.closedIntervalDuration(
+            state.calibrationStartedAt,
+            state.calibrationEndedAt,
+          ),
+        },
+        paused: state.paused,
         completedAt: state.completedAt,
         metrics: state.lastMetrics,
       };

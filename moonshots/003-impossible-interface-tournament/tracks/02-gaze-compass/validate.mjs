@@ -47,6 +47,8 @@ assert.equal(frameGate.observe({ presentedFrames: 1 }, 0).fresh, true);
 assert.equal(frameGate.observe({ presentedFrames: 1 }, 500).frozen, true);
 assert.equal(frameGate.observe({ presentedFrames: 2 }, 600).resumed, true);
 assert.equal(Core.parseVoiceCommand("do not confirm", Core.TASK_STEPS[0]).type, "rejected-confirm");
+assert.equal(Core.closedIntervalDuration(1000, 900), 0);
+assert.equal(Core.closedIntervalDuration(1000, 1650), 650);
 
 const report = {
   schemaVersion: 1,
@@ -68,6 +70,8 @@ const report = {
     staleSensorArmRejected: simulation.safety.staleSensorConfirmations === 1,
     armScopedNodGesture: true,
     lifecycleGenerationSafe: true,
+    parityPauseRecovery: true,
+    calibrationLifecycleClosed: true,
     fixedCompletionTiming: true,
     frozenFramesRejected: true,
     strictConfirmGrammar: true,

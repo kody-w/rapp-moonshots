@@ -874,6 +874,11 @@
     return Math.max(0, end - start);
   }
 
+  function closedIntervalDuration(startedAt, endedAt) {
+    if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt)) return 0;
+    return Math.max(0, endedAt - startedAt);
+  }
+
   function parseVoiceCommand(text, step) {
     const phrase = normalizeSpeech(text);
     if (!phrase) return { type: "unknown", phrase };
@@ -1142,6 +1147,7 @@
     TaskModel,
     TimedCalibration,
     VideoFrameFreshnessGate,
+    closedIntervalDuration,
     completionDuration,
     fitCalibration,
     mapCalibratedPoint,

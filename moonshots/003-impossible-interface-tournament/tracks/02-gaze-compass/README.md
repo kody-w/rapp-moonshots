@@ -99,7 +99,11 @@ quality.
   preview, then enters parity-only mode.
 - End Sensors advances an explicit lifecycle generation. A stream that resolves
   from an older permission request is immediately disposed, and interrupted
-  calibration becomes usable parity-only control.
+  calibration becomes usable parity-only control. Parity entry clears a prior
+  voice pause; Center also provides a non-voice resume path.
+- Calibration begin clears the previous model, quality, and timestamps. Every
+  success, retry failure, terminal failure, freeze, or shutdown closes the
+  attempt, hides/resets its overlay, and records a bounded duration.
 - Audio is neither read into application buffers nor recorded.
 - No raw frame or audio enters exported metrics.
 - Export recomputes live camera/microphone on-time at export; stopping sensors
@@ -107,6 +111,8 @@ quality.
 - Camera and microphone counters finalize independently when their tracks end.
   Mission completion time freezes when center-home is reached; later exports
   refresh only still-active sensor counters.
+- Calibration duration is computed only from a closed start/end interval, so
+  later routing or export time cannot extend it.
 - CSP sets `connect-src 'none'`; the source contains no network client,
   persistence API, analytics, or recorder.
 - Browser speech recognition may be unavailable or use browser/OS processing

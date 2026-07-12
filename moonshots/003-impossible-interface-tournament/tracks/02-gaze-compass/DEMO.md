@@ -24,7 +24,9 @@ can help while an independent confirmation channel owns commitment.
 6. Cover or freeze the camera after arming, then try to confirm before the next
    watchdog tick. Show the atomic stale-arm rejection, cleared arm, and required
    center reacquisition.
-7. Finish the route, return center, and export privacy-safe metrics.
+7. During calibration, choose End Sensors. Show the calibration layer disappear
+   and complete a parity choice with Center plus keyboard/touch/switch.
+8. Finish the route, return center, and export privacy-safe metrics.
 
 ## Deterministic proof
 
