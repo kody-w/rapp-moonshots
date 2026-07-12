@@ -303,6 +303,76 @@
     }
   }
 
+  class VideoFrameFreshnessGate {
+    constructor(options) {
+      const config = options || {};
+      this.timeoutMs = clamp(finiteNumber(config.timeoutMs, 1100), 250, 5000);
+      this.reset();
+    }
+
+    reset() {
+      this.startedAt = null;
+      this.lastMarker = null;
+      this.lastFreshAt = null;
+      this.frozen = false;
+    }
+
+    start(now) {
+      this.reset();
+      this.startedAt = finiteNumber(now, 0);
+    }
+
+    markerFor(frame) {
+      if (frame && Number.isFinite(frame.presentedFrames)) {
+        return { kind: "presentedFrames", value: frame.presentedFrames };
+      }
+      if (frame && Number.isFinite(frame.mediaTime)) {
+        return { kind: "mediaTime", value: frame.mediaTime };
+      }
+      if (frame && Number.isFinite(frame.currentTime)) {
+        return { kind: "currentTime", value: frame.currentTime };
+      }
+      if (frame && Number.isFinite(frame.timestamp)) {
+        return { kind: "timestamp", value: frame.timestamp };
+      }
+      return null;
+    }
+
+    evaluateFreeze(now) {
+      const timestamp = finiteNumber(now, 0);
+      const reference = this.lastFreshAt === null ? this.startedAt : this.lastFreshAt;
+      const frozen = reference !== null && timestamp - reference >= this.timeoutMs;
+      const justFrozen = frozen && !this.frozen;
+      this.frozen = frozen;
+      return { frozen, justFrozen };
+    }
+
+    observe(frame, now) {
+      const timestamp = finiteNumber(now, 0);
+      if (this.startedAt === null) this.startedAt = timestamp;
+      const marker = this.markerFor(frame);
+      const fresh =
+        marker !== null &&
+        (this.lastMarker === null ||
+          marker.kind !== this.lastMarker.kind ||
+          marker.value !== this.lastMarker.value);
+
+      if (!fresh) {
+        return { fresh: false, resumed: false, ...this.evaluateFreeze(timestamp) };
+      }
+
+      const resumed = this.frozen;
+      this.lastMarker = marker;
+      this.lastFreshAt = timestamp;
+      this.frozen = false;
+      return { fresh: true, frozen: false, justFrozen: false, resumed };
+    }
+
+    check(now) {
+      return { fresh: false, resumed: false, ...this.evaluateFreeze(now) };
+    }
+  }
+
   function angularDistance(a, b) {
     return Math.abs((((a - b) % 360) + 540) % 360 - 180);
   }
@@ -370,6 +440,7 @@
         falseCommits: 0,
         dwellCancellations: 0,
         confidencePauses: 0,
+        confidenceRevocations: 0,
         sensorLosses: 0,
         sensorRecoveries: 0,
         confirmationSources: {},
@@ -420,6 +491,10 @@
       const timestamp = finiteNumber(now, 0);
       const sample = normalizeSample(point);
       if (!sample || sample.confidence < this.config.minConfidence) {
+        if (this.currentSector) {
+          if (this.armed) this.metrics.confidenceRevocations += 1;
+          this.clearFocus("confidence-pause", true);
+        }
         if (
           this.lastGoodAt !== null &&
           timestamp - this.lastGoodAt >= this.config.sensorTimeoutMs
@@ -522,6 +597,7 @@
         !this.armed ||
         !this.currentSector ||
         this.centerRequired ||
+        this.state === "confidence-pause" ||
         this.state === "sensor-lost" ||
         this.state === "recovering"
       ) {
@@ -689,11 +765,8 @@
     }
 
     undo() {
-      if (this.home) {
-        this.home = false;
-        return true;
-      }
       if (this.stepIndex <= 0) return false;
+      this.home = false;
       this.routeCommitted = false;
       this.stepIndex = Math.min(this.stepIndex, TASK_STEPS.length) - 1;
       const step = TASK_STEPS[this.stepIndex];
@@ -739,13 +812,28 @@
       .trim();
   }
 
+  function shouldHandleGlobalConfirmKey(key, interactiveTarget) {
+    return (key === "Enter" || key === " ") && !interactiveTarget;
+  }
+
+  function sensorOnDuration(accumulatedMs, startedAt, now) {
+    const accumulated = Math.max(0, finiteNumber(accumulatedMs, 0));
+    if (!Number.isFinite(startedAt)) return accumulated;
+    return accumulated + Math.max(0, finiteNumber(now, startedAt) - startedAt);
+  }
+
   function parseVoiceCommand(text, step) {
     const phrase = normalizeSpeech(text);
     if (!phrase) return { type: "unknown", phrase };
     if (/\b(stop|freeze)\b/.test(phrase)) return { type: "stop", phrase };
     if (/\b(cancel|never mind|abort)\b/.test(phrase)) return { type: "cancel", phrase };
     if (/\bundo\b/.test(phrase)) return { type: "undo", phrase };
-    if (/\b(confirm|approve|yes confirm)\b/.test(phrase)) return { type: "confirm", phrase };
+    if (["confirm", "yes confirm", "confirm choice", "approve", "approve choice"].includes(phrase)) {
+      return { type: "confirm", phrase };
+    }
+    if (/\b(confirm|approve)\b/.test(phrase)) {
+      return { type: "rejected-confirm", phrase };
+    }
     if (/\b(home|center|rest)\b/.test(phrase)) return { type: "center", phrase };
     if (/\b(resume|continue)\b/.test(phrase)) return { type: "resume", phrase };
     if (/\b(repeat|options)\b/.test(phrase)) return { type: "repeat", phrase };
@@ -888,6 +976,16 @@
       }
 
       const expected = step.options.find((option) => option.id === step.expected);
+      if (index === 2) {
+        record("voice-guide", { phrase: expected.label, direction: expected.direction });
+        feed(expected.direction, 1000);
+        controller.update({ ...mappedPoint(expected.direction), confidence: 0.1 }, now);
+        now += 100;
+        record("confidence-revoked", {
+          confirmAccepted: controller.confirm("voice", now),
+        });
+        now += 100;
+      }
       record("voice-guide", { phrase: expected.label, direction: expected.direction });
       feed(expected.direction, 1000);
       const beforeConfirm = controller.metrics.executions;
@@ -940,6 +1038,7 @@
         blockedConfirmations: controller.metrics.blockedConfirmations,
         dwellCancellations: controller.metrics.dwellCancellations,
         confidencePauses: controller.metrics.confidencePauses,
+        confidenceRevocations: controller.metrics.confidenceRevocations,
         sensorLosses: controller.metrics.sensorLosses,
         sensorRecoveries: controller.metrics.sensorRecoveries,
       },
@@ -981,11 +1080,14 @@
     NodDetector,
     TaskModel,
     TimedCalibration,
+    VideoFrameFreshnessGate,
     fitCalibration,
     mapCalibratedPoint,
     optionForDirection,
     parseVoiceCommand,
     runDeterministicSimulation,
+    sensorOnDuration,
     sectorForPoint,
+    shouldHandleGlobalConfirmKey,
   });
 });

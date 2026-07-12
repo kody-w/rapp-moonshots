@@ -132,6 +132,73 @@ test("dwell never commits by itself and sensor loss requires center recovery", (
   assert.equal(controller.metrics.falseCommits, 0);
 });
 
+test("confidence loss revokes an armed candidate until a full confident re-dwell", () => {
+  const executions = [];
+  const controller = new Core.GazeIntentController({
+    dwellMs: 800,
+    onExecute: (direction) => executions.push(direction),
+  });
+
+  hold(controller, Core.DIRECTION_POINTS.south, 0, 900);
+  assert.equal(controller.snapshot().armed, true);
+  controller.update({ ...Core.DIRECTION_POINTS.south, confidence: 0.1 }, 1000);
+
+  assert.equal(controller.snapshot().state, "confidence-pause");
+  assert.equal(controller.snapshot().armed, false);
+  assert.equal(controller.snapshot().sector, null);
+  assert.equal(controller.metrics.confidenceRevocations, 1);
+  assert.equal(controller.confirm("voice", 1010), false);
+  controller.update({ ...Core.DIRECTION_POINTS.south, confidence: 0.95 }, 1100);
+  assert.equal(controller.snapshot().armed, false);
+  assert.equal(executions.length, 0);
+
+  hold(controller, Core.DIRECTION_POINTS.south, 1200, 900);
+  assert.equal(controller.snapshot().armed, true);
+  assert.equal(controller.confirm("voice", 2200), true);
+  assert.deepEqual(executions, ["south"]);
+
+  const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
+  assert.match(app, /confidence: point\.confidence/);
+});
+
+test("frame freshness gate rejects frozen pixels and cannot arm from stale samples", () => {
+  const gate = new Core.VideoFrameFreshnessGate({ timeoutMs: 700 });
+  const controller = new Core.GazeIntentController({
+    dwellMs: 800,
+    sensorTimeoutMs: 700,
+  });
+  gate.start(0);
+
+  const first = gate.observe({ presentedFrames: 1, mediaTime: 0 }, 0);
+  assert.equal(first.fresh, true);
+  if (first.fresh) {
+    controller.update({ ...Core.DIRECTION_POINTS.east, confidence: 0.95 }, 0);
+  }
+  for (const now of [100, 200, 300, 400, 500, 600]) {
+    const repeatedFrame = gate.observe({ presentedFrames: 1, mediaTime: 0 }, now);
+    assert.equal(repeatedFrame.fresh, false);
+  }
+  const frozen = gate.observe({ presentedFrames: 1, mediaTime: 0 }, 700);
+  assert.equal(frozen.frozen, true);
+  assert.equal(frozen.justFrozen, true);
+  controller.check(700);
+
+  assert.equal(controller.snapshot().centerReason, "sensor-loss");
+  assert.equal(controller.snapshot().armed, false);
+  assert.equal(controller.confirm("voice", 710), false);
+  assert.equal(controller.lastGoodAt, 0);
+
+  const resumed = gate.observe({ presentedFrames: 2, mediaTime: 0.04 }, 800);
+  assert.equal(resumed.fresh, true);
+  assert.equal(resumed.resumed, true);
+
+  const currentTimeGate = new Core.VideoFrameFreshnessGate({ timeoutMs: 700 });
+  currentTimeGate.start(0);
+  assert.equal(currentTimeGate.observe({ currentTime: 1 }, 0).fresh, true);
+  assert.equal(currentTimeGate.observe({ currentTime: 1 }, 100).fresh, false);
+  assert.equal(currentTimeGate.observe({ currentTime: 1.04 }, 200).fresh, true);
+});
+
 test("voice values guide a sector while only explicit confirm is a commit command", () => {
   const quantity = Core.TASK_STEPS.find((step) => step.id === "quantity");
   const value = Core.parseVoiceCommand("route three cobalt beacons", quantity);
@@ -143,6 +210,97 @@ test("voice values guide a sector while only explicit confirm is a commit comman
   assert.equal(value.option.direction, "east");
   assert.equal(confirmation.type, "confirm");
   assert.equal(stop.type, "stop");
+});
+
+test("strict confirm grammar rejects negated and contextual phrases", () => {
+  const step = Core.TASK_STEPS[0];
+  for (const phrase of ["confirm", "yes confirm", "confirm choice", "approve", "approve choice"]) {
+    assert.equal(Core.parseVoiceCommand(phrase, step).type, "confirm", phrase);
+  }
+  for (const phrase of [
+    "do not confirm",
+    "cannot approve",
+    "please confirm",
+    "confirm later",
+    "they said confirm",
+    "can you approve",
+    "not confirm",
+  ]) {
+    assert.equal(Core.parseVoiceCommand(phrase, step).type, "rejected-confirm", phrase);
+  }
+});
+
+test("global confirm keys are ignored on native interactive controls", () => {
+  assert.equal(Core.shouldHandleGlobalConfirmKey("Enter", false), true);
+  assert.equal(Core.shouldHandleGlobalConfirmKey(" ", false), true);
+  assert.equal(Core.shouldHandleGlobalConfirmKey("Enter", true), false);
+  assert.equal(Core.shouldHandleGlobalConfirmKey(" ", true), false);
+  assert.equal(Core.shouldHandleGlobalConfirmKey("Escape", false), false);
+
+  const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
+  assert.match(app, /function isNativeInteractiveTarget\(target\)/);
+  assert.match(app, /target\.closest\(\s*"button, a\[href\], input, select, textarea/);
+  assert.match(
+    app,
+    /if \(!Core\.shouldHandleGlobalConfirmKey\(event\.key, interactiveTarget\)\) return;/,
+  );
+});
+
+test("completion-aware undo removes the final choice in one operation", () => {
+  const task = new Core.TaskModel();
+  for (const step of Core.TASK_STEPS) {
+    const expected = step.options.find((option) => option.id === step.expected);
+    task.choose(expected.direction, "voice", task.stepIndex * 1000);
+  }
+  task.returnHome();
+  assert.equal(task.isExactComplete(), true);
+
+  assert.equal(task.undo(), true);
+  const snapshot = task.snapshot();
+  assert.equal(snapshot.home, false);
+  assert.equal(snapshot.routeCommitted, false);
+  assert.equal(snapshot.exactComplete, false);
+  assert.equal(snapshot.stepIndex, Core.TASK_STEPS.length - 1);
+  assert.equal(snapshot.selections.release, undefined);
+  assert.equal(task.currentStep().id, "release");
+
+  const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
+  assert.equal((app.match(/state\.task\.undo\(\)/g) || []).length, 1);
+  assert.match(app, /undoLastChoice\("voice"\)/);
+  assert.match(app, /undoLastChoice\("keyboard"\)/);
+  assert.match(app, /elements\.completionBanner\.classList\.add\("is-hidden"\)/);
+});
+
+test("startup cleanup releases acquired media before parity fallback", () => {
+  const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
+  assert.match(
+    app,
+    /catch \(error\) \{\s*releaseMediaResources\(\{ markSensorLoss: false \}\);\s*enterParityOnlyMode/s,
+  );
+  assert.match(app, /function releaseMediaResources\(options\)[\s\S]*state\.visionSensor\.stop\(\)/);
+  assert.match(app, /window\.clearInterval\(state\.monitorTimer\)/);
+  assert.match(app, /window\.clearTimeout\(state\.calibrationRetryTimer\)/);
+  assert.match(app, /const stream = state\.stream;\s*state\.stream = null/);
+  assert.match(app, /tracks = stream\.getTracks\(\)/);
+  assert.match(app, /for \(const track of tracks\)[\s\S]*track\.stop\(\)/);
+  assert.match(app, /elements\.cameraPreview\.srcObject = null/);
+});
+
+test("sensor timing continues through export and is finalized on stop", () => {
+  assert.equal(Core.sensorOnDuration(250, 1000, 1600), 850);
+  assert.equal(Core.sensorOnDuration(850, null, 2200), 850);
+  assert.equal(Core.sensorOnDuration(0, 2000, 1500), 0);
+
+  const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
+  assert.match(
+    app,
+    /function metricsForExport\(\)[\s\S]*state\.lastMetrics = buildLiveMetrics\(\)/,
+  );
+  assert.match(app, /function downloadMetrics\(\) \{\s*const metrics = metricsForExport\(\)/);
+  assert.match(
+    app,
+    /releaseMediaResources\(\{ markSensorLoss: true \}\);\s*if \(state\.completed && state\.mode === "live"\) state\.lastMetrics = buildLiveMetrics\(\)/,
+  );
 });
 
 test("deterministic simulation completes the exact cobalt-beacon task identically", () => {
@@ -164,6 +322,9 @@ test("deterministic simulation completes the exact cobalt-beacon task identicall
   });
   assert.equal(first.safety.falseCommits, 0);
   assert.equal(first.safety.gazeOnlyExecutions, 0);
+  assert.equal(first.safety.blockedConfirmations, 1);
+  assert.equal(first.safety.confidencePauses, 1);
+  assert.equal(first.safety.confidenceRevocations, 1);
   assert.equal(first.safety.sensorLosses, 1);
   assert.equal(first.safety.sensorRecoveries, 1);
   assert.equal(first.interaction.explicitConfirmations, Core.TASK_STEPS.length);
@@ -198,6 +359,8 @@ test("privacy validator finds no network client, recording, or durable frame sto
   assert.match(app, /navigator\.mediaDevices\.getUserMedia/);
   assert.match(app, /FaceDetector/);
   assert.match(app, /frame-motion head-pose fallback/);
+  assert.match(app, /requestVideoFrameCallback/);
+  assert.match(app, /VideoFrameFreshnessGate/);
   assert.match(app, /clearRect/);
   assert.match(index, /Frames ephemeral/);
   assert.match(index, /coarse webcam gaze estimate/i);

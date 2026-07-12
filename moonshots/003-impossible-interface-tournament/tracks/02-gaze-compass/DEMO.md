@@ -21,16 +21,17 @@ can help while an independent confirmation channel owns commitment.
 4. Route the shared cobalt task using the direction table in `README.md`.
 5. Hold one wrong candidate for 400 ms, then return center. Show that it speaks
    and cancels without execution.
-6. Cover or disable the camera after arming. Show signal pause, cleared arm, and
-   required center reacquisition.
+6. Cover or freeze the camera after arming. Show fresh-frame timeout, cleared
+   arm, and required center reacquisition.
 7. Finish the route, return center, and export privacy-safe metrics.
 
 ## Deterministic proof
 
 Open `http://localhost:8000/?simulate=1`. The fixed replay performs one center
-cancellation, one sensor-loss recovery, alternating voice/gesture confirms, the
-exact route, and final center return. Exported simulation metrics are identical
-to `evidence/simulation-metrics.json`.
+cancellation, one confidence-arm revocation with blocked confirmation, one
+sensor-loss recovery, alternating voice/gesture confirms, the exact route, and
+final center return. Exported simulation metrics are identical to
+`evidence/simulation-metrics.json`.
 
 ```bash
 node validate.mjs

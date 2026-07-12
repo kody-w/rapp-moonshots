@@ -34,9 +34,18 @@ assert.deepEqual(simulation, repeat);
 assert.equal(simulation.exactTaskCompletion, true);
 assert.equal(simulation.safety.falseCommits, 0);
 assert.equal(simulation.safety.gazeOnlyExecutions, 0);
+assert.equal(simulation.safety.confidenceRevocations, 1);
+assert.equal(simulation.safety.blockedConfirmations, 1);
 assert.equal(simulation.privacy.rawFramesStored, 0);
 assert.equal(simulation.privacy.rawAudioStored, 0);
 assert.equal(simulation.privacy.networkRequests, 0);
+
+const frameGate = new Core.VideoFrameFreshnessGate({ timeoutMs: 500 });
+frameGate.start(0);
+assert.equal(frameGate.observe({ presentedFrames: 1 }, 0).fresh, true);
+assert.equal(frameGate.observe({ presentedFrames: 1 }, 500).frozen, true);
+assert.equal(frameGate.observe({ presentedFrames: 2 }, 600).resumed, true);
+assert.equal(Core.parseVoiceCommand("do not confirm", Core.TASK_STEPS[0]).type, "rejected-confirm");
 
 const report = {
   schemaVersion: 1,
@@ -52,6 +61,11 @@ const report = {
     falseCommits: simulation.safety.falseCommits,
     gazeOnlyExecutions: simulation.safety.gazeOnlyExecutions,
     centerCancellationObserved: simulation.safety.dwellCancellations > 0,
+    confidenceArmRevoked:
+      simulation.safety.confidenceRevocations === 1 &&
+      simulation.safety.blockedConfirmations === 1,
+    frozenFramesRejected: true,
+    strictConfirmGrammar: true,
     sensorLossRecovered:
       simulation.safety.sensorLosses === 1 && simulation.safety.sensorRecoveries === 1,
     localEphemeralProcessing:

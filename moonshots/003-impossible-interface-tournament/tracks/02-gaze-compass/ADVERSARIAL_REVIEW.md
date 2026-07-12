@@ -15,7 +15,9 @@ not eye-tracker precision.
 | User stares at an option unintentionally | Dwell only arms; it never executes | User may still say an ambiguous confirmation |
 | Synthesized speech triggers recognition | Recognition is aborted while the app speaks and restarted afterward | OS/browser echo behavior varies |
 | Casual movement resembles a nod | Nod needs an outbound movement and timed reversal; center processing precedes gesture confirmation | Some motor patterns can false-positive; voice/switch should be preferred for high stakes |
-| Camera freezes after arming | Timeout clears focus, announces loss, and requires center | Browser/device failures can delay an `ended` event until timeout |
+| Camera freezes after arming | Decoded-frame identity/`currentTime` must advance; repeated pixels are ignored, the watchdog clears focus, and center recovery is required | Browser metadata quality varies, so timeout remains necessary |
+| Confidence drops after arming | The arm and dwell are revoked immediately; explicit confirm is rejected until a full confident re-dwell | Confidence itself remains heuristic |
+| Negated speech contains “confirm” | Only exact allowlisted confirmation phrases execute | Recognition can still mistranscribe an intended exact phrase |
 | Low confidence later improves | Dwell time pauses rather than accumulating wall-clock time | Confidence itself is heuristic |
 | FaceDetector disappears mid-session | Input clears and timed calibration restarts for the fallback coordinate space | Recalibration interrupts the task |
 | Calibration cannot separate targets | Three automatic attempts, then gaze is disabled while parity remains | This user/device combination receives no gaze benefit |

@@ -16,14 +16,17 @@ as a click.
 6. Identical synthetic input produces byte-equivalent metric objects.
 7. No raw frame/audio persistence or application network client is present.
 8. Keyboard, touch, and switch paths preserve separate arm and confirm phases.
+9. Repeated video-frame identities cannot advance dwell and time out safely.
+10. Negated/contextual confirmation speech cannot execute.
 
 ## Method
 
 `runDeterministicSimulation()` uses fixed synthetic samples and a virtual clock.
 It calibrates center plus four radial targets, dwells each expected sector,
 asserts zero execution before explicit confirmation, alternates voice and
-gesture confirmation, inserts a wrong-sector center cancellation, inserts a
-sensor timeout and center recovery, then returns home.
+gesture confirmation, inserts a wrong-sector center cancellation, revokes one
+armed choice with low confidence and blocks its confirmation, inserts a sensor
+timeout and center recovery, then returns home.
 
 Unit tests separately perturb the calibration basis, probe radial/angular
 boundaries, and attempt confirmation after center cancellation and sensor loss.
@@ -46,6 +49,7 @@ The committed evidence records:
 - seven explicit confirmations: four voice and three gesture,
 - false commits: 0,
 - gaze-only executions: 0,
+- confidence revocations/blocked stale confirmations: 1/1,
 - deliberate center cancellations: at least 1,
 - sensor losses/recoveries: 1/1,
 - raw frames/audio stored: 0/0, and

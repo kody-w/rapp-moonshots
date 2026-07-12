@@ -61,6 +61,8 @@
     calibrationEndedAt: null,
     calibrationStatus: "not-started",
     calibrationFrame: 0,
+    calibrationRetryTimer: 0,
+    calibrationInterruptedByFreeze: false,
     monitorTimer: 0,
     recognition: null,
     recognitionRunning: false,
@@ -104,7 +106,7 @@
       this.point = {
         x: this.point.x + (point.x - this.point.x) * alpha,
         y: this.point.y + (point.y - this.point.y) * alpha,
-        confidence: this.point.confidence * 0.45 + point.confidence * 0.55,
+        confidence: point.confidence,
       };
       return { ...this.point };
     }
@@ -194,7 +196,11 @@
       this.faceMisses = 0;
       this.running = false;
       this.frameHandle = 0;
-      this.lastFrameAt = 0;
+      this.videoFrameHandle = null;
+      this.watchdogTimer = 0;
+      this.lastProcessedAt = 0;
+      this.usesVideoFrameCallback = false;
+      this.frameGate = new Core.VideoFrameFreshnessGate({ timeoutMs: 1100 });
       this.mode = "frame-motion head-pose fallback";
     }
 
@@ -209,7 +215,13 @@
       }
       this.callbacks.onMode(this.mode);
       this.running = true;
-      this.frameHandle = requestAnimationFrame((now) => this.processFrame(now));
+      this.frameGate.start(performance.now());
+      this.usesVideoFrameCallback =
+        typeof this.video.requestVideoFrameCallback === "function";
+      this.watchdogTimer = window.setInterval(() => {
+        this.handleFreshness(this.frameGate.check(performance.now()));
+      }, 250);
+      this.scheduleFrame();
     }
 
     switchToFallback(reason) {
@@ -221,23 +233,77 @@
       this.callbacks.onMode(this.mode, reason || "FaceDetector unavailable");
     }
 
-    processFrame(now) {
+    scheduleFrame() {
       if (!this.running) return;
-      this.frameHandle = requestAnimationFrame((nextNow) => this.processFrame(nextNow));
+      if (this.usesVideoFrameCallback) {
+        this.videoFrameHandle = this.video.requestVideoFrameCallback((now, metadata) => {
+          this.videoFrameHandle = null;
+          if (!this.running) return;
+          this.scheduleFrame();
+          this.considerFrame(now, metadata);
+        });
+      } else {
+        this.frameHandle = requestAnimationFrame((now) => {
+          if (!this.running) return;
+          this.scheduleFrame();
+          this.considerFrame(now, null);
+        });
+      }
+    }
+
+    frameDescriptor(metadata) {
+      let presentedFrames = metadata && metadata.presentedFrames;
+      if (!Number.isFinite(presentedFrames) && this.video.getVideoPlaybackQuality) {
+        const quality = this.video.getVideoPlaybackQuality();
+        if (Number.isFinite(quality.totalVideoFrames) && quality.totalVideoFrames > 0) {
+          presentedFrames = quality.totalVideoFrames;
+        }
+      }
       if (
-        now - this.lastFrameAt < 82 ||
+        !Number.isFinite(presentedFrames) &&
+        Number.isFinite(this.video.webkitDecodedFrameCount) &&
+        this.video.webkitDecodedFrameCount > 0
+      ) {
+        presentedFrames = this.video.webkitDecodedFrameCount;
+      }
+      return {
+        presentedFrames,
+        mediaTime: metadata && metadata.mediaTime,
+        currentTime: this.video.currentTime,
+        timestamp: metadata && metadata.presentationTime,
+      };
+    }
+
+    handleFreshness(result) {
+      if (result.justFrozen) {
+        this.callbacks.onFreeze("video frame timeout");
+      } else if (result.resumed) {
+        this.callbacks.onResume();
+      }
+    }
+
+    considerFrame(now, metadata) {
+      if (
+        !this.running ||
         this.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
       ) {
         return;
       }
-      this.lastFrameAt = now;
+      const freshness = this.frameGate.observe(this.frameDescriptor(metadata), now);
+      this.handleFreshness(freshness);
+      if (!freshness.fresh || now - this.lastProcessedAt < 82) return;
+      this.lastProcessedAt = now;
+      this.processFreshFrame(now);
+    }
+
+    processFreshFrame(frameObservedAt) {
       this.context.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
       const imageData = this.context.getImageData(0, 0, this.canvas.width, this.canvas.height);
       const fallbackSample = this.motion.estimate(imageData);
       this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
       if (!this.detector) {
-        this.callbacks.onSample(fallbackSample, this.mode, now);
+        this.callbacks.onSample(fallbackSample, this.mode, frameObservedAt);
         return;
       }
       if (this.detectorBusy) return;
@@ -247,6 +313,9 @@
         .detect(this.video)
         .then((faces) => {
           if (!this.running) return;
+          const freshness = this.frameGate.check(performance.now());
+          this.handleFreshness(freshness);
+          if (freshness.frozen) return;
           if (faces.length === 1) {
             this.faceMisses = 0;
             const box = faces[0].boundingBox;
@@ -257,14 +326,14 @@
                 confidence: 0.9,
               },
               this.mode,
-              performance.now(),
+              frameObservedAt,
             );
           } else {
             this.faceMisses += 1;
             this.callbacks.onSample(
               { ...fallbackSample, confidence: 0.12 },
               this.mode,
-              performance.now(),
+              frameObservedAt,
             );
             if (this.faceMisses >= 8) this.switchToFallback("No stable face box");
           }
@@ -278,8 +347,18 @@
     stop() {
       this.running = false;
       cancelAnimationFrame(this.frameHandle);
+      if (
+        this.videoFrameHandle !== null &&
+        typeof this.video.cancelVideoFrameCallback === "function"
+      ) {
+        this.video.cancelVideoFrameCallback(this.videoFrameHandle);
+      }
+      this.videoFrameHandle = null;
+      window.clearInterval(this.watchdogTimer);
+      this.watchdogTimer = 0;
       this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
       this.motion.clear();
+      this.frameGate.reset();
       this.detector = null;
     }
   }
@@ -658,9 +737,12 @@
   }
 
   function startCalibration(reason) {
+    if (state.mode === "live" && !state.stream) return;
     cancelAnimationFrame(state.calibrationFrame);
+    window.clearTimeout(state.calibrationRetryTimer);
     state.calibrationAttempts += 1;
     state.calibrationStatus = "running";
+    state.calibrationInterruptedByFreeze = false;
     state.calibrationStartedAt = performance.now();
     state.calibrationSequence = new Core.TimedCalibration({ settleMs: 350, captureMs: 950 });
     state.calibrationSequence.start(state.calibrationStartedAt);
@@ -708,7 +790,10 @@
       } catch (error) {
         if (state.calibrationAttempts < 3) {
           setStatus("Signal was not separated enough. Calibration restarts automatically.", true);
-          window.setTimeout(() => startCalibration("automatic retry"), 700);
+          state.calibrationRetryTimer = window.setTimeout(
+            () => startCalibration("automatic retry"),
+            700,
+          );
         } else {
           state.calibrationStatus = "accessibility-only";
           elements.calibrationLayer.classList.add("is-hidden");
@@ -746,6 +831,28 @@
     }
   }
 
+  function handleVideoFreeze(reason) {
+    if (state.calibrationStatus === "running") {
+      cancelAnimationFrame(state.calibrationFrame);
+      state.calibrationStatus = "frozen";
+      state.calibrationInterruptedByFreeze = true;
+    }
+    handleTrackLoss(reason);
+    elements.sensorOverlay.classList.remove("is-hidden");
+    elements.sensorOverlayCopy.textContent =
+      "Video frames stopped advancing. Stale pixels are ignored; input is cleared until fresh frames return and center is reacquired.";
+    setStatus("Video frozen. No stale frame can refresh or arm a choice.", true);
+  }
+
+  function handleVideoResume() {
+    if (state.calibrationInterruptedByFreeze && state.stream) {
+      state.calibrationAttempts = 0;
+      startCalibration("fresh video frames resumed");
+      return;
+    }
+    setStatus("Fresh video frames resumed. Return to center to recover.");
+  }
+
   function activateApplication(mode) {
     state.mode = mode;
     state.sessionStartedAt = performance.now();
@@ -754,6 +861,80 @@
     buildCompassGeometry();
     renderTask();
     updateCursor({ x: 0, y: 0, confidence: mode === "simulation" ? 1 : 0 });
+  }
+
+  function releaseMediaResources(options) {
+    const config = { markSensorLoss: false, ...(options || {}) };
+    cancelAnimationFrame(state.calibrationFrame);
+    state.calibrationFrame = 0;
+    window.clearTimeout(state.calibrationRetryTimer);
+    state.calibrationRetryTimer = 0;
+    window.clearInterval(state.monitorTimer);
+    state.monitorTimer = 0;
+
+    if (state.visionSensor) {
+      try {
+        state.visionSensor.stop();
+      } catch (_error) {
+        // Track cleanup below remains authoritative if the processing loop failed.
+      }
+      state.visionSensor = null;
+    }
+    state.recognitionWanted = false;
+    window.clearTimeout(state.recognitionRestartTimer);
+    state.recognitionRestartTimer = 0;
+    if (state.recognition) {
+      try {
+        state.recognition.abort();
+      } catch (_error) {
+        state.recognitionRunning = false;
+      }
+      state.recognition = null;
+    }
+
+    const now = performance.now();
+    const timing = privacyTiming(now);
+    state.cameraAccumulatedMs = timing.cameraOnMs;
+    state.microphoneAccumulatedMs = timing.microphoneOnMs;
+    state.cameraStartedAt = null;
+    state.microphoneStartedAt = null;
+    const stream = state.stream;
+    state.stream = null;
+    if (stream) {
+      let tracks = [];
+      try {
+        tracks = stream.getTracks();
+      } catch (_error) {
+        tracks = [];
+      }
+      for (const track of tracks) {
+        try {
+          track.stop();
+        } catch (_error) {
+          // A track that ended during cleanup is already stopped.
+        }
+      }
+    }
+
+    try {
+      elements.cameraPreview.pause();
+    } catch (_error) {
+      // The preview may not have reached a playable state.
+    }
+    elements.cameraPreview.srcObject = null;
+    elements.cameraPreview.classList.add("is-hidden");
+    const context = elements.canvas.getContext("2d");
+    if (context) context.clearRect(0, 0, elements.canvas.width, elements.canvas.height);
+    state.calibrationSequence = null;
+    state.smoother = null;
+    state.calibrationInterruptedByFreeze = false;
+
+    setIndicator(elements.cameraIndicator, "off", "Camera off");
+    setIndicator(elements.micIndicator, "off", "Mic off");
+    if (config.markSensorLoss && state.controller && !state.completed) {
+      state.controller.markSensorLost(now, "sensors ended");
+      renderController(state.controller.snapshot());
+    }
   }
 
   async function startLive() {
@@ -808,12 +989,15 @@
         {
           onSample: onSensorSample,
           onMode: onSensorMode,
+          onFreeze: handleVideoFreeze,
+          onResume: handleVideoResume,
         },
       );
       state.visionSensor.start();
       initializeRecognition();
       startCalibration();
     } catch (error) {
+      releaseMediaResources({ markSensorLoss: false });
       enterParityOnlyMode(
         `Permission or sensor start failed: ${error && error.name ? error.name : "unavailable"}.`,
       );
@@ -835,6 +1019,7 @@
   }
 
   function handleTrackLoss(reason) {
+    if (state.completed || !state.stream) return;
     if (state.controller) state.controller.markSensorLost(performance.now(), reason);
     setIndicator(elements.cameraIndicator, "paused", "Camera signal lost");
   }
@@ -910,6 +1095,23 @@
     speak(`${step.prompt}. ${options}.`, true);
   }
 
+  function undoLastChoice(source) {
+    if (!state.task.undo()) return false;
+    stopManualHold();
+    if (state.controller) {
+      state.controller.cancel(`${source}-undo`);
+      renderController(state.controller.snapshot());
+    }
+    state.completed = false;
+    state.lastMetrics = null;
+    elements.completionBanner.classList.add("is-hidden");
+    elements.exportMetrics.disabled = true;
+    renderTask();
+    setStatus("Last choice undone. Return to center, then choose again.", true);
+    speak("Last choice undone. Return to center.", true);
+    return true;
+  }
+
   function handleVoice(transcript) {
     const command = Core.parseVoiceCommand(transcript, state.task.currentStep());
     switch (command.type) {
@@ -943,16 +1145,11 @@
         speak("Resumed. Return to center.", true);
         break;
       case "undo":
-        if (state.task.undo()) {
-          if (state.controller) state.controller.cancel("undo");
-          state.completed = false;
-          state.lastMetrics = null;
-          elements.completionBanner.classList.add("is-hidden");
-          elements.exportMetrics.disabled = true;
-          renderTask();
-          setStatus("Last choice undone. Return to center, then choose again.", true);
-          speak("Last choice undone. Return to center.", true);
-        }
+        undoLastChoice("voice");
+        break;
+      case "rejected-confirm":
+        setStatus("Confirmation rejected. Say exactly “confirm” or “approve.” Nothing changed.", true);
+        speak("Confirmation rejected. Say confirm or approve exactly.", true);
         break;
       case "center":
         centerAction("voice");
@@ -1066,12 +1263,14 @@
     const timestamp = now || performance.now();
     return {
       cameraOnMs: Math.round(
-        state.cameraAccumulatedMs +
-          (state.cameraStartedAt === null ? 0 : timestamp - state.cameraStartedAt),
+        Core.sensorOnDuration(state.cameraAccumulatedMs, state.cameraStartedAt, timestamp),
       ),
       microphoneOnMs: Math.round(
-        state.microphoneAccumulatedMs +
-          (state.microphoneStartedAt === null ? 0 : timestamp - state.microphoneStartedAt),
+        Core.sensorOnDuration(
+          state.microphoneAccumulatedMs,
+          state.microphoneStartedAt,
+          timestamp,
+        ),
       ),
     };
   }
@@ -1120,6 +1319,7 @@
         blockedConfirmations: metrics.blockedConfirmations || 0,
         dwellCancellations: metrics.dwellCancellations || 0,
         confidencePauses: metrics.confidencePauses || 0,
+        confidenceRevocations: metrics.confidenceRevocations || 0,
         sensorLosses: metrics.sensorLosses || 0,
         sensorRecoveries: metrics.sensorRecoveries || 0,
       },
@@ -1152,14 +1352,22 @@
     speak("Route complete. Home safe. Metrics ready.", true);
   }
 
+  function metricsForExport() {
+    if (state.mode === "live" && state.completed) {
+      state.lastMetrics = buildLiveMetrics();
+    }
+    return state.lastMetrics;
+  }
+
   function downloadMetrics() {
-    if (!state.lastMetrics) return;
-    const payload = JSON.stringify(state.lastMetrics, null, 2);
+    const metrics = metricsForExport();
+    if (!metrics) return;
+    const payload = JSON.stringify(metrics, null, 2);
     const blob = new Blob([payload], { type: "application/json" });
     const objectUrl = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = objectUrl;
-    anchor.download = `gaze-compass-${state.lastMetrics.mode}-metrics.json`;
+    anchor.download = `gaze-compass-${metrics.mode}-metrics.json`;
     document.body.append(anchor);
     anchor.click();
     anchor.remove();
@@ -1167,36 +1375,8 @@
   }
 
   function stopSensors() {
-    if (state.visionSensor) {
-      state.visionSensor.stop();
-      state.visionSensor = null;
-    }
-    if (state.recognition) {
-      state.recognitionWanted = false;
-      try {
-        state.recognition.abort();
-      } catch (_error) {
-        state.recognitionRunning = false;
-      }
-    }
-    if (state.stream) {
-      const now = performance.now();
-      const timing = privacyTiming(now);
-      state.cameraAccumulatedMs = timing.cameraOnMs;
-      state.microphoneAccumulatedMs = timing.microphoneOnMs;
-      state.cameraStartedAt = null;
-      state.microphoneStartedAt = null;
-      for (const track of state.stream.getTracks()) track.stop();
-      state.stream = null;
-    }
-    elements.cameraPreview.srcObject = null;
-    elements.cameraPreview.classList.add("is-hidden");
-    setIndicator(elements.cameraIndicator, "off", "Camera off");
-    setIndicator(elements.micIndicator, "off", "Mic off");
-    if (state.controller && !state.completed) {
-      state.controller.markSensorLost(performance.now(), "sensors ended");
-      renderController(state.controller.snapshot());
-    }
+    releaseMediaResources({ markSensorLoss: true });
+    if (state.completed && state.mode === "live") state.lastMetrics = buildLiveMetrics();
     setStatus("Sensors ended. Frames and derived frame buffers cleared.");
   }
 
@@ -1275,7 +1455,13 @@
           state: "rest",
           centerRequired: false,
         });
-        setStatus("Center canceled the candidate; zero execution.");
+        setStatus(
+          event.reason === "confidence-pause"
+            ? "Low confidence revoked the armed candidate; confirmation is blocked."
+            : "Center canceled the candidate; zero execution.",
+        );
+      } else if (event.type === "confidence-revoked") {
+        setStatus("Simulation rejected confirmation after confidence loss.");
       } else if (event.type === "center") {
         updateCursor({ x: 0, y: 0, confidence: 0.96 });
         renderController({
@@ -1314,6 +1500,15 @@
     await replaySimulation(result);
   }
 
+  function isNativeInteractiveTarget(target) {
+    if (!(target instanceof Element)) return false;
+    return Boolean(
+      target.closest(
+        "button, a[href], input, select, textarea, summary, [contenteditable]:not([contenteditable='false']), [role='button'], [role='link'], [role='slider'], [role='switch'], [role='checkbox'], [role='radio'], [tabindex]:not([tabindex='-1'])",
+      ),
+    );
+  }
+
   function bindEvents() {
     elements.startLive.addEventListener("click", startLive, { once: true });
     elements.startSimulation.addEventListener("click", startSimulation, { once: true });
@@ -1335,7 +1530,10 @@
         stopManualHold(true);
       });
       target.addEventListener("pointercancel", () => stopManualHold(true));
-      target.addEventListener("click", (event) => event.preventDefault());
+      target.addEventListener("click", (event) => {
+        event.preventDefault();
+        if (event.detail === 0) startManualHold(target.dataset.direction, true);
+      });
     }
 
     for (const control of elements.switchControls) {
@@ -1353,30 +1551,25 @@
       ArrowLeft: "west",
     };
     document.addEventListener("keydown", (event) => {
-      const editingRange =
-        event.target instanceof Element && event.target.matches("input[type='range']");
+      const interactiveTarget = isNativeInteractiveTarget(event.target);
       if (keyDirections[event.key]) {
-        if (editingRange) return;
+        if (interactiveTarget) return;
         event.preventDefault();
         if (!event.repeat) startManualHold(keyDirections[event.key], false);
       } else if (event.key === "Enter" || event.key === " ") {
-        if (
-          event.target === elements.dwellRange ||
-          (event.target instanceof Element &&
-            event.target.matches("#start-live, #start-simulation"))
-        ) {
-          return;
-        }
+        if (!Core.shouldHandleGlobalConfirmKey(event.key, interactiveTarget)) return;
         event.preventDefault();
         confirmAction("keyboard");
       } else if (event.key === "Escape" || event.key === "Backspace") {
+        if (interactiveTarget) return;
         event.preventDefault();
         centerAction("keyboard");
+      } else if (interactiveTarget) {
+        return;
       } else if (event.key.toLowerCase() === "r") {
         repeatCurrentGuide();
-      } else if (event.key.toLowerCase() === "u" && state.task.undo()) {
-        if (state.controller) state.controller.cancel("keyboard-undo");
-        renderTask();
+      } else if (event.key.toLowerCase() === "u") {
+        undoLastChoice("keyboard");
       }
     });
     document.addEventListener("keyup", (event) => {

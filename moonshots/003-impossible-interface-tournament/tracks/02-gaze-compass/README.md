@@ -35,7 +35,7 @@ http://localhost:8000/?simulate=1
    advance by time; calibration needs no click.
 3. Say the desired value. Gaze toward its spoken direction and hold.
 4. At 400 ms the candidate is spoken. Continue holding until the armed earcon.
-5. Say **confirm** or make a deliberate down/up nod.
+5. Say exactly **confirm** or **approve**, or make a deliberate down/up nod.
 6. Return to center after every confirmation. Center clears carry-over focus.
 
 The exact tournament route is:
@@ -58,8 +58,12 @@ The exact tournament route is:
 - `confirm()` requires an armed sector and records its explicit source.
 - Center, `cancel`, `stop`, `undo`, low confidence, page hiding, and sensor loss
   fail safe.
-- Low confidence pauses dwell. A signal timeout clears the candidate and
-  requires center reacquisition before recovery.
+- Low confidence revokes focus and any arm; a new confident full dwell is
+  required. A signal timeout clears the candidate and requires center
+  reacquisition before recovery.
+- Video processing prefers `requestVideoFrameCallback` metadata and otherwise
+  gates on decoded-frame count or `currentTime`. Repeated frozen pixels never
+  refresh confidence or dwell, and the freshness watchdog declares sensor loss.
 - Smoothing, a radial dead zone, center threshold, angular hysteresis, and a
   maximum credited sample gap reduce jitter and tab-stall arming.
 - Dwell is adjustable from 0.8–2.2 seconds.
@@ -83,8 +87,13 @@ quality.
   to one processing turn and the canvas is immediately cleared.
 - The fallback retains only one derived grayscale comparison buffer while the
   session is active; stopping sensors clears it.
+- If any startup step fails after permission, the application cancels frame,
+  calibration, and recognition loops, stops every acquired track, clears the
+  preview, then enters parity-only mode.
 - Audio is neither read into application buffers nor recorded.
 - No raw frame or audio enters exported metrics.
+- Export recomputes live camera/microphone on-time at export; stopping sensors
+  first freezes those counters without losing elapsed time.
 - CSP sets `connect-src 'none'`; the source contains no network client,
   persistence API, analytics, or recorder.
 - Browser speech recognition may be unavailable or use browser/OS processing
@@ -94,14 +103,17 @@ quality.
 ## Input parity
 
 - **Keyboard:** hold arrow keys to dwell, Enter/Space to confirm, Escape or
-  Backspace for center, `R` to repeat, and `U` to undo.
+  Backspace for center, `R` to repeat, and `U` to undo. On focused controls,
+  Enter/Space keeps native behavior instead of invoking the global confirmer.
 - **Touch/pointer:** hold a sector until armed, then use Confirm. Tap the center
   circle to cancel.
 - **Single-switch:** Cycle starts timed focus, Center cancels, and Confirm
   activates only an armed choice.
-- **Voice:** values provide direction guidance; `confirm`, `cancel`, `stop`,
+- **Voice:** values provide direction guidance; exact `confirm`/`approve`,
+  `cancel`, `stop`,
   `undo`, `resume`, `home`, `repeat`, `slower`, `faster`, and `export metrics`
-  are supported when browser recognition exists.
+  are supported when browser recognition exists. Negated or contextual
+  confirmation phrases are rejected.
 
 ## Verify
 
