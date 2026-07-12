@@ -2,9 +2,13 @@
 
 const assert = require("node:assert/strict");
 const {
+  NodGestureGate,
   VoiceOrbitMachine,
+  isSupportedDestination,
+  normalizeDestinationIdentifier,
   parseRouteUtterance,
   runDeterministicSimulation,
+  taskComplete,
   taskMatchesTournament,
 } = require("../core.js");
 
@@ -36,6 +40,11 @@ function highlight(machine, id, source = "gaze") {
   return index;
 }
 
+function choose(machine, id, source = "keyboard") {
+  highlight(machine, id, source);
+  machine.dispatch({ type: "CONFIRM", source });
+}
+
 test("parses all shared tournament values", () => {
   const parsed = parseRouteUtterance(
     "Send three cobalt beacons at 2:30 PM, mark fragile, to Orion seven through north gate.",
@@ -49,6 +58,72 @@ test("parses all shared tournament values", () => {
     destination: "ORION-7",
     gate: "North Gate",
   });
+});
+
+test("negation wins over fragile and spoken destinations are validated", () => {
+  const parsed = parseRouteUtterance(
+    "Route two amber beacons at 12:00, do not mark as fragile, to Luna three through south gate",
+  );
+  assert.equal(parsed.fragile, false);
+  assert.equal(parsed.destination, "LUNA-3");
+  assert.equal(normalizeDestinationIdentifier("Atlas number two"), "ATLAS-2");
+  assert.equal(normalizeDestinationIdentifier("Polaris dash four"), "POLARIS-4");
+  assert.equal(normalizeDestinationIdentifier("Orion eight"), null);
+  assert.equal(normalizeDestinationIdentifier("Vega nine"), null);
+  assert.equal(isSupportedDestination("ORION-7"), true);
+  assert.equal(isSupportedDestination("VEGA-9"), false);
+  assert.equal("destination" in parseRouteUtterance("route one beacon to Vega nine"), false);
+  assert.equal(
+    taskComplete({
+      action: "route",
+      count: 1,
+      color: "cobalt",
+      time: "12:00",
+      fragile: false,
+      destination: "VEGA-9",
+      gate: "North Gate",
+    }),
+    false,
+  );
+});
+
+test("center rest cancels a downward aim without completing a nod", () => {
+  const gate = new NodGestureGate({
+    settleMs: 100,
+    armDelta: 0.03,
+    returnDelta: 0.01,
+    timeoutMs: 500,
+    cooldownMs: 200,
+  });
+  assert.equal(
+    gate.sample({ zone: "petal", index: 3, position: 0.7, now: 0 }).confirmed,
+    false,
+  );
+  assert.equal(
+    gate.sample({ zone: "petal", index: 3, position: 0.7, now: 120 }).confirmed,
+    false,
+  );
+  assert.equal(
+    gate.sample({ zone: "petal", index: 3, position: 0.75, now: 160 }).phase,
+    "down",
+  );
+  const centerReturn = gate.sample({ zone: "center", index: null, position: 0.5, now: 200 });
+  assert.equal(centerReturn.confirmed, false);
+  assert.equal(centerReturn.phase, "center");
+  assert.equal(
+    gate.sample({ zone: "petal", index: 3, position: 0.7, now: 220 }).phase,
+    "settling",
+  );
+
+  gate.sample({ zone: "petal", index: 3, position: 0.7, now: 340 });
+  gate.sample({ zone: "petal", index: 3, position: 0.75, now: 380 });
+  const explicitReturnToPetalPose = gate.sample({
+    zone: "petal",
+    index: 3,
+    position: 0.7,
+    now: 430,
+  });
+  assert.equal(explicitReturnToPetalPose.confirmed, true);
 });
 
 test("every interaction stage emits four to eight petals", () => {
@@ -160,6 +235,90 @@ test("stop, cancel, and undo win over mixed voice phrases", () => {
   assert.equal(undone.state.stage, "review");
 });
 
+test("committed and complete routes reject speech mutation until explicit undo", () => {
+  const machine = new VoiceOrbitMachine();
+  machine.dispatch({ type: "START", mode: "simulation" });
+  exactRoute(machine);
+  choose(machine, "confirm-route", "voice");
+  const committedTask = JSON.stringify(machine.state.task);
+
+  machine.dispatch({
+    type: "VOICE",
+    source: "speech",
+    text: "route two amber beacons at 12:00 not fragile to LUNA-3 through South Gate",
+  });
+  assert.equal(machine.state.stage, "committed");
+  assert.equal(machine.state.committed, true);
+  assert.equal(JSON.stringify(machine.state.task), committedTask);
+
+  choose(machine, "return-home", "gesture");
+  machine.dispatch({
+    type: "VOICE",
+    source: "speech",
+    text: "send one silver beacon at 16:00 to ATLAS-2 through East Gate",
+  });
+  assert.equal(machine.state.stage, "complete");
+  assert.equal(machine.state.committed, true);
+  assert.equal(JSON.stringify(machine.state.task), committedTask);
+  assert.equal(machine.state.metrics.blockedActions, 2);
+
+  machine.dispatch({ type: "UNDO", source: "keyboard" });
+  machine.dispatch({ type: "UNDO", source: "keyboard" });
+  assert.equal(machine.state.stage, "review");
+  assert.equal(machine.state.committed, false);
+  machine.dispatch({
+    type: "VOICE",
+    source: "speech",
+    text: "route two amber beacons at 12:00 not fragile to LUNA-3 through South Gate",
+  });
+  assert.equal(machine.state.committed, false);
+  assert.equal(machine.state.task.count, 2);
+  assert.equal(machine.state.task.fragile, false);
+  assert.equal(machine.state.task.destination, "LUNA-3");
+});
+
+test("no-speech fallback completes by keyboard and touch with sensors unrequested", () => {
+  const machine = new VoiceOrbitMachine();
+  machine.dispatch({ type: "START", mode: "fallback" });
+  assert.deepEqual(machine.state.sensors, {
+    camera: "not-requested",
+    microphone: "not-requested",
+    speech: "disabled",
+    estimator: "not-requested",
+  });
+  choose(machine, "intent-route", "keyboard");
+  choose(machine, "count-3", "touch");
+  choose(machine, "color-cobalt", "keyboard");
+  choose(machine, "time-1430", "touch");
+  choose(machine, "fragile-yes", "keyboard");
+  choose(machine, "destination-orion", "touch");
+  choose(machine, "gate-north", "keyboard");
+  choose(machine, "confirm-route", "touch");
+  choose(machine, "return-home", "keyboard");
+  assert.equal(machine.state.stage, "complete");
+  assert.equal(taskMatchesTournament(machine.state.task), true);
+  assert.equal(machine.state.metrics.voiceConfirmations, 0);
+  assert.ok(machine.state.metrics.keyboardConfirmations > 0);
+  assert.ok(machine.state.metrics.touchConfirmations > 0);
+});
+
+test("completion time stays frozen across delayed export", () => {
+  let now = 100;
+  const machine = new VoiceOrbitMachine({ clock: () => now });
+  machine.dispatch({ type: "START", mode: "simulation" });
+  now = 400;
+  exactRoute(machine);
+  choose(machine, "confirm-route", "voice");
+  now = 1000;
+  choose(machine, "return-home", "gesture");
+  assert.equal(machine.state.metrics.elapsedMs, 900);
+  now = 9100;
+  machine.dispatch({ type: "VOICE", text: "export", source: "speech" });
+  const record = machine.exportRecord();
+  assert.equal(record.metrics.elapsedMs, 900);
+  assert.equal(record.events.at(-1).t, 900);
+});
+
 test("deterministic simulation completes the exact shared task", () => {
   const { record } = runDeterministicSimulation();
   assert.equal(record.complete, true);
@@ -179,6 +338,7 @@ test("deterministic simulation completes the exact shared task", () => {
   assert.equal(record.metrics.dwellCancellations, 1);
   assert.equal(record.metrics.voiceConfirmations, 1);
   assert.equal(record.metrics.gestureConfirmations, 1);
+  assert.equal(record.metrics.elapsedMs, 2700);
 });
 
 test("instrumentation export excludes raw media and transcripts", () => {
@@ -189,7 +349,7 @@ test("instrumentation export excludes raw media and transcripts", () => {
     rawAudioStored: false,
     rawTranscriptsStored: false,
     applicationNetworkClientsUsed: false,
-    browserSpeechServiceMayUseNetwork: true,
+    browserSpeechServiceMayUseNetwork: false,
   });
   assert.equal(serialized.includes("Route three cobalt"), false);
   assert.equal(serialized.includes("frameData"), false);

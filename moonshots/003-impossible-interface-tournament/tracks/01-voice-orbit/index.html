@@ -121,6 +121,10 @@
               <span>Start voice + camera</span>
               <small>One permission gesture</small>
             </button>
+            <button class="secondary-action" id="start-fallback" type="button">
+              <span>Start keyboard + touch</span>
+              <small>No camera · no microphone · no speech service</small>
+            </button>
             <button class="secondary-action" id="start-simulation" type="button">
               <span>Run deterministic mission</span>
               <small>No permissions · 8 seconds</small>
@@ -133,7 +137,8 @@
               Webcam frames are processed ephemerally in this tab and are never recorded,
               persisted, or sent by this app. Web Speech API recognition may use your browser
               vendor’s network speech service; its audio handling follows that browser’s privacy
-              policy. Choose simulation or keyboard fallback if that is not acceptable.
+              policy. Choose the no-media keyboard + touch mode or simulation if that is not
+              acceptable.
             </p>
           </div>
         </div>

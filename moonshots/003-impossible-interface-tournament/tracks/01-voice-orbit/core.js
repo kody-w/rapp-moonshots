@@ -28,6 +28,21 @@
     "gate",
   ]);
 
+  const SUPPORTED_DESTINATIONS = Object.freeze(["ORION-7", "LUNA-3", "ATLAS-2", "POLARIS-4"]);
+
+  const SPOKEN_NUMBERS = Object.freeze({
+    zero: 0,
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+  });
+
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
   }
@@ -39,6 +54,25 @@
       .replace(/[.,!?]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  function normalizeDestinationIdentifier(value) {
+    const speech = normalizeSpeech(value);
+    const match = speech.match(
+      /\b(orion|luna|atlas|polaris)\s*(?:-|dash|hyphen|number)?\s*(zero|one|two|three|four|five|six|seven|eight|nine|\d+)\b/,
+    );
+    if (!match) {
+      return null;
+    }
+    const number = Object.prototype.hasOwnProperty.call(SPOKEN_NUMBERS, match[2])
+      ? SPOKEN_NUMBERS[match[2]]
+      : Number(match[2]);
+    const identifier = `${match[1].toUpperCase()}-${number}`;
+    return SUPPORTED_DESTINATIONS.includes(identifier) ? identifier : null;
+  }
+
+  function isSupportedDestination(value) {
+    return typeof value === "string" && SUPPORTED_DESTINATIONS.includes(value.toUpperCase());
   }
 
   function parseRouteUtterance(value) {
@@ -92,19 +126,22 @@
       }
     }
 
-    if (/\b(fragile|delicate|handle with care)\b/.test(speech)) {
-      parsed.fragile = true;
-    } else if (/\b(standard|not fragile|rugged)\b/.test(speech)) {
+    if (
+      /\bnon\s*-?\s*fragile\b/.test(speech) ||
+      /\bnot\s+(?:marked\s+)?(?:as\s+)?fragile\b/.test(speech) ||
+      /\b(?:do not|don'?t)\s+(?:(?:mark|make|treat)\s+)?(?:(?:it|them)\s+)?(?:as\s+)?fragile\b/.test(
+        speech,
+      ) ||
+      /\b(standard|rugged)\b/.test(speech)
+    ) {
       parsed.fragile = false;
+    } else if (/\b(fragile|delicate|handle with care)\b/.test(speech)) {
+      parsed.fragile = true;
     }
 
-    if (/\borion\s*-?\s*(?:7|seven)\b/.test(speech)) {
-      parsed.destination = "ORION-7";
-    } else {
-      const destinationMatch = speech.match(/\b(?:to|destination)\s+([a-z]+(?:\s*-\s*\d+)?)\b/);
-      if (destinationMatch && !/\b(?:north|south|east|west)\b/.test(destinationMatch[1])) {
-        parsed.destination = destinationMatch[1].toUpperCase().replace(/\s+/g, "-");
-      }
+    const destination = normalizeDestinationIdentifier(speech);
+    if (destination) {
+      parsed.destination = destination;
     }
 
     const gateMatch = speech.match(/\b(north|south|east|west)\s+gate\b/);
@@ -118,8 +155,84 @@
   function taskComplete(task) {
     return (
       task.action === "route" &&
-      FIELD_ORDER.every((field) => task[field] !== null && task[field] !== undefined)
+      FIELD_ORDER.every((field) => task[field] !== null && task[field] !== undefined) &&
+      isSupportedDestination(task.destination)
     );
+  }
+
+  class NodGestureGate {
+    constructor(configuration) {
+      const options = configuration || {};
+      this.settleMs = options.settleMs || 450;
+      this.armDelta = options.armDelta || 0.035;
+      this.returnDelta = options.returnDelta || 0.014;
+      this.timeoutMs = options.timeoutMs || 1000;
+      this.cooldownMs = options.cooldownMs || 1800;
+      this.cooldownUntil = 0;
+      this.reset();
+    }
+
+    reset() {
+      this.index = null;
+      this.anchor = null;
+      this.enteredAt = 0;
+      this.armedAt = 0;
+      this.phase = "settling";
+    }
+
+    sample(sample) {
+      const now = Number(sample.now) || 0;
+      const position = Number(sample.position);
+      const index = sample.index;
+      if (sample.zone === "center" || !Number.isInteger(index) || !Number.isFinite(position)) {
+        this.reset();
+        return { confirmed: false, phase: "center" };
+      }
+      if (now < this.cooldownUntil) {
+        return { confirmed: false, phase: "cooldown" };
+      }
+      if (this.index !== index) {
+        this.index = index;
+        this.anchor = position;
+        this.enteredAt = now;
+        this.armedAt = 0;
+        this.phase = "settling";
+        return { confirmed: false, phase: this.phase };
+      }
+      if (this.phase === "settling") {
+        this.anchor = position;
+        if (now - this.enteredAt >= this.settleMs) {
+          this.phase = "ready";
+        }
+        return { confirmed: false, phase: this.phase };
+      }
+      if (this.phase === "ready") {
+        const movement = position - this.anchor;
+        if (movement >= this.armDelta) {
+          this.phase = "down";
+          this.armedAt = now;
+          return { confirmed: false, phase: this.phase };
+        }
+        this.anchor = this.anchor * 0.98 + position * 0.02;
+        return { confirmed: false, phase: this.phase };
+      }
+      if (this.phase === "down") {
+        if (now - this.armedAt > this.timeoutMs) {
+          this.index = index;
+          this.anchor = position;
+          this.enteredAt = now;
+          this.armedAt = 0;
+          this.phase = "settling";
+          return { confirmed: false, phase: "timeout" };
+        }
+        if (Math.abs(position - this.anchor) <= this.returnDelta) {
+          this.cooldownUntil = now + this.cooldownMs;
+          this.reset();
+          return { confirmed: true, phase: "confirmed" };
+        }
+      }
+      return { confirmed: false, phase: this.phase };
+    }
   }
 
   function taskMatchesTournament(task) {
@@ -181,6 +294,7 @@
         frozen: false,
         freezeReason: null,
         startedAt: null,
+        stoppedAt: null,
         completedAt: null,
         confirmedAt: null,
         returnedHome: false,
@@ -208,7 +322,13 @@
       if (this.state.startedAt === null) {
         return 0;
       }
-      return Math.max(0, this.clock() - this.state.startedAt);
+      const terminalAt =
+        this.state.completedAt !== null
+          ? this.state.completedAt
+          : this.state.stoppedAt !== null
+            ? this.state.stoppedAt
+            : this.clock();
+      return Math.max(0, terminalAt - this.state.startedAt);
     }
 
     _log(type, detail) {
@@ -248,23 +368,54 @@
       this.state.highlightSource = null;
     }
 
+    _routeLocked() {
+      return (
+        this.state.committed ||
+        this.state.returnedHome ||
+        this.state.stage === "committed" ||
+        this.state.stage === "complete"
+      );
+    }
+
+    _prepareDraftMutation(source) {
+      if (this._routeLocked()) {
+        this.state.metrics.blockedActions += 1;
+        this._log("draft.mutation.blocked", { source, stage: this.state.stage });
+        return false;
+      }
+      this.state.committed = false;
+      this.state.returnedHome = false;
+      this.state.confirmedAt = null;
+      this.state.completedAt = null;
+      return true;
+    }
+
     _setDraftField(field, value) {
+      if (!this._prepareDraftMutation("prediction")) {
+        return false;
+      }
+      if (field === "destination" && !isSupportedDestination(value)) {
+        this.state.metrics.errors += 1;
+        this._log("draft.destination.rejected", { value });
+        return false;
+      }
       this.state.task.action = "route";
       this.state.task[field] = value;
       this.state.stage = taskComplete(this.state.task) ? "review" : "collect";
       this.state.highlight = null;
       this.state.highlightSource = null;
       this._log("draft.updated", { field, value });
+      return true;
     }
 
     _fieldOptions(field) {
       const options = {
         count: [
-          ["count-1", "One beacon", "1", "1"],
-          ["count-2", "Two beacons", "2", "2"],
-          ["count-3", "Three beacons", "3", "3"],
-          ["count-4", "Four beacons", "4", "4"],
-          ["count-5", "Five beacons", "5", "5"],
+          ["count-1", "One beacon", "1", 1],
+          ["count-2", "Two beacons", "2", 2],
+          ["count-3", "Three beacons", "3", 3],
+          ["count-4", "Four beacons", "4", 4],
+          ["count-5", "Five beacons", "5", 5],
           ["cancel", "Cancel route", "rest", null],
         ],
         color: [
@@ -362,6 +513,7 @@
     }
 
     _promptForStage() {
+      const fallback = this.state.mode === "fallback";
       if (this.state.frozen) {
         return `Inputs frozen — ${this.state.freezeReason || "sensor unavailable"}. Stop, cancel, and undo remain available.`;
       }
@@ -369,20 +521,30 @@
         return "Sensors stopped. No media tracks remain active.";
       }
       if (this.state.stage === "intent") {
-        return "Speak a broad intent, such as “route three cobalt beacons.”";
+        return fallback
+          ? "Use arrows or touch to highlight Route beacons, then explicitly confirm."
+          : "Speak a broad intent, such as “route three cobalt beacons.”";
       }
       if (this.state.stage === "collect") {
         const field = firstMissingField(this.state.task);
-        return `Route understood. Speak ${field}, or aim at a prediction and say “select.”`;
+        return fallback
+          ? `Choose the ${field} prediction, then explicitly confirm.`
+          : `Route understood. Speak ${field}, or aim at a prediction and say “select.”`;
       }
       if (this.state.stage === "review") {
-        return "Draft complete. Aim at Confirm route, then say “select” or nod deliberately.";
+        return fallback
+          ? "Draft complete. Highlight Confirm route, then press Enter or the confirm button."
+          : "Draft complete. Aim at Confirm route, then say “select” or nod deliberately.";
       }
       if (this.state.stage === "committed") {
-        return "Route confirmed locally. Aim at Return home and explicitly confirm.";
+        return fallback
+          ? "Route confirmed locally. Highlight Return home and explicitly confirm."
+          : "Route confirmed locally. Aim at Return home and explicitly confirm.";
       }
       if (this.state.stage === "complete") {
-        return "Task complete and home restored. Say “export” for a local JSON record.";
+        return fallback
+          ? "Task complete and home restored. Export is available as a local JSON record."
+          : "Task complete and home restored. Say “export” for a local JSON record.";
       }
       return "Voice Orbit ready.";
     }
@@ -426,6 +588,7 @@
     }
 
     _stop(source) {
+      this.state.stoppedAt = this.clock();
       this.state.status = "stopped";
       this.state.frozen = true;
       this.state.freezeReason = "stopped by user";
@@ -489,6 +652,14 @@
     }
 
     _applyParsedSpeech(parsed) {
+      if (!this._prepareDraftMutation("voice")) {
+        return [];
+      }
+      if (parsed.destination && !isSupportedDestination(parsed.destination)) {
+        this.state.metrics.errors += 1;
+        this._log("draft.destination.rejected", { value: parsed.destination });
+        return [];
+      }
       const changed = [];
       if (parsed.action === "route" || this.state.task.action === "route") {
         this.state.task.action = "route";
@@ -560,6 +731,12 @@
       }
 
       const parsed = parseRouteUtterance(speech);
+      if (this._routeLocked() && Object.keys(parsed).length > 0) {
+        this.state.metrics.blockedActions += 1;
+        this.state.lastAction = "route-locked";
+        this._log("draft.mutation.blocked", { source, stage: this.state.stage });
+        return;
+      }
       const recognized =
         Object.keys(parsed).length > 0 ||
         (this.state.stage === "collect" &&
@@ -628,17 +805,26 @@
           });
           break;
         case "change-time":
+          if (!this._prepareDraftMutation(source)) {
+            break;
+          }
           this.state.task.time = null;
           this.state.stage = "collect";
           this._log("draft.revise", { field: "time", source });
           break;
         case "change-cargo":
+          if (!this._prepareDraftMutation(source)) {
+            break;
+          }
           this.state.task.count = null;
           this.state.task.color = null;
           this.state.stage = "collect";
           this._log("draft.revise", { field: "cargo", source });
           break;
         case "change-destination":
+          if (!this._prepareDraftMutation(source)) {
+            break;
+          }
           this.state.task.destination = null;
           this.state.stage = "collect";
           this._log("draft.revise", { field: "destination", source });
@@ -722,11 +908,24 @@
             this.state.frozen = false;
             this.state.freezeReason = null;
             this.state.startedAt = this.clock();
+            this.state.stoppedAt = null;
             this.state.completedAt = null;
-            this.state.sensors.camera = action.mode === "simulation" ? "simulated" : "requesting";
-            this.state.sensors.microphone = action.mode === "simulation" ? "simulated" : "requesting";
-            this.state.sensors.speech = action.mode === "simulation" ? "simulated" : "requesting";
-            this.state.sensors.estimator = action.mode === "simulation" ? "simulated" : "calibrating";
+            if (action.mode === "simulation") {
+              this.state.sensors.camera = "simulated";
+              this.state.sensors.microphone = "simulated";
+              this.state.sensors.speech = "simulated";
+              this.state.sensors.estimator = "simulated";
+            } else if (action.mode === "fallback") {
+              this.state.sensors.camera = "not-requested";
+              this.state.sensors.microphone = "not-requested";
+              this.state.sensors.speech = "disabled";
+              this.state.sensors.estimator = "not-requested";
+            } else {
+              this.state.sensors.camera = "requesting";
+              this.state.sensors.microphone = "requesting";
+              this.state.sensors.speech = "requesting";
+              this.state.sensors.estimator = "calibrating";
+            }
             this.state.lastAction = "start";
             this._log("session.start", { mode: this.state.mode });
           }
@@ -822,7 +1021,7 @@
           rawAudioStored: false,
           rawTranscriptsStored: false,
           applicationNetworkClientsUsed: false,
-          browserSpeechServiceMayUseNetwork: true,
+          browserSpeechServiceMayUseNetwork: this.state.mode === "live",
         },
         mode: this.state.mode,
         status: this.state.status,
@@ -875,6 +1074,7 @@
     time = 2700;
     machine.dispatch({ type: "GESTURE", gesture: "nod", source: "simulation-camera" });
 
+    time = 12700;
     return {
       machine,
       record: machine.exportRecord(),
@@ -882,8 +1082,12 @@
   }
 
   return {
+    SUPPORTED_DESTINATIONS,
     TASK_TEMPLATE,
+    NodGestureGate,
     VoiceOrbitMachine,
+    isSupportedDestination,
+    normalizeDestinationIdentifier,
     normalizeSpeech,
     parseRouteUtterance,
     routeSummary,

@@ -1201,6 +1201,16 @@ body.simulation-mode .camera-monitor {
     var(--cp-surface-soft);
 }
 
+body.fallback-mode .camera-monitor {
+  background:
+    radial-gradient(circle at 50% 44%, var(--cp-surface) 0 16%, var(--cp-surface-soft) 17% 25%, var(--cp-bg-elevated) 26%),
+    var(--cp-surface-soft);
+}
+
+body.fallback-mode .camera-monitor video {
+  visibility: hidden;
+}
+
 body.simulation-mode .camera-monitor video {
   visibility: hidden;
 }

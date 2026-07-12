@@ -11,10 +11,11 @@ coarse and browser-dependent.
 | Failure | Consequence | Mitigation | Residual risk |
 |---|---|---|---|
 | Long gaze mistaken for intent | Unwanted armed petal | Dwell never executes; center clears it | User may still confirm the wrong highlight |
-| Natural head bob looks like a nod | Accidental confirmation | Down-return sequence, active highlight, time window, cooldown | Coarse motion can still false-trigger |
+| Downward petal aim looks like a nod | Center return could confirm | Nod anchors only after a stable petal pose; center is processed first and resets the gate | Coarse motion can still false-trigger away from center |
 | Face leaves frame | Stale highlight | Estimator loss clears highlight and freezes commits | Detection may report loss late |
 | Camera/mic track ends or mutes | Missing modality | Immediate freeze; priority controls remain | Voice stop cannot work after mic loss; keyboard/touch stop remains |
 | Speech hears `confirm` incorrectly | Wrong commit | Confirmation requires an existing highlight | Highlight itself can be wrong |
+| New route values spoken after commit | Confirmed task silently changes | Committed/complete stages reject all parsed route mutations until undo/new route | User must notice the rejection prompt/event |
 | Phrase contains `stop`, `cancel`, or `undo` | Ordinary parse could override safety | Priority scan occurs before all other parsing | Benign sentences containing those words fail safe |
 | `FaceDetector` unavailable | Claimed gaze quality collapses | Explicit head/motion fallback label | Motion fallback is substantially less useful |
 | Browser speech is remote | Audio crosses app’s local boundary | Pre-permission and in-session caveat | Vendor behavior is outside app control |
@@ -28,8 +29,11 @@ coarse and browser-dependent.
 The application requests one combined media stream. Video is shown locally and
 is passed either to the browser `FaceDetector` or an in-memory 32×24 analysis
 canvas. The previous low-resolution luminance sample is replaced every frame
-and cleared on stop/page exit. Audio is not read by application code; it is
-available to the browser Web Speech implementation.
+and cleared on stop/page exit. The canvas itself is cleared in `finally`
+immediately after sampling and raw pixel bytes are zeroed after derivation.
+Audio is not read by application code; it is available to the browser Web
+Speech implementation only in live voice mode. The dedicated keyboard/touch
+startup requests no media and never creates a recognizer.
 
 There is no `fetch`, XHR, WebSocket, EventSource, beacon, recorder, storage API,
 canvas serialization, third-party script, external font, or analytics hook.

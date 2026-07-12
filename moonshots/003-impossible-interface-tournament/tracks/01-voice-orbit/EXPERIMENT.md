@@ -14,7 +14,8 @@ through North Gate, confirm, then return home.
 
 1. **Live multimodal:** one permission click, then voice + webcam only.
 2. **Voice fallback:** speak a petal label, then `select`; camera remains active.
-3. **Accessible fallback:** arrows + Enter or touch aim + explicit confirm.
+3. **No-media accessible fallback:** dedicated startup, arrows + Enter or touch
+   aim + explicit confirm; no camera, microphone, or speech recognition.
 4. **Deterministic simulation:** fixed actions and values, no permissions.
 
 Run on localhost in a current browser. Record browser/OS, `FaceDetector` mode,
@@ -28,7 +29,8 @@ participants or media.
 3. Complete the fixed task without pointer or keyboard in the live condition.
 4. During review, hold attention on **Confirm route** for at least 1.4 seconds;
    verify no commit.
-5. Return to center; verify highlight and dwell cancel.
+5. Aim downward, then return to center; verify highlight, dwell, and any gesture
+   sequence cancel without a commit.
 6. Highlight again and say `select`.
 7. Highlight **Return home** and perform a deliberate down-and-return nod.
 8. In a second run, remove a camera track while armed; verify freeze, then use
@@ -43,11 +45,15 @@ participants or media.
 | False commits | Zero commits caused by gaze or dwell |
 | Petal bound | Every stage exposes 4–8 predictions |
 | Center rest | Armed highlight clears and cancellation increments |
+| Gesture separation | Downward petal aim + center return cannot complete a nod |
 | Sensor loss | Highlight clears; commit blocks until all required sensors recover |
 | Priority safety | Stop, cancel, and undo preempt mixed ordinary phrases |
 | Hands-free | No post-start pointer/keyboard use in normal live completion |
 | Privacy | No raw media/transcript export, persistence API, or app network client |
 | Accessibility | Keyboard and touch can aim and explicitly confirm |
+| No-speech startup | No media request and no SpeechRecognition construction/start |
+| Commit integrity | Route speech cannot mutate committed/completed values |
+| Timing | Completion freezes elapsed time before any delayed export |
 | Theme | Exact Clawpilot variables and required fonts present |
 
 ## Metrics

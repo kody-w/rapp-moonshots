@@ -24,6 +24,10 @@ Open <http://localhost:8080/>. `localhost` is required because camera APIs need
 a secure context. The single **Start voice + camera** click requests both media
 permissions; normal interaction is hands-free afterward.
 
+For a true no-speech fallback, choose **Start keyboard + touch** or open
+<http://localhost:8080/?fallback=1>. It requests no camera or microphone and
+never constructs or starts Web Speech recognition.
+
 For the reproducible no-permission demo, choose **Run deterministic mission** or
 open:
 
@@ -39,15 +43,16 @@ home, and confirms home with a simulated nod.
 |---|---|
 | Broad speech | Supplies intent and any recognized route values |
 | Coarse gaze/head direction | Highlights one radial prediction |
-| Center/rest direction | Clears highlight and cancels dwell |
+| Center/rest direction | Clears highlight, cancels dwell, and resets gesture state |
 | `select` / `confirm` | Activates the highlighted prediction |
-| Deliberate down-and-return nod | Activates the highlighted prediction |
+| Deliberate nod around a settled petal pose | Activates only if it returns to that petal pose, not center |
 | `stop`, `cancel`, `undo` | Preempts ordinary voice interpretation |
 | Arrow keys | Accessible radial aim fallback |
 | Enter / explicit touch button | Accessible confirmation fallback |
 
 Touching a petal only highlights it. A separate confirmation action is always
-required.
+required. After confirmation, route values are immutable: further route speech
+is rejected until **Undo** or an explicitly confirmed **New route**.
 
 ## Sensor honesty
 
@@ -57,6 +62,10 @@ required.
 - A face bounding-box/head-position estimate is used when landmarks are absent.
 - If `FaceDetector` is absent, a 32×24 ephemeral frame-difference estimate is
   labeled **motion fallback · not eye tracking**.
+- Directional aim and nod recognition use separate signals. Center handling
+  runs first, so returning to center can never finish a nod.
+- The analysis canvas is cleared in a `finally` block immediately after every
+  sample, raw sample bytes are zeroed, and cleanup clears it again.
 - Loss of camera, microphone, or the active estimator freezes activation and
   clears the armed highlight. Stop, cancel, and undo still work.
 - This is not medical-grade eye tracking and does not claim pixel accuracy.
@@ -65,7 +74,8 @@ Webcam frames stay in memory only long enough for local analysis. The
 application has no network client, recorder, storage API, analytics, or
 external asset. However, browser Web Speech API implementations may send audio
 to a vendor speech service. This caveat is visible before permission and during
-use. Simulation and keyboard/touch controls avoid speech recognition.
+use. Simulation avoids live recognition; **Start keyboard + touch** guarantees
+that no media or speech API is requested.
 
 ## Instrumentation
 
@@ -90,6 +100,8 @@ npm test
 The dependency-free Node tests cover the state machine, all petal-count bounds,
 gaze/dwell non-activation, explicit commits, center rest, sensor-loss freeze,
 priority safety commands, exact deterministic completion, export privacy,
+locked committed routes, completion-time freezing, destination normalization,
+no-media startup isolation, native Enter activation, analysis-canvas clearing,
 network/persistence absence, browser capability hooks, and the mandatory
 Clawpilot theme.
 

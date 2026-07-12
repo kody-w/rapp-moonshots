@@ -11,6 +11,7 @@
     launch: document.getElementById("launch-screen"),
     workspace: document.getElementById("workspace"),
     startLive: document.getElementById("start-live"),
+    startFallback: document.getElementById("start-fallback"),
     startSimulation: document.getElementById("start-simulation"),
     cameraIndicator: document.getElementById("camera-indicator"),
     microphoneIndicator: document.getElementById("microphone-indicator"),
@@ -21,6 +22,7 @@
     stageChip: document.getElementById("stage-chip"),
     manifest: document.getElementById("manifest"),
     lastHeard: document.getElementById("last-heard"),
+    speechCaveat: document.getElementById("speech-caveat"),
     orbitPrompt: document.getElementById("orbit-prompt"),
     interactionMode: document.getElementById("interaction-mode"),
     orbitShell: document.getElementById("orbit-shell"),
@@ -69,9 +71,7 @@
     stableSince: 0,
     lastDwellSample: 0,
     dwellProgress: 0,
-    nodPhase: "ready",
-    nodPhaseAt: 0,
-    gestureCooldownUntil: 0,
+    nodGate: new Core.NodGestureGate(),
     petalSignature: "",
     lastExportRequest: 0,
     simulationTimers: [],
@@ -99,6 +99,7 @@
     elements.launch.hidden = true;
     elements.workspace.hidden = false;
     document.body.classList.toggle("simulation-mode", runtime.simulation);
+    document.body.classList.toggle("fallback-mode", mode === "fallback");
     elements.orbitPrompt.setAttribute("tabindex", "-1");
     elements.orbitPrompt.focus({ preventScroll: true });
   }
@@ -289,6 +290,11 @@
     announce("Local instrumentation JSON exported.");
   }
 
+  function clearAnalysisCanvas() {
+    const context = elements.canvas.getContext("2d");
+    context.clearRect(0, 0, elements.canvas.width, elements.canvas.height);
+  }
+
   function stopRuntimeSensors() {
     runtime.recognitionWanted = false;
     if (runtime.recognitionRestart) {
@@ -320,11 +326,16 @@
       runtime.stream = null;
     }
     elements.cameraPreview.srcObject = null;
+    if (runtime.previousFrame) {
+      runtime.previousFrame.fill(0);
+    }
     runtime.previousFrame = null;
+    clearAnalysisCanvas();
     runtime.detector = null;
     runtime.baseline = null;
     runtime.stableIndex = null;
     runtime.dwellProgress = 0;
+    runtime.nodGate.reset();
   }
 
   function dispatch(action) {
@@ -333,6 +344,11 @@
     machine.dispatch(action);
     render();
 
+    if (action.type === "VOICE" && machine.state.lastAction === "route-locked") {
+      elements.lastHeard.textContent =
+        "Route locked after confirmation. Say “undo” or explicitly choose New route first.";
+      announce("Confirmed route unchanged. Undo or choose New route before editing.");
+    }
     if (machine.state.exportRequested > previousExport) {
       downloadRecord();
     }
@@ -362,7 +378,7 @@
   function updateDirectionalAim(dx, dy, source, now) {
     if (machine.state.frozen || machine.state.status !== "active") {
       resetDwell();
-      return;
+      return { zone: "blocked", index: null };
     }
     const magnitude = Math.hypot(dx, dy);
     if (magnitude < 0.15) {
@@ -370,12 +386,12 @@
         dispatch({ type: "HIGHLIGHT", index: null, source: "center" });
       }
       resetDwell();
-      return;
+      return { zone: "center", index: null };
     }
 
     const count = machine.state.options.length;
     if (!count) {
-      return;
+      return { zone: "blocked", index: null };
     }
     const angle = Math.atan2(dy, dx);
     const step = (Math.PI * 2) / count;
@@ -387,7 +403,7 @@
       runtime.lastDwellSample = now;
       runtime.dwellProgress = 0;
       dispatch({ type: "HIGHLIGHT", index, source });
-      return;
+      return { zone: "petal", index };
     }
 
     const dwellElapsed = Math.max(0, now - runtime.stableSince);
@@ -399,34 +415,29 @@
     } else {
       updateAimVector();
     }
+    return { zone: "petal", index };
   }
 
-  function detectNod(verticalDisplacement, now) {
-    if (
-      now < runtime.gestureCooldownUntil ||
-      machine.state.highlight === null ||
-      machine.state.frozen
-    ) {
-      return false;
+  function processGestureSample(aim, gesturePosition, now) {
+    if (aim.zone !== "petal") {
+      runtime.nodGate.sample({
+        zone: "center",
+        index: null,
+        position: gesturePosition,
+        now,
+      });
+      return;
     }
-    if (runtime.nodPhase === "ready" && verticalDisplacement > 0.22) {
-      runtime.nodPhase = "down";
-      runtime.nodPhaseAt = now;
-      return true;
+    const result = runtime.nodGate.sample({
+      zone: "petal",
+      index: aim.index,
+      position: gesturePosition,
+      now,
+    });
+    if (result.confirmed && machine.state.highlight === aim.index && !machine.state.frozen) {
+      dispatch({ type: "GESTURE", gesture: "nod", source: "camera-motion" });
+      announce("Deliberate nod confirmed the highlighted choice.");
     }
-    if (runtime.nodPhase === "down") {
-      if (now - runtime.nodPhaseAt > 1200) {
-        runtime.nodPhase = "ready";
-        return false;
-      } else if (Math.abs(verticalDisplacement) < 0.07) {
-        runtime.nodPhase = "ready";
-        runtime.gestureCooldownUntil = now + 2400;
-        dispatch({ type: "GESTURE", gesture: "nod", source: "camera-motion" });
-        announce("Deliberate nod confirmed the highlighted choice.");
-      }
-      return true;
-    }
-    return false;
   }
 
   function landmarkCenter(face) {
@@ -470,6 +481,7 @@
     };
     const x = 1 - sourcePoint.x / elements.cameraPreview.videoWidth;
     const y = sourcePoint.y / elements.cameraPreview.videoHeight;
+    const gestureY = (box.y + box.height / 2) / elements.cameraPreview.videoHeight;
     const estimatorStatus = eyes ? "active" : "head-fallback";
     runtime.estimatorKind = eyes ? "face-landmark" : "head-position";
     elements.estimatorLabel.textContent = eyes ? "LANDMARK PROXY" : "HEAD POSITION";
@@ -499,10 +511,13 @@
       runtime.baseline.x = runtime.baseline.x * 0.996 + x * 0.004;
       runtime.baseline.y = runtime.baseline.y * 0.996 + y * 0.004;
     }
-    const gestureInProgress = detectNod(dy, now);
-    if (!gestureInProgress) {
-      updateDirectionalAim(dx, dy, eyes ? "face-landmark-gaze" : "head-position-fallback", now);
-    }
+    const aim = updateDirectionalAim(
+      dx,
+      dy,
+      eyes ? "face-landmark-gaze" : "head-position-fallback",
+      now,
+    );
+    processGestureSample(aim, gestureY, now);
   }
 
   async function analyzeFace(now) {
@@ -520,7 +535,7 @@
         }
         runtime.baseline = null;
         runtime.baselineSamples = 0;
-        runtime.nodPhase = "ready";
+        runtime.nodGate.reset();
         setSensor("estimator", "lost", "face not visible");
         elements.estimatorLabel.textContent = "FACE LOST";
       }
@@ -534,12 +549,19 @@
 
   function analyzeMotion(now) {
     const context = elements.canvas.getContext("2d", { willReadFrequently: true });
-    context.drawImage(elements.cameraPreview, 0, 0, elements.canvas.width, elements.canvas.height);
-    const pixels = context.getImageData(0, 0, elements.canvas.width, elements.canvas.height).data;
+    let pixels;
+    try {
+      context.drawImage(elements.cameraPreview, 0, 0, elements.canvas.width, elements.canvas.height);
+      pixels = context.getImageData(0, 0, elements.canvas.width, elements.canvas.height).data;
+    } finally {
+      context.clearRect(0, 0, elements.canvas.width, elements.canvas.height);
+    }
     const luminance = new Uint8Array(elements.canvas.width * elements.canvas.height);
     let weightedX = 0;
     let weightedY = 0;
     let totalDifference = 0;
+    let appearanceYTotal = 0;
+    let appearanceWeight = 0;
 
     for (let index = 0; index < luminance.length; index += 1) {
       const offset = index * 4;
@@ -547,6 +569,9 @@
         pixels[offset] * 0.299 + pixels[offset + 1] * 0.587 + pixels[offset + 2] * 0.114,
       );
       luminance[index] = value;
+      const appearance = 255 - value;
+      appearanceYTotal += Math.floor(index / elements.canvas.width) * appearance;
+      appearanceWeight += appearance;
       if (runtime.previousFrame) {
         const difference = Math.abs(value - runtime.previousFrame[index]);
         if (difference > 18) {
@@ -559,6 +584,7 @@
       }
     }
 
+    pixels.fill(0);
     runtime.previousFrame = luminance;
     setSensor("estimator", "motion-fallback", "FaceDetector unavailable");
     runtime.estimatorKind = "frame-motion";
@@ -570,14 +596,17 @@
       const centerY = weightedY / totalDifference;
       const dx = ((centerX / (elements.canvas.width - 1)) * 2 - 1) * -1;
       const dy = (centerY / (elements.canvas.height - 1)) * 2 - 1;
+      const gesturePosition =
+        appearanceWeight > 0
+          ? appearanceYTotal / appearanceWeight / (elements.canvas.height - 1)
+          : 0.5;
       runtime.lastMotionAt = now;
-      const gestureInProgress = detectNod(dy, now);
-      if (!gestureInProgress) {
-        updateDirectionalAim(dx, dy, "frame-motion-fallback", now);
-      }
+      const aim = updateDirectionalAim(dx, dy, "frame-motion-fallback", now);
+      processGestureSample(aim, gesturePosition, now);
     } else if (now - runtime.lastMotionAt > 420 && machine.state.highlightSource === "frame-motion-fallback") {
       dispatch({ type: "HIGHLIGHT", index: null, source: "center" });
       resetDwell();
+      runtime.nodGate.sample({ zone: "center", index: null, position: 0.5, now });
     }
   }
 
@@ -602,6 +631,8 @@
     runtime.baseline = null;
     runtime.baselineSamples = 0;
     runtime.previousFrame = null;
+    runtime.nodGate.reset();
+    clearAnalysisCanvas();
     if ("FaceDetector" in window) {
       try {
         runtime.detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
@@ -705,6 +736,21 @@
     };
   }
 
+  function startFallback() {
+    if (runtime.started) {
+      return;
+    }
+    showWorkspace("fallback");
+    dispatch({ type: "START", mode: "fallback" });
+    elements.interactionMode.textContent = "KEYBOARD + TOUCH · NO MEDIA";
+    elements.estimatorLabel.textContent = "NOT REQUESTED";
+    elements.lastHeard.textContent =
+      "Speech is disabled. Use arrows or touch to aim, then Enter or Confirm highlighted.";
+    elements.speechCaveat.textContent =
+      "No microphone, camera, or browser speech service is requested in this mode.";
+    announce("No-media keyboard and touch mode started.");
+  }
+
   async function startLive() {
     if (runtime.started) {
       return;
@@ -713,6 +759,7 @@
     dispatch({ type: "START", mode: "live" });
     announce("Requesting local camera and microphone permission.");
     elements.startLive.disabled = true;
+    elements.startFallback.disabled = true;
     elements.startSimulation.disabled = true;
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -877,7 +924,19 @@
     announce(`${machine.state.options[next].label} highlighted.`);
   }
 
+  function isNativeInteractiveTarget(target) {
+    return (
+      target instanceof Element &&
+      Boolean(
+        target.closest(
+          'button, a[href], input, select, textarea, summary, [contenteditable="true"], [role="button"], [role="link"]',
+        ),
+      )
+    );
+  }
+
   elements.startLive.addEventListener("click", () => void startLive());
+  elements.startFallback.addEventListener("click", startFallback);
   elements.startSimulation.addEventListener("click", startSimulation);
   elements.exportJson.addEventListener("click", () => {
     dispatch({ type: "VOICE", text: "export", source: "touch" });
@@ -909,6 +968,9 @@
       dispatch({ type: "CANCEL", source: "keyboard" });
       return;
     }
+    if (event.key === "Enter" && isNativeInteractiveTarget(event.target)) {
+      return;
+    }
     if (event.key === "Enter") {
       event.preventDefault();
       dispatch({ type: "CONFIRM", source: "keyboard" });
@@ -938,5 +1000,7 @@
   const query = new URLSearchParams(window.location.search);
   if (query.get("simulate") === "1") {
     window.setTimeout(startSimulation, 0);
+  } else if (query.get("fallback") === "1") {
+    window.setTimeout(startFallback, 0);
   }
 })();

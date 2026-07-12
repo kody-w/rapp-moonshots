@@ -15,6 +15,14 @@ const executable = `${app}\n${core}`;
 
 const checks = [];
 
+function section(source, start, end) {
+  const startIndex = source.indexOf(start);
+  const endIndex = source.indexOf(end, startIndex + start.length);
+  assert.ok(startIndex >= 0, `${start} missing`);
+  assert.ok(endIndex > startIndex, `${end} missing after ${start}`);
+  return source.slice(startIndex, endIndex);
+}
+
 function check(name, body) {
   try {
     body();
@@ -122,6 +130,52 @@ check("live multimodal capability and honest fallbacks are implemented", () => {
   assert.match(index, /browser\s+vendor’s network speech service/i);
 });
 
+check("no-media fallback cannot request microphone or start speech", () => {
+  const fallback = section(app, "function startFallback()", "async function startLive()");
+  assert.match(index, /id="start-fallback"/);
+  assert.match(index, /No camera · no microphone · no speech service/);
+  assert.match(fallback, /type: "START", mode: "fallback"/);
+  assert.doesNotMatch(fallback, /getUserMedia/);
+  assert.doesNotMatch(fallback, /startSpeechRecognition/);
+  assert.doesNotMatch(fallback, /SpeechRecognition/);
+  assert.match(core, /action\.mode === "fallback"/);
+  assert.match(core, /microphone = "not-requested"/);
+  assert.match(core, /speech = "disabled"/);
+});
+
+check("native Enter activation is preserved for interactive controls", () => {
+  assert.match(app, /function isNativeInteractiveTarget\(target\)/);
+  assert.match(app, /button, a\[href\], input, select, textarea, summary/);
+  assert.match(app, /event\.key === "Enter" && isNativeInteractiveTarget\(event\.target\)/);
+  ["fallback-cancel", "fallback-undo", "fallback-stop", "export-json"].forEach((id) => {
+    assert.match(index, new RegExp(`id="${id}"`));
+  });
+  assert.match(app, /fallbackCancel\.addEventListener\("click"/);
+  assert.match(app, /fallbackUndo\.addEventListener\("click"/);
+  assert.match(app, /fallbackStop\.addEventListener\("click"/);
+  assert.match(app, /exportJson\.addEventListener\("click"/);
+});
+
+check("center aim precedes the independent nod gesture signal", () => {
+  const face = section(app, "function processFace(face, now)", "async function analyzeFace(now)");
+  const aimIndex = face.indexOf("updateDirectionalAim(");
+  const gestureIndex = face.indexOf("processGestureSample(");
+  assert.ok(aimIndex >= 0 && gestureIndex > aimIndex);
+  assert.match(face, /const gestureY = \(box\.y \+ box\.height \/ 2\)/);
+  assert.match(app, /if \(aim\.zone !== "petal"\)/);
+  assert.match(app, /zone: "center"/);
+});
+
+check("analysis canvas is cleared after sampling and during cleanup", () => {
+  const motion = section(app, "function analyzeMotion(now)", "function analysisLoop(timestamp)");
+  const cleanup = section(app, "function stopRuntimeSensors()", "function dispatch(action)");
+  assert.match(motion, /getImageData\([^;]+;\s*}\s*finally\s*{\s*context\.clearRect\(/s);
+  assert.match(motion, /pixels\.fill\(0\)/);
+  assert.match(cleanup, /runtime\.previousFrame\.fill\(0\)/);
+  assert.match(cleanup, /clearAnalysisCanvas\(\)/);
+  assert.match(app, /window\.addEventListener\("pagehide", stopRuntimeSensors\)/);
+});
+
 check("safety, fallback, and local export controls are visible", () => {
   assert.match(index, /STOP<\/kbd><kbd>CANCEL<\/kbd><kbd>UNDO/);
   assert.match(index, /Gaze\/dwell only highlights · never activates/);
@@ -130,6 +184,10 @@ check("safety, fallback, and local export controls are visible", () => {
   assert.match(core, /"safety\.freeze"/);
   assert.match(core, /case "DWELL":/);
   assert.match(core, /executes: false/);
+  assert.match(core, /class NodGestureGate/);
+  assert.match(core, /sample\.zone === "center"/);
+  assert.match(core, /draft\.mutation\.blocked/);
+  assert.match(core, /SUPPORTED_DESTINATIONS/);
 });
 
 process.on("exit", () => {
