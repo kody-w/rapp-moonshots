@@ -29,23 +29,24 @@
   "timing": {
     "dwellMs": 900,
     "candidateSpeechMs": 400,
-    "completionMs": 12400,
-    "totalMs": 15400
+    "completionMs": 12500,
+    "totalMs": 15500
   },
   "safety": {
     "falseCommits": 0,
     "gazeOnlyExecutions": 0,
-    "blockedConfirmations": 1,
-    "dwellCancellations": 2,
+    "blockedConfirmations": 2,
+    "dwellCancellations": 3,
     "confidencePauses": 1,
     "confidenceRevocations": 1,
+    "staleSensorConfirmations": 1,
     "sensorLosses": 1,
     "sensorRecoveries": 1
   },
   "interaction": {
-    "focusEvents": 9,
-    "candidateAnnouncements": 9,
-    "arms": 8,
+    "focusEvents": 10,
+    "candidateAnnouncements": 10,
+    "arms": 9,
     "explicitConfirmations": 7,
     "confirmationSources": {
       "voice": 4,
@@ -292,50 +293,84 @@
       "reason": "post-confirm"
     },
     {
-      "atMs": 11300,
-      "type": "sensor-lost",
-      "reason": "sample-timeout"
-    },
-    {
-      "atMs": 11400,
-      "type": "sensor-recovered"
-    },
-    {
-      "atMs": 11400,
-      "type": "center",
-      "reason": "sensor-loss"
-    },
-    {
-      "atMs": 11500,
+      "atMs": 10300,
       "type": "voice-guide",
       "phrase": "ORION-7",
       "direction": "north"
     },
     {
-      "atMs": 11500,
+      "atMs": 10300,
       "type": "focus",
       "direction": "north",
       "step": "destination"
     },
     {
-      "atMs": 11900,
+      "atMs": 10700,
       "type": "candidate",
       "direction": "north",
       "label": "ORION-7"
     },
     {
-      "atMs": 12400,
+      "atMs": 11200,
       "type": "armed",
       "direction": "north"
     },
     {
-      "atMs": 12600,
+      "atMs": 11400,
+      "type": "cancel",
+      "reason": "sensor-loss",
+      "direction": "north"
+    },
+    {
+      "atMs": 11400,
+      "type": "sensor-lost",
+      "reason": "stale-sensor-confirm"
+    },
+    {
+      "atMs": 11400,
+      "type": "stale-sensor-confirm",
+      "confirmAccepted": false
+    },
+    {
+      "atMs": 11500,
+      "type": "sensor-recovered"
+    },
+    {
+      "atMs": 11500,
+      "type": "center",
+      "reason": "sensor-loss"
+    },
+    {
+      "atMs": 11600,
+      "type": "voice-guide",
+      "phrase": "ORION-7",
+      "direction": "north"
+    },
+    {
+      "atMs": 11600,
+      "type": "focus",
+      "direction": "north",
+      "step": "destination"
+    },
+    {
+      "atMs": 12000,
+      "type": "candidate",
+      "direction": "north",
+      "label": "ORION-7"
+    },
+    {
+      "atMs": 12500,
+      "type": "armed",
+      "direction": "north"
+    },
+    {
+      "atMs": 12700,
       "type": "gaze-dwell-complete",
       "executionsBeforeConfirm": 4,
       "armed": true
     },
     {
-      "atMs": 12600,
+      "atMs": 12700,
       "type": "execute",
       "direction": "north",
       "source": "voice",
@@ -343,41 +378,41 @@
       "option": "orion-7"
     },
     {
-      "atMs": 12700,
+      "atMs": 12800,
       "type": "center",
       "reason": "post-confirm"
     },
     {
-      "atMs": 12800,
+      "atMs": 12900,
       "type": "voice-guide",
       "phrase": "North Gate",
       "direction": "east"
     },
     {
-      "atMs": 12800,
+      "atMs": 12900,
       "type": "focus",
       "direction": "east",
       "step": "gate"
     },
     {
-      "atMs": 13200,
+      "atMs": 13300,
       "type": "candidate",
       "direction": "east",
       "label": "North Gate"
     },
     {
-      "atMs": 13700,
+      "atMs": 13800,
       "type": "armed",
       "direction": "east"
     },
     {
-      "atMs": 13900,
+      "atMs": 14000,
       "type": "gaze-dwell-complete",
       "executionsBeforeConfirm": 5,
       "armed": true
     },
     {
-      "atMs": 13900,
+      "atMs": 14000,
       "type": "execute",
       "direction": "east",
       "source": "gesture",
@@ -385,41 +420,41 @@
       "option": "north-gate"
     },
     {
-      "atMs": 14000,
+      "atMs": 14100,
       "type": "center",
       "reason": "post-confirm"
     },
     {
-      "atMs": 14100,
+      "atMs": 14200,
       "type": "voice-guide",
       "phrase": "Send route",
       "direction": "south"
     },
     {
-      "atMs": 14100,
+      "atMs": 14200,
       "type": "focus",
       "direction": "south",
       "step": "release"
     },
     {
-      "atMs": 14500,
+      "atMs": 14600,
       "type": "candidate",
       "direction": "south",
       "label": "Send route"
     },
     {
-      "atMs": 15000,
+      "atMs": 15100,
       "type": "armed",
       "direction": "south"
     },
     {
-      "atMs": 15200,
+      "atMs": 15300,
       "type": "gaze-dwell-complete",
       "executionsBeforeConfirm": 6,
       "armed": true
     },
     {
-      "atMs": 15200,
+      "atMs": 15300,
       "type": "execute",
       "direction": "south",
       "source": "voice",
@@ -427,10 +462,10 @@
       "option": "send"
     },
     {
-      "atMs": 15300,
+      "atMs": 15400,
       "type": "center",
       "reason": "post-confirm"
     }
   ],
-  "deterministicFingerprint": "592d265c"
+  "deterministicFingerprint": "8bc2720d"
 }

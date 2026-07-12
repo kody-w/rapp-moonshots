@@ -54,6 +54,8 @@
     smoother: null,
     stream: null,
     visionSensor: null,
+    sensorGeneration: 0,
+    sensorsStopped: true,
     calibrationSequence: null,
     calibrationModel: null,
     calibrationAttempts: 0,
@@ -71,6 +73,7 @@
     speaking: false,
     audioContext: null,
     sessionStartedAt: null,
+    completedAt: null,
     cameraStartedAt: null,
     microphoneStartedAt: null,
     cameraAccumulatedMs: 0,
@@ -78,6 +81,7 @@
     lastMetrics: null,
     lastMappedPoint: { x: 0, y: 0, confidence: 0 },
     lastRawSampleAt: null,
+    lastRawFrameAt: null,
     manualTimer: 0,
     manualDirection: null,
     manualOverrideUntil: 0,
@@ -197,10 +201,10 @@
       this.running = false;
       this.frameHandle = 0;
       this.videoFrameHandle = null;
-      this.watchdogTimer = 0;
       this.lastProcessedAt = 0;
       this.usesVideoFrameCallback = false;
       this.frameGate = new Core.VideoFrameFreshnessGate({ timeoutMs: 1100 });
+      this.freezeReported = false;
       this.mode = "frame-motion head-pose fallback";
     }
 
@@ -218,9 +222,6 @@
       this.frameGate.start(performance.now());
       this.usesVideoFrameCallback =
         typeof this.video.requestVideoFrameCallback === "function";
-      this.watchdogTimer = window.setInterval(() => {
-        this.handleFreshness(this.frameGate.check(performance.now()));
-      }, 250);
       this.scheduleFrame();
     }
 
@@ -275,11 +276,27 @@
     }
 
     handleFreshness(result) {
-      if (result.justFrozen) {
+      const shouldReport =
+        !this.callbacks.shouldReportFreshness ||
+        this.callbacks.shouldReportFreshness();
+      if (result.frozen && shouldReport && !this.freezeReported) {
+        this.freezeReported = true;
         this.callbacks.onFreeze("video frame timeout");
-      } else if (result.resumed) {
-        this.callbacks.onResume();
+      } else if (!result.frozen && result.resumed) {
+        const wasReported = this.freezeReported;
+        this.freezeReported = false;
+        if (shouldReport && wasReported) this.callbacks.onResume();
       }
+    }
+
+    checkFreshness(now) {
+      const result = this.frameGate.check(now);
+      this.handleFreshness(result);
+      return result;
+    }
+
+    isFresh(now) {
+      return this.frameGate.isFresh(now);
     }
 
     considerFrame(now, metadata) {
@@ -291,7 +308,9 @@
       }
       const freshness = this.frameGate.observe(this.frameDescriptor(metadata), now);
       this.handleFreshness(freshness);
-      if (!freshness.fresh || now - this.lastProcessedAt < 82) return;
+      if (!freshness.fresh) return;
+      if (this.callbacks.onFreshFrame) this.callbacks.onFreshFrame(now);
+      if (now - this.lastProcessedAt < 82) return;
       this.lastProcessedAt = now;
       this.processFreshFrame(now);
     }
@@ -354,11 +373,10 @@
         this.video.cancelVideoFrameCallback(this.videoFrameHandle);
       }
       this.videoFrameHandle = null;
-      window.clearInterval(this.watchdogTimer);
-      this.watchdogTimer = 0;
       this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
       this.motion.clear();
       this.frameGate.reset();
+      this.freezeReported = false;
       this.detector = null;
     }
   }
@@ -605,6 +623,7 @@
         speak(`${option.label}. Hold to arm.`, true);
       },
       onArm(direction) {
+        state.nodDetector.beginArm();
         const option = optionAt(direction);
         if (!option) return;
         earcon("armed");
@@ -613,6 +632,7 @@
         renderController(state.controller.snapshot());
       },
       onExecute(direction, source, now) {
+        state.nodDetector.endArm();
         const selection = state.task.choose(direction, source, now);
         if (!selection) return;
         earcon("confirm");
@@ -631,12 +651,14 @@
         }
       },
       onCancel(reason, direction) {
+        state.nodDetector.endArm();
         if (reason === "confirmed") return;
         earcon("cancel");
         const option = direction ? optionAt(direction) : null;
         setStatus(`${option ? option.label : "Candidate"} canceled. Center is safe.`);
       },
       onCenter() {
+        state.nodDetector.endArm();
         renderController(state.controller.snapshot());
         if (state.task.routeCommitted && !state.task.home) {
           state.task.returnHome();
@@ -646,9 +668,11 @@
         setStatus("Safe center. No choice is armed.");
       },
       onConfidencePause() {
+        state.nodDetector.endArm();
         setStatus("Confidence low. Dwell timer paused; nothing can execute.");
       },
       onSensorLost(reason) {
+        state.nodDetector.endArm();
         earcon("warning");
         elements.sensorOverlay.classList.remove("is-hidden");
         elements.sensorOverlayCopy.textContent =
@@ -658,6 +682,7 @@
         speak("Sensor signal lost. Input cleared. Return to center after recovery.", true);
       },
       onRecovered() {
+        state.nodDetector.endArm();
         elements.sensorOverlay.classList.add("is-hidden");
         if (state.stream) setIndicator(elements.cameraIndicator, "on", "Camera local");
         setStatus("Signal recovered at safe center.");
@@ -667,9 +692,11 @@
     renderController(state.controller.snapshot());
   }
 
-  function updateControllerFromPoint(point, now, allowNod) {
+  function updateControllerFromPoint(point, now, allowNod, inputSource) {
     if (!state.controller || state.paused || state.completed) return;
-    const snapshot = state.controller.update(point, now);
+    const snapshot = state.controller.update(point, now, {
+      source: inputSource || "manual",
+    });
     renderController(snapshot);
     if (
       allowNod &&
@@ -701,21 +728,27 @@
     state.lastMappedPoint = smoothed;
     updateCursor(smoothed);
     if (now < state.manualOverrideUntil) return;
-    updateControllerFromPoint(smoothed, now, true);
+    updateControllerFromPoint(smoothed, now, true, "sensor");
   }
 
   function monitorSensor() {
     window.clearInterval(state.monitorTimer);
     state.monitorTimer = window.setInterval(() => {
-      if (
-        state.mode === "live" &&
-        state.controller &&
-        state.calibrationStatus === "complete" &&
-        !state.paused
-      ) {
-        renderController(state.controller.check(performance.now()));
-      }
+      const now = performance.now();
+      if (!shouldRunSensorWatchdog(now)) return;
+      state.visionSensor.checkFreshness(now);
     }, 250);
+  }
+
+  function shouldRunSensorWatchdog(now) {
+    return (
+      state.mode === "live" &&
+      Boolean(state.visionSensor) &&
+      !state.sensorsStopped &&
+      !state.paused &&
+      !state.completed &&
+      now >= state.manualOverrideUntil
+    );
   }
 
   function calibrationPosition(target) {
@@ -783,7 +816,6 @@
         state.smoother.reset({ x: 0, y: 0, confidence: 1 });
         buildController();
         renderTask();
-        monitorSensor();
         const quality = Math.round(state.calibrationModel.quality * 100);
         setStatus(`Calibration complete at ${quality}% quality. Center is safe.`);
         speak("Calibration complete. Center is safe. Say route, then look north.", true);
@@ -863,6 +895,58 @@
     updateCursor({ x: 0, y: 0, confidence: mode === "simulation" ? 1 : 0 });
   }
 
+  function beginSensorLifecycle() {
+    state.sensorGeneration += 1;
+    state.sensorsStopped = false;
+    return state.sensorGeneration;
+  }
+
+  function stopSensorLifecycle() {
+    state.sensorGeneration += 1;
+    state.sensorsStopped = true;
+  }
+
+  function isCurrentSensorLifecycle(generation) {
+    return !state.sensorsStopped && generation === state.sensorGeneration;
+  }
+
+  function disposeDetachedStream(stream) {
+    if (!stream) return;
+    let tracks = [];
+    try {
+      tracks = stream.getTracks();
+    } catch (_error) {
+      tracks = [];
+    }
+    for (const track of tracks) {
+      try {
+        track.stop();
+      } catch (_error) {
+        // The detached track may already have ended.
+      }
+    }
+  }
+
+  function finalizeCameraOnTime(now) {
+    if (state.cameraStartedAt === null) return;
+    state.cameraAccumulatedMs = Core.sensorOnDuration(
+      state.cameraAccumulatedMs,
+      state.cameraStartedAt,
+      now,
+    );
+    state.cameraStartedAt = null;
+  }
+
+  function finalizeMicrophoneOnTime(now) {
+    if (state.microphoneStartedAt === null) return;
+    state.microphoneAccumulatedMs = Core.sensorOnDuration(
+      state.microphoneAccumulatedMs,
+      state.microphoneStartedAt,
+      now,
+    );
+    state.microphoneStartedAt = null;
+  }
+
   function releaseMediaResources(options) {
     const config = { markSensorLoss: false, ...(options || {}) };
     cancelAnimationFrame(state.calibrationFrame);
@@ -893,11 +977,8 @@
     }
 
     const now = performance.now();
-    const timing = privacyTiming(now);
-    state.cameraAccumulatedMs = timing.cameraOnMs;
-    state.microphoneAccumulatedMs = timing.microphoneOnMs;
-    state.cameraStartedAt = null;
-    state.microphoneStartedAt = null;
+    finalizeCameraOnTime(now);
+    finalizeMicrophoneOnTime(now);
     const stream = state.stream;
     state.stream = null;
     if (stream) {
@@ -928,6 +1009,8 @@
     state.calibrationSequence = null;
     state.smoother = null;
     state.calibrationInterruptedByFreeze = false;
+    state.lastRawFrameAt = null;
+    state.nodDetector.endArm();
 
     setIndicator(elements.cameraIndicator, "off", "Camera off");
     setIndicator(elements.micIndicator, "off", "Mic off");
@@ -939,16 +1022,19 @@
 
   async function startLive() {
     if (state.mode !== "idle") return;
+    const generation = beginSensorLifecycle();
+    let acquiredStream = null;
     elements.startLive.disabled = true;
     initializeAudio();
     activateApplication("live");
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      stopSensorLifecycle();
       enterParityOnlyMode("Camera and microphone APIs are unavailable in this browser.");
       return;
     }
 
     try {
-      state.stream = await navigator.mediaDevices.getUserMedia({
+      acquiredStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: "user",
           width: { ideal: 640 },
@@ -961,6 +1047,11 @@
           autoGainControl: true,
         },
       });
+      if (!isCurrentSensorLifecycle(generation)) {
+        disposeDetachedStream(acquiredStream);
+        return;
+      }
+      state.stream = acquiredStream;
       const now = performance.now();
       state.cameraStartedAt = now;
       state.microphoneStartedAt = now;
@@ -969,18 +1060,31 @@
       elements.cameraPreview.srcObject = state.stream;
       elements.cameraPreview.classList.remove("is-hidden");
       await elements.cameraPreview.play();
+      if (!isCurrentSensorLifecycle(generation)) {
+        disposeDetachedStream(acquiredStream);
+        return;
+      }
 
       const videoTrack = state.stream.getVideoTracks()[0];
       const audioTrack = state.stream.getAudioTracks()[0];
       if (videoTrack) {
-        videoTrack.addEventListener("ended", () => handleTrackLoss("camera track ended"));
+        videoTrack.addEventListener("ended", () => {
+          finalizeCameraOnTime(performance.now());
+          handleTrackLoss("camera track ended");
+          setIndicator(elements.cameraIndicator, "off", "Camera ended");
+        });
         videoTrack.addEventListener("mute", () => handleTrackLoss("camera muted"));
+      } else {
+        finalizeCameraOnTime(performance.now());
       }
       if (audioTrack) {
         audioTrack.addEventListener("ended", () => {
+          finalizeMicrophoneOnTime(performance.now());
           setIndicator(elements.micIndicator, "off", "Mic unavailable");
           state.recognitionWanted = false;
         });
+      } else {
+        finalizeMicrophoneOnTime(performance.now());
       }
 
       state.visionSensor = new LocalVisionSensor(
@@ -991,12 +1095,26 @@
           onMode: onSensorMode,
           onFreeze: handleVideoFreeze,
           onResume: handleVideoResume,
+          onFreshFrame(now) {
+            state.lastRawFrameAt = now;
+          },
+          shouldReportFreshness() {
+            return shouldRunSensorWatchdog(performance.now());
+          },
         },
       );
       state.visionSensor.start();
+      monitorSensor();
       initializeRecognition();
       startCalibration();
     } catch (error) {
+      if (!isCurrentSensorLifecycle(generation)) {
+        if (acquiredStream && state.stream !== acquiredStream) {
+          disposeDetachedStream(acquiredStream);
+        }
+        return;
+      }
+      stopSensorLifecycle();
       releaseMediaResources({ markSensorLoss: false });
       enterParityOnlyMode(
         `Permission or sensor start failed: ${error && error.name ? error.name : "unavailable"}.`,
@@ -1005,6 +1123,7 @@
   }
 
   function enterParityOnlyMode(message) {
+    state.sensorsStopped = true;
     state.calibrationStatus = "accessibility-only";
     state.sensorModeName = "parity controls only";
     elements.sensorMode.textContent = "Sensor: parity controls only · no camera frames";
@@ -1013,7 +1132,7 @@
     elements.sensorOverlay.classList.remove("is-hidden");
     elements.sensorOverlayCopy.textContent =
       "No sensor permission is active. Keyboard, touch, and switch controls can still complete the identical task.";
-    buildController();
+    if (!state.controller) buildController();
     renderTask();
     setStatus(`${message} No action was taken; parity controls are ready.`, true);
   }
@@ -1098,11 +1217,13 @@
   function undoLastChoice(source) {
     if (!state.task.undo()) return false;
     stopManualHold();
+    state.nodDetector.endArm();
     if (state.controller) {
       state.controller.cancel(`${source}-undo`);
       renderController(state.controller.snapshot());
     }
     state.completed = false;
+    state.completedAt = null;
     state.lastMetrics = null;
     elements.completionBanner.classList.add("is-hidden");
     elements.exportMetrics.disabled = true;
@@ -1120,6 +1241,7 @@
         break;
       case "cancel":
         stopManualHold();
+        state.nodDetector.endArm();
         if (state.controller) {
           renderController(state.controller.cancel("voice-cancel"));
           setStatus("Canceled by voice. Return to center to continue.", true);
@@ -1128,6 +1250,7 @@
       case "stop":
         state.paused = true;
         stopManualHold();
+        state.nodDetector.endArm();
         if (state.controller) state.controller.cancel("voice-stop");
         elements.sensorOverlay.classList.remove("is-hidden");
         elements.sensorOverlayCopy.textContent =
@@ -1138,6 +1261,7 @@
         break;
       case "resume":
         state.paused = false;
+        state.nodDetector.endArm();
         elements.sensorOverlay.classList.add("is-hidden");
         if (state.stream) setIndicator(elements.cameraIndicator, "on", "Camera local");
         if (state.controller) state.controller.cancel("resume-center");
@@ -1223,18 +1347,26 @@
 
   function centerAction(source) {
     if (!state.controller) return;
+    state.nodDetector.endArm();
     stopManualHold();
     state.manualOverrideUntil = performance.now() + 600;
     const center = { x: 0, y: 0, confidence: 1 };
     updateCursor(center);
     updateControllerFromPoint(center, performance.now(), false);
-    state.nodDetector.reset();
     if (!state.completed) setStatus(`Safe center reached by ${source}. No choice is armed.`);
   }
 
   function confirmAction(source) {
     if (!state.controller || state.paused || state.completed) return false;
-    const confirmed = state.controller.confirm(source, performance.now());
+    const now = performance.now();
+    const arm = state.controller.snapshot();
+    const sensorFresh =
+      arm.armedSource !== "sensor" ||
+      (!state.sensorsStopped &&
+        Boolean(state.visionSensor) &&
+        state.visionSensor.isFresh(now));
+    state.nodDetector.endArm();
+    const confirmed = state.controller.confirm(source, now, { sensorFresh });
     renderController(state.controller.snapshot());
     if (!confirmed) {
       earcon("cancel");
@@ -1275,8 +1407,9 @@
     };
   }
 
-  function buildLiveMetrics() {
-    const now = performance.now();
+  function buildLiveMetrics(nowOverride) {
+    const now = Number.isFinite(nowOverride) ? nowOverride : performance.now();
+    const completionAt = state.completedAt === null ? now : state.completedAt;
     const task = state.task.snapshot();
     const timing = privacyTiming(now);
     const metrics = state.controller ? state.controller.metrics : {};
@@ -1311,7 +1444,9 @@
       timing: {
         dwellMs: state.controller ? state.controller.config.dwellMs : Number(elements.dwellRange.value),
         candidateSpeechMs: 400,
-        completionMs: Math.round(now - state.sessionStartedAt),
+        completionMs: Math.round(
+          Core.completionDuration(state.sessionStartedAt, completionAt, now),
+        ),
       },
       safety: {
         falseCommits: metrics.falseCommits || 0,
@@ -1320,6 +1455,7 @@
         dwellCancellations: metrics.dwellCancellations || 0,
         confidencePauses: metrics.confidencePauses || 0,
         confidenceRevocations: metrics.confidenceRevocations || 0,
+        staleSensorConfirmations: metrics.staleSensorConfirmations || 0,
         sensorLosses: metrics.sensorLosses || 0,
         sensorRecoveries: metrics.sensorRecoveries || 0,
       },
@@ -1341,8 +1477,9 @@
 
   function completeSession(simulationMetrics) {
     if (state.completed) return;
+    state.completedAt = performance.now();
     state.completed = true;
-    state.lastMetrics = simulationMetrics || buildLiveMetrics();
+    state.lastMetrics = simulationMetrics || buildLiveMetrics(state.completedAt);
     elements.completionBanner.classList.remove("is-hidden");
     elements.exportMetrics.disabled = false;
     elements.completionCopy.textContent =
@@ -1354,8 +1491,21 @@
 
   function metricsForExport() {
     if (state.mode === "live" && state.completed) {
-      state.lastMetrics = buildLiveMetrics();
+      refreshMetricSensorCounters();
     }
+    return state.lastMetrics;
+  }
+
+  function refreshMetricSensorCounters() {
+    if (!state.lastMetrics) return null;
+    const counters = privacyTiming(performance.now());
+    state.lastMetrics = {
+      ...state.lastMetrics,
+      privacy: {
+        ...state.lastMetrics.privacy,
+        ...counters,
+      },
+    };
     return state.lastMetrics;
   }
 
@@ -1375,9 +1525,16 @@
   }
 
   function stopSensors() {
+    stopSensorLifecycle();
     releaseMediaResources({ markSensorLoss: true });
-    if (state.completed && state.mode === "live") state.lastMetrics = buildLiveMetrics();
-    setStatus("Sensors ended. Frames and derived frame buffers cleared.");
+    if (state.completed) {
+      if (state.mode === "live") refreshMetricSensorCounters();
+      setStatus("Sensors ended. Frames and derived frame buffers cleared.");
+      return;
+    }
+    enterParityOnlyMode(
+      "Sensors ended. Camera calibration was interrupted safely.",
+    );
   }
 
   function wait(milliseconds) {
@@ -1458,10 +1615,14 @@
         setStatus(
           event.reason === "confidence-pause"
             ? "Low confidence revoked the armed candidate; confirmation is blocked."
+            : event.reason === "sensor-loss"
+              ? "Raw-frame freshness expired; the sensor-derived arm was revoked."
             : "Center canceled the candidate; zero execution.",
         );
       } else if (event.type === "confidence-revoked") {
         setStatus("Simulation rejected confirmation after confidence loss.");
+      } else if (event.type === "stale-sensor-confirm") {
+        setStatus("Simulation atomically rejected a stale sensor-derived arm.");
       } else if (event.type === "center") {
         updateCursor({ x: 0, y: 0, confidence: 0.96 });
         renderController({
@@ -1599,6 +1760,12 @@
         mode: state.mode,
         task: state.task.snapshot(),
         controller: state.controller ? state.controller.snapshot() : null,
+        sensorLifecycle: {
+          generation: state.sensorGeneration,
+          stopped: state.sensorsStopped,
+          lastRawFrameAt: state.lastRawFrameAt,
+        },
+        completedAt: state.completedAt,
         metrics: state.lastMetrics,
       };
     },

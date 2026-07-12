@@ -18,6 +18,11 @@ as a click.
 8. Keyboard, touch, and switch paths preserve separate arm and confirm phases.
 9. Repeated video-frame identities cannot advance dwell and time out safely.
 10. Negated/contextual confirmation speech cannot execute.
+11. A stale sensor-derived arm is rejected synchronously without waiting for the
+    watchdog.
+12. Nod outbound and return phases both occur inside one arm epoch.
+13. Late permission streams are disposed after End Sensors, and completion
+    duration does not drift at export.
 
 ## Method
 
@@ -25,8 +30,8 @@ as a click.
 It calibrates center plus four radial targets, dwells each expected sector,
 asserts zero execution before explicit confirmation, alternates voice and
 gesture confirmation, inserts a wrong-sector center cancellation, revokes one
-armed choice with low confidence and blocks its confirmation, inserts a sensor
-timeout and center recovery, then returns home.
+armed choice with low confidence and blocks its confirmation, atomically rejects
+a stale sensor-derived arm and recovers through center, then returns home.
 
 Unit tests separately perturb the calibration basis, probe radial/angular
 boundaries, and attempt confirmation after center cancellation and sensor loss.
@@ -50,6 +55,7 @@ The committed evidence records:
 - false commits: 0,
 - gaze-only executions: 0,
 - confidence revocations/blocked stale confirmations: 1/1,
+- stale sensor-arm rejections: 1,
 - deliberate center cancellations: at least 1,
 - sensor losses/recoveries: 1/1,
 - raw frames/audio stored: 0/0, and

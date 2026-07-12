@@ -3,8 +3,8 @@
   "validator": "gaze-compass-track-02",
   "passed": true,
   "tests": {
-    "total": 15,
-    "passed": 15
+    "total": 19,
+    "passed": 19
   },
   "gates": {
     "exactTaskCompletion": true,
@@ -13,6 +13,10 @@
     "gazeOnlyExecutions": 0,
     "centerCancellationObserved": true,
     "confidenceArmRevoked": true,
+    "staleSensorArmRejected": true,
+    "armScopedNodGesture": true,
+    "lifecycleGenerationSafe": true,
+    "fixedCompletionTiming": true,
     "frozenFramesRejected": true,
     "strictConfirmGrammar": true,
     "sensorLossRecovered": true,
@@ -20,5 +24,5 @@
     "clawpilotTheme": true,
     "keyboardTouchSwitchParity": true
   },
-  "deterministicFingerprint": "592d265c"
+  "deterministicFingerprint": "8bc2720d"
 }

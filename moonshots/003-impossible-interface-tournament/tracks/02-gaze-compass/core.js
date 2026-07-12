@@ -371,6 +371,13 @@
     check(now) {
       return { fresh: false, resumed: false, ...this.evaluateFreeze(now) };
     }
+
+    isFresh(now) {
+      return (
+        this.lastFreshAt !== null &&
+        finiteNumber(now, this.lastFreshAt) - this.lastFreshAt < this.timeoutMs
+      );
+    }
   }
 
   function angularDistance(a, b) {
@@ -441,6 +448,7 @@
         dwellCancellations: 0,
         confidencePauses: 0,
         confidenceRevocations: 0,
+        staleSensorConfirmations: 0,
         sensorLosses: 0,
         sensorRecoveries: 0,
         confirmationSources: {},
@@ -459,6 +467,9 @@
       this.atCenter = true;
       this.centerRequired = false;
       this.centerReason = null;
+      this.currentInputSource = null;
+      this.armedSource = null;
+      this.armedAt = null;
     }
 
     setDwell(dwellMs) {
@@ -478,6 +489,9 @@
       this.stableMs = 0;
       this.candidateAnnounced = false;
       this.armed = false;
+      this.currentInputSource = null;
+      this.armedSource = null;
+      this.armedAt = null;
     }
 
     requireCenter(reason) {
@@ -487,8 +501,9 @@
       this.atCenter = false;
     }
 
-    update(point, now) {
+    update(point, now, context) {
       const timestamp = finiteNumber(now, 0);
+      const inputSource = String((context && context.source) || "unspecified");
       const sample = normalizeSample(point);
       if (!sample || sample.confidence < this.config.minConfidence) {
         if (this.currentSector) {
@@ -561,6 +576,7 @@
       if (classification !== this.currentSector) {
         this.clearFocus("sector-change", Boolean(this.currentSector));
         this.currentSector = classification;
+        this.currentInputSource = inputSource;
         this.stableMs = 0;
         this.state = "focusing";
         this.metrics.focusEvents += 1;
@@ -569,6 +585,7 @@
         return this.snapshot();
       }
 
+      if (!this.armed) this.currentInputSource = inputSource;
       const delta =
         this.lastTickAt === null
           ? 0
@@ -583,16 +600,22 @@
       }
       if (!this.armed && this.stableMs >= this.config.dwellMs) {
         this.armed = true;
+        this.armedSource = this.currentInputSource;
+        this.armedAt = timestamp;
         this.state = "armed";
         this.metrics.arms += 1;
-        this.callbacks.onArm(this.currentSector);
+        this.callbacks.onArm(this.currentSector, {
+          source: this.armedSource,
+          armedAt: this.armedAt,
+        });
       }
       this.lastTickAt = timestamp;
       return this.snapshot();
     }
 
-    confirm(source, now) {
+    confirm(source, now, context) {
       const confirmationSource = String(source || "unknown");
+      const timestamp = finiteNumber(now, 0);
       if (
         !this.armed ||
         !this.currentSector ||
@@ -604,12 +627,21 @@
         this.metrics.blockedConfirmations += 1;
         return false;
       }
+      if (
+        this.armedSource === "sensor" &&
+        (!context || context.sensorFresh !== true)
+      ) {
+        this.metrics.blockedConfirmations += 1;
+        this.metrics.staleSensorConfirmations += 1;
+        this.markSensorLost(timestamp, "stale-sensor-confirm");
+        return false;
+      }
       const sector = this.currentSector;
       this.metrics.explicitConfirmations += 1;
       this.metrics.executions += 1;
       this.metrics.confirmationSources[confirmationSource] =
         (this.metrics.confirmationSources[confirmationSource] || 0) + 1;
-      this.callbacks.onExecute(sector, confirmationSource, finiteNumber(now, 0));
+      this.callbacks.onExecute(sector, confirmationSource, timestamp);
       this.clearFocus("confirmed", false);
       this.requireCenter("post-confirm");
       return true;
@@ -650,6 +682,8 @@
         progress: clamp(this.stableMs / this.config.dwellMs, 0, 1),
         candidateAnnounced: this.candidateAnnounced,
         armed: this.armed,
+        armedSource: this.armedSource,
+        armedAt: this.armedAt,
         centerRequired: this.centerRequired,
         centerReason: this.centerReason,
       };
@@ -671,11 +705,22 @@
       this.direction = 0;
       this.startedAt = null;
       this.peak = null;
+      this.active = false;
+    }
+
+    beginArm() {
+      this.reset();
+      this.active = true;
+    }
+
+    endArm() {
+      this.reset();
     }
 
     update(value, confidence, now) {
+      if (!this.active) return false;
       if (!Number.isFinite(value) || finiteNumber(confidence, 0) < 0.46) {
-        this.reset();
+        this.endArm();
         return false;
       }
       const timestamp = finiteNumber(now, 0);
@@ -712,7 +757,7 @@
         timestamp - this.startedAt >= this.minReversalMs &&
         reversal >= this.threshold * 0.9
       ) {
-        this.reset();
+        this.endArm();
         this.baseline = value;
         return true;
       }
@@ -820,6 +865,13 @@
     const accumulated = Math.max(0, finiteNumber(accumulatedMs, 0));
     if (!Number.isFinite(startedAt)) return accumulated;
     return accumulated + Math.max(0, finiteNumber(now, startedAt) - startedAt);
+  }
+
+  function completionDuration(sessionStartedAt, completedAt, now) {
+    const fallback = finiteNumber(now, 0);
+    const start = finiteNumber(sessionStartedAt, fallback);
+    const end = finiteNumber(completedAt, fallback);
+    return Math.max(0, end - start);
   }
 
   function parseVoiceCommand(text, step) {
@@ -949,37 +1001,45 @@
       ...DIRECTION_POINTS[direction],
       confidence: confidence === undefined ? 0.96 : confidence,
     });
-    const feed = (direction, durationMs) => {
+    const feed = (direction, durationMs, source) => {
       for (let elapsed = 0; elapsed <= durationMs; elapsed += 100) {
-        controller.update(mappedPoint(direction), now);
+        controller.update(mappedPoint(direction), now, {
+          source: source || "simulation",
+        });
         now += 100;
       }
     };
 
-    controller.update(mappedPoint("center"), now);
+    controller.update(mappedPoint("center"), now, { source: "simulation" });
     now += 100;
 
     TASK_STEPS.forEach((step, index) => {
+      const expected = step.options.find((option) => option.id === step.expected);
       if (index === 1) {
         record("voice-guide", { phrase: "three", direction: "east" });
         feed("north", 500);
-        controller.update(mappedPoint("center"), now);
+        controller.update(mappedPoint("center"), now, { source: "simulation" });
         now += 100;
       }
       if (index === 4) {
-        now += 1000;
-        controller.check(now);
-        controller.update(mappedPoint(step.options.find((option) => option.id === step.expected).direction), now);
+        record("voice-guide", { phrase: expected.label, direction: expected.direction });
+        feed(expected.direction, 1000, "sensor");
+        record("stale-sensor-confirm", {
+          confirmAccepted: controller.confirm("voice", now, { sensorFresh: false }),
+        });
         now += 100;
-        controller.update(mappedPoint("center"), now);
+        controller.update(mappedPoint("center"), now, { source: "simulation" });
         now += 100;
       }
 
-      const expected = step.options.find((option) => option.id === step.expected);
       if (index === 2) {
         record("voice-guide", { phrase: expected.label, direction: expected.direction });
         feed(expected.direction, 1000);
-        controller.update({ ...mappedPoint(expected.direction), confidence: 0.1 }, now);
+        controller.update(
+          { ...mappedPoint(expected.direction), confidence: 0.1 },
+          now,
+          { source: "simulation" },
+        );
         now += 100;
         record("confidence-revoked", {
           confirmAccepted: controller.confirm("voice", now),
@@ -998,7 +1058,7 @@
         throw new Error(`Simulation failed to arm ${step.id}.`);
       }
       now += 100;
-      controller.update(mappedPoint("center"), now);
+      controller.update(mappedPoint("center"), now, { source: "simulation" });
       now += 100;
     });
 
@@ -1039,6 +1099,7 @@
         dwellCancellations: controller.metrics.dwellCancellations,
         confidencePauses: controller.metrics.confidencePauses,
         confidenceRevocations: controller.metrics.confidenceRevocations,
+        staleSensorConfirmations: controller.metrics.staleSensorConfirmations,
         sensorLosses: controller.metrics.sensorLosses,
         sensorRecoveries: controller.metrics.sensorRecoveries,
       },
@@ -1081,6 +1142,7 @@
     TaskModel,
     TimedCalibration,
     VideoFrameFreshnessGate,
+    completionDuration,
     fitCalibration,
     mapCalibratedPoint,
     optionForDirection,

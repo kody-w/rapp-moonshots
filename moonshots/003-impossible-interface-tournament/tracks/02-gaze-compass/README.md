@@ -64,6 +64,13 @@ The exact tournament route is:
 - Video processing prefers `requestVideoFrameCallback` metadata and otherwise
   gates on decoded-frame count or `currentTime`. Repeated frozen pixels never
   refresh confidence or dwell, and the freshness watchdog declares sensor loss.
+- The watchdog reads the raw-frame gate, not controller sample timestamps. It
+  is suspended during manual override and after completion. Confirmation also
+  checks that gate synchronously, so a stale sensor arm is rejected even before
+  a watchdog tick.
+- Nod recognition starts a new gesture epoch when an arm begins and ends it on
+  every confirm, cancel, center, confidence pause, or sensor loss. Both nod
+  phases must occur after the current arm.
 - Smoothing, a radial dead zone, center threshold, angular hysteresis, and a
   maximum credited sample gap reduce jitter and tab-stall arming.
 - Dwell is adjustable from 0.8–2.2 seconds.
@@ -90,10 +97,16 @@ quality.
 - If any startup step fails after permission, the application cancels frame,
   calibration, and recognition loops, stops every acquired track, clears the
   preview, then enters parity-only mode.
+- End Sensors advances an explicit lifecycle generation. A stream that resolves
+  from an older permission request is immediately disposed, and interrupted
+  calibration becomes usable parity-only control.
 - Audio is neither read into application buffers nor recorded.
 - No raw frame or audio enters exported metrics.
 - Export recomputes live camera/microphone on-time at export; stopping sensors
   first freezes those counters without losing elapsed time.
+- Camera and microphone counters finalize independently when their tracks end.
+  Mission completion time freezes when center-home is reached; later exports
+  refresh only still-active sensor counters.
 - CSP sets `connect-src 'none'`; the source contains no network client,
   persistence API, analytics, or recorder.
 - Browser speech recognition may be unavailable or use browser/OS processing
@@ -106,7 +119,8 @@ quality.
   Backspace for center, `R` to repeat, and `U` to undo. On focused controls,
   Enter/Space keeps native behavior instead of invoking the global confirmer.
 - **Touch/pointer:** hold a sector until armed, then use Confirm. Tap the center
-  circle to cancel.
+  circle to cancel. Sensor-loss overlays never intercept pointer input, so the
+  safe center remains reachable.
 - **Single-switch:** Cycle starts timed focus, Center cancels, and Confirm
   activates only an armed choice.
 - **Voice:** values provide direction guidance; exact `confirm`/`approve`,

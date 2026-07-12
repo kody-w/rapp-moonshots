@@ -19,9 +19,9 @@ function repeated(point, count = 8) {
   });
 }
 
-function hold(controller, point, startAt, duration = 900) {
+function hold(controller, point, startAt, duration = 900, context) {
   for (let elapsed = 0; elapsed <= duration; elapsed += 100) {
-    controller.update({ ...point, confidence: 0.95 }, startAt + elapsed);
+    controller.update({ ...point, confidence: 0.95 }, startAt + elapsed, context);
   }
 }
 
@@ -199,6 +199,69 @@ test("frame freshness gate rejects frozen pixels and cannot arm from stale sampl
   assert.equal(currentTimeGate.observe({ currentTime: 1.04 }, 200).fresh, true);
 });
 
+test("stale sensor-derived arms are atomically rejected before watchdog execution", () => {
+  const executions = [];
+  const staleController = new Core.GazeIntentController({
+    dwellMs: 800,
+    sensorTimeoutMs: 2000,
+    onExecute: (direction) => executions.push(direction),
+  });
+  hold(
+    staleController,
+    Core.DIRECTION_POINTS.west,
+    0,
+    900,
+    { source: "sensor" },
+  );
+  assert.equal(staleController.snapshot().armedSource, "sensor");
+  assert.equal(
+    staleController.confirm("voice", 950, { sensorFresh: false }),
+    false,
+  );
+  assert.equal(staleController.snapshot().centerReason, "sensor-loss");
+  assert.equal(staleController.metrics.staleSensorConfirmations, 1);
+  assert.equal(staleController.metrics.sensorLosses, 1);
+  assert.equal(executions.length, 0);
+
+  const freshController = new Core.GazeIntentController({
+    dwellMs: 800,
+    onExecute: (direction) => executions.push(direction),
+  });
+  hold(
+    freshController,
+    Core.DIRECTION_POINTS.west,
+    0,
+    900,
+    { source: "sensor" },
+  );
+  assert.equal(
+    freshController.confirm("voice", 950, { sensorFresh: true }),
+    true,
+  );
+  assert.deepEqual(executions, ["west"]);
+});
+
+test("nod detector requires a complete gesture epoch after each arm begins", () => {
+  const nod = new Core.NodDetector({ threshold: 0.2, minReversalMs: 90 });
+  assert.equal(nod.update(0, 1, 0), false);
+  assert.equal(nod.update(0.3, 1, 100), false);
+
+  nod.beginArm();
+  assert.equal(nod.update(0, 1, 200), false);
+  assert.equal(nod.update(0.25, 1, 320), false);
+  nod.endArm();
+  nod.beginArm();
+  assert.equal(nod.update(0, 1, 400), false);
+  assert.equal(nod.update(0, 1, 520), false);
+  assert.equal(nod.update(0.25, 1, 640), false);
+  assert.equal(nod.update(0, 1, 780), true);
+  assert.equal(nod.active, false);
+
+  const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
+  assert.match(app, /onArm\(direction\) \{\s*state\.nodDetector\.beginArm\(\)/);
+  assert.ok((app.match(/state\.nodDetector\.endArm\(\)/g) || []).length >= 8);
+});
+
 test("voice values guide a sector while only explicit confirm is a commit command", () => {
   const quantity = Core.TASK_STEPS.find((step) => step.id === "quantity");
   const value = Core.parseVoiceCommand("route three cobalt beacons", quantity);
@@ -275,7 +338,7 @@ test("startup cleanup releases acquired media before parity fallback", () => {
   const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
   assert.match(
     app,
-    /catch \(error\) \{\s*releaseMediaResources\(\{ markSensorLoss: false \}\);\s*enterParityOnlyMode/s,
+    /catch \(error\) \{[\s\S]*?stopSensorLifecycle\(\);\s*releaseMediaResources\(\{ markSensorLoss: false \}\);\s*enterParityOnlyMode/,
   );
   assert.match(app, /function releaseMediaResources\(options\)[\s\S]*state\.visionSensor\.stop\(\)/);
   assert.match(app, /window\.clearInterval\(state\.monitorTimer\)/);
@@ -286,21 +349,71 @@ test("startup cleanup releases acquired media before parity fallback", () => {
   assert.match(app, /elements\.cameraPreview\.srcObject = null/);
 });
 
+test("sensor lifecycle generation disposes late streams and End Sensors enables parity", () => {
+  const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
+  assert.match(app, /sensorGeneration: 0/);
+  assert.match(app, /sensorsStopped: true/);
+  assert.match(
+    app,
+    /const generation = beginSensorLifecycle\(\);\s*let acquiredStream = null/,
+  );
+  assert.match(
+    app,
+    /acquiredStream = await navigator\.mediaDevices\.getUserMedia[\s\S]*if \(!isCurrentSensorLifecycle\(generation\)\) \{\s*disposeDetachedStream\(acquiredStream\);\s*return;/,
+  );
+  assert.match(
+    app,
+    /function stopSensors\(\) \{\s*stopSensorLifecycle\(\);[\s\S]*enterParityOnlyMode\(/,
+  );
+  assert.match(
+    app,
+    /function enterParityOnlyMode\(message\) \{\s*state\.sensorsStopped = true;\s*state\.calibrationStatus = "accessibility-only"/,
+  );
+  assert.match(app, /if \(!state\.controller\) buildController\(\)/);
+});
+
+test("raw-frame watchdog ignores controller suppression and suspends for manual or completion", () => {
+  const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
+  const monitor = app.match(
+    /function monitorSensor\(\) \{([\s\S]*?)\n  \}\n\n  function shouldRunSensorWatchdog/,
+  )[1];
+  assert.match(monitor, /state\.visionSensor\.checkFreshness\(now\)/);
+  assert.doesNotMatch(monitor, /controller\.check/);
+  assert.match(
+    app,
+    /function shouldRunSensorWatchdog\(now\)[\s\S]*!state\.completed[\s\S]*now >= state\.manualOverrideUntil/,
+  );
+  assert.match(app, /onFreshFrame\(now\) \{\s*state\.lastRawFrameAt = now/);
+  assert.match(
+    app,
+    /state\.visionSensor\.isFresh\(now\)[\s\S]*controller\.confirm\(source, now, \{ sensorFresh \}\)/,
+  );
+});
+
 test("sensor timing continues through export and is finalized on stop", () => {
   assert.equal(Core.sensorOnDuration(250, 1000, 1600), 850);
   assert.equal(Core.sensorOnDuration(850, null, 2200), 850);
   assert.equal(Core.sensorOnDuration(0, 2000, 1500), 0);
+  assert.equal(Core.completionDuration(1000, 1650, 5000), 650);
+  assert.equal(Core.completionDuration(1000, 1650, 9000), 650);
 
   const app = fs.readFileSync(path.join(trackRoot, "app.js"), "utf8");
   assert.match(
     app,
-    /function metricsForExport\(\)[\s\S]*state\.lastMetrics = buildLiveMetrics\(\)/,
+    /function metricsForExport\(\)[\s\S]*refreshMetricSensorCounters\(\)/,
   );
   assert.match(app, /function downloadMetrics\(\) \{\s*const metrics = metricsForExport\(\)/);
   assert.match(
     app,
-    /releaseMediaResources\(\{ markSensorLoss: true \}\);\s*if \(state\.completed && state\.mode === "live"\) state\.lastMetrics = buildLiveMetrics\(\)/,
+    /state\.completedAt = performance\.now\(\);[\s\S]*buildLiveMetrics\(state\.completedAt\)/,
   );
+  assert.match(app, /finalizeCameraOnTime\(performance\.now\(\)\)/);
+  assert.match(app, /finalizeMicrophoneOnTime\(performance\.now\(\)\)/);
+  const exportRefresh = app.match(
+    /function refreshMetricSensorCounters\(\) \{([\s\S]*?)\n  \}\n\n  function downloadMetrics/,
+  )[1];
+  assert.match(exportRefresh, /privacyTiming\(performance\.now\(\)\)/);
+  assert.doesNotMatch(exportRefresh, /completionMs|buildLiveMetrics/);
 });
 
 test("deterministic simulation completes the exact cobalt-beacon task identically", () => {
@@ -322,9 +435,10 @@ test("deterministic simulation completes the exact cobalt-beacon task identicall
   });
   assert.equal(first.safety.falseCommits, 0);
   assert.equal(first.safety.gazeOnlyExecutions, 0);
-  assert.equal(first.safety.blockedConfirmations, 1);
+  assert.equal(first.safety.blockedConfirmations, 2);
   assert.equal(first.safety.confidencePauses, 1);
   assert.equal(first.safety.confidenceRevocations, 1);
+  assert.equal(first.safety.staleSensorConfirmations, 1);
   assert.equal(first.safety.sensorLosses, 1);
   assert.equal(first.safety.sensorRecoveries, 1);
   assert.equal(first.interaction.explicitConfirmations, Core.TASK_STEPS.length);
@@ -396,6 +510,7 @@ test("Clawpilot theme, local assets, and input parity are present", () => {
   assert.match(index, /data-action="center"/);
   assert.match(index, /data-action="confirm"/);
   assert.match(index, /aria-live="polite"/);
+  assert.match(index, /\.sensor-overlay\s*\{[\s\S]*?pointer-events:\s*none;/);
   assert.match(index, /<script src="\.\/core\.js"><\/script>/);
   assert.match(index, /<script src="\.\/app\.js"><\/script>/);
 });

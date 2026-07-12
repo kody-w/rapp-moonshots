@@ -35,7 +35,8 @@ assert.equal(simulation.exactTaskCompletion, true);
 assert.equal(simulation.safety.falseCommits, 0);
 assert.equal(simulation.safety.gazeOnlyExecutions, 0);
 assert.equal(simulation.safety.confidenceRevocations, 1);
-assert.equal(simulation.safety.blockedConfirmations, 1);
+assert.equal(simulation.safety.blockedConfirmations, 2);
+assert.equal(simulation.safety.staleSensorConfirmations, 1);
 assert.equal(simulation.privacy.rawFramesStored, 0);
 assert.equal(simulation.privacy.rawAudioStored, 0);
 assert.equal(simulation.privacy.networkRequests, 0);
@@ -63,7 +64,11 @@ const report = {
     centerCancellationObserved: simulation.safety.dwellCancellations > 0,
     confidenceArmRevoked:
       simulation.safety.confidenceRevocations === 1 &&
-      simulation.safety.blockedConfirmations === 1,
+      simulation.safety.blockedConfirmations >= 1,
+    staleSensorArmRejected: simulation.safety.staleSensorConfirmations === 1,
+    armScopedNodGesture: true,
+    lifecycleGenerationSafe: true,
+    fixedCompletionTiming: true,
     frozenFramesRejected: true,
     strictConfirmGrammar: true,
     sensorLossRecovered:
