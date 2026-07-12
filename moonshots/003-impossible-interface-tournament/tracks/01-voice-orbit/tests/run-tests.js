@@ -122,6 +122,46 @@ test("unsupported destination speech clears a stale valid draft value", () => {
   assert.equal(machine.state.stage, "review");
 });
 
+test("directed destination corrections override every fallback mention", () => {
+  const supportedCorrection = parseRouteUtterance(
+    "route to Orion seven then change destination to Luna three",
+  );
+  assert.equal(supportedCorrection.destination, "LUNA-3");
+  assert.equal(
+    parseRouteUtterance("send to Luna three instead of Orion seven").destination,
+    "LUNA-3",
+  );
+
+  const unsupportedCorrection = parseRouteUtterance(
+    "send to Vega nine instead of Orion seven",
+  );
+  assert.equal(unsupportedCorrection.destination, null);
+  assert.equal(unsupportedCorrection.destinationRejected, "VEGA-9");
+
+  const machine = new VoiceOrbitMachine();
+  machine.dispatch({ type: "START", mode: "simulation" });
+  exactRoute(machine);
+  machine.dispatch({
+    type: "VOICE",
+    text: "change destination to Luna three instead of Orion seven",
+    source: "speech",
+  });
+  assert.equal(machine.state.task.destination, "LUNA-3");
+  assert.equal(machine.state.stage, "review");
+  assert.equal(machine.state.metrics.errors, 0);
+
+  machine.dispatch({
+    type: "VOICE",
+    text: "send to Vega nine instead of Luna three",
+    source: "speech",
+  });
+  assert.equal(machine.state.task.destination, null);
+  assert.equal(machine.state.stage, "collect");
+  assert.equal(machine.state.lastAction, "destination-rejected");
+  assert.equal(machine.state.metrics.errors, 1);
+  assert.equal(machine.state.metrics.voiceRepairs, 1);
+});
+
 test("center rest cancels a downward aim without completing a nod", () => {
   const gate = new NodGestureGate({
     settleMs: 100,

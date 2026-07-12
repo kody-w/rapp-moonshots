@@ -56,18 +56,15 @@
       .trim();
   }
 
-  function destinationCandidateIdentifier(value) {
-    const speech = normalizeSpeech(value);
-    const known = speech.match(
-      /\b(orion|luna|atlas|polaris)\s*(?:-|dash|hyphen|number)?\s*(zero|one|two|three|four|five|six|seven|eight|nine|\d+)\b/,
-    );
-    const directed = speech.match(
-      /\b(?:to|destination(?:\s+(?:is|equals))?)\s+(?:the\s+)?([a-z]+)\s*(?:-|dash|hyphen|number)?\s*(zero|one|two|three|four|five|six|seven|eight|nine|\d+)\b/,
-    );
-    const standalone = speech.match(
-      /^([a-z]+)\s*(?:-|dash|hyphen|number)?\s*(zero|one|two|three|four|five|six|seven|eight|nine|\d+)$/,
-    );
-    const match = known || directed || standalone;
+  function lastMatch(speech, expression) {
+    let result = null;
+    for (const match of speech.matchAll(expression)) {
+      result = match;
+    }
+    return result;
+  }
+
+  function identifierFromMatch(match) {
     if (!match) {
       return null;
     }
@@ -75,6 +72,34 @@
       ? SPOKEN_NUMBERS[match[2]]
       : Number(match[2]);
     return `${match[1].toUpperCase()}-${number}`;
+  }
+
+  function destinationCandidateIdentifier(value) {
+    const speech = normalizeSpeech(value);
+    const correction = lastMatch(
+      speech,
+      /\b(?:change|correct|update|set)\s+(?:the\s+)?destination\s+(?:to|as)\s+(?:the\s+)?([a-z]+)\s*(?:-|dash|hyphen|number)?\s*(zero|one|two|three|four|five|six|seven|eight|nine|\d+)\b/g,
+    );
+    const insteadOf = lastMatch(
+      speech,
+      /\b(?:to\s+)?([a-z]+)\s*(?:-|dash|hyphen|number)?\s*(zero|one|two|three|four|five|six|seven|eight|nine|\d+)\s+instead\s+of\s+(?:the\s+)?[a-z]+\s*(?:-|dash|hyphen|number)?\s*(?:zero|one|two|three|four|five|six|seven|eight|nine|\d+)\b/g,
+    );
+    const directed = lastMatch(
+      speech,
+      /\bto\s+(?:the\s+)?([a-z]+)\s*(?:-|dash|hyphen|number)?\s*(zero|one|two|three|four|five|six|seven|eight|nine|\d+)\b/g,
+    );
+    const assigned = lastMatch(
+      speech,
+      /\bdestination(?:\s+(?:is|equals|to))?\s+(?:the\s+)?([a-z]+)\s*(?:-|dash|hyphen|number)?\s*(zero|one|two|three|four|five|six|seven|eight|nine|\d+)\b/g,
+    );
+    const known = speech.match(
+      /\b(orion|luna|atlas|polaris)\s*(?:-|dash|hyphen|number)?\s*(zero|one|two|three|four|five|six|seven|eight|nine|\d+)\b/,
+    );
+    const standalone = speech.match(
+      /^([a-z]+)\s*(?:-|dash|hyphen|number)?\s*(zero|one|two|three|four|five|six|seven|eight|nine|\d+)$/,
+    );
+    // Correction grammar owns the target; later fallback mentions cannot override it.
+    return identifierFromMatch(correction || insteadOf || directed || assigned || standalone || known);
   }
 
   function normalizeDestinationIdentifier(value) {
@@ -749,7 +774,12 @@
 
       const exactOption = this.state.options.findIndex((option) => {
         const label = normalizeSpeech(option.label);
-        return speech === label || speech.includes(label);
+        return (
+          speech === label ||
+          speech === `highlight ${label}` ||
+          speech === `choose ${label}` ||
+          speech === `aim at ${label}`
+        );
       });
       if (exactOption >= 0) {
         this.state.highlight = exactOption;

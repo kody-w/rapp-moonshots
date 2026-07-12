@@ -55,6 +55,9 @@ required. After confirmation, route values are immutable: further route speech
 is rejected until **Undo** or an explicitly confirmed **New route**.
 Destination-like speech outside ORION-7, LUNA-3, ATLAS-2, and POLARIS-4 clears
 the draft destination and reports a repair instead of retaining a stale value.
+Directed corrections are parsed first: in “to X instead of Y” or “change
+destination to X,” X is always the target and later identifier mentions cannot
+override it.
 Negation is scoped to fragile, delicate, and handle-with-care phrasing.
 
 ## Sensor honesty

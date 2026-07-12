@@ -167,6 +167,20 @@ check("preview and recognition stop races fail closed", () => {
   assert.match(dispatcher, /if \(machine\.state\.status === "stopped"\)\s*{\s*stopRuntimeSensors\(\)/);
 });
 
+check("directed destination grammar precedes fallback mentions", () => {
+  const parser = section(
+    core,
+    "function destinationCandidateIdentifier(value)",
+    "function normalizeDestinationIdentifier(value)",
+  );
+  assert.match(parser, /change\|correct\|update\|set/);
+  assert.match(parser, /instead\\s\+of/);
+  assert.match(
+    parser,
+    /correction \|\| insteadOf \|\| directed \|\| assigned \|\| standalone \|\| known/,
+  );
+});
+
 check("native Enter activation is preserved for interactive controls", () => {
   assert.match(app, /function isNativeInteractiveTarget\(target\)/);
   assert.match(app, /button, a\[href\], input, select, textarea, summary/);

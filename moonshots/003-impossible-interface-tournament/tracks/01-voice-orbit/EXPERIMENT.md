@@ -56,6 +56,7 @@ participants or media.
 | Timing | Completion freezes elapsed time before any delayed export |
 | Media race | Stop during preview playback prevents recognizer construction/restart |
 | Destination repair | Unsupported identifier clears any stale draft destination |
+| Correction precedence | Directed target wins over supported IDs in “instead of” context |
 | Handling negation | Negation applies to fragile, delicate, and handle-with-care only |
 | Repeated safety | Repeated stop preserves first stop time; non-voice empty undo is not a voice repair |
 | Theme | Exact Clawpilot variables and required fonts present |
