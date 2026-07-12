@@ -20,14 +20,19 @@ Exports are ordinary files and are not automatically inserted into an Obsidian v
 
 ## Roll back source
 
-From the repository worktree:
+The public application entered `main` through merge commit `cf1a8fc`:
 
 ```bash
-git log --oneline -- moonshots/002-autonomous-invention-lab/tracks/03-ghost-ops/
-git revert <ghost-ops-commit-sha>
+git revert -m 1 cf1a8fc
 ```
 
-The implementation changes only `moonshots/002-autonomous-invention-lab/tracks/03-ghost-ops/`, so reverting its single local commit removes the application without touching shared infrastructure or another invention track.
+Then make a small integration commit that removes or marks Ghost Ops withdrawn
+in:
+
+- `moonshots/002-autonomous-invention-lab/index.html`
+- `moonshots/002-autonomous-invention-lab/RESULTS.json`
+- `moonshots/002-autonomous-invention-lab/JUDGING.md`
+- `moonshots/002-autonomous-invention-lab/README.md`
 
 Verify the rollback:
 
@@ -36,10 +41,5 @@ git status --short
 test ! -e moonshots/002-autonomous-invention-lab/tracks/03-ghost-ops/index.html
 ```
 
-If the commit has not been created, discard only this owned path:
-
-```bash
-git restore --staged --worktree moonshots/002-autonomous-invention-lab/tracks/03-ghost-ops/
-```
-
-Never use a repository-wide reset for this track.
+Never revert only the Ghost Ops source-tip commit: two track commits were
+integrated by the merge. Never use a repository-wide reset for this track.

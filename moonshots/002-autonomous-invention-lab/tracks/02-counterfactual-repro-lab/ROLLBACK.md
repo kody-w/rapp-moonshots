@@ -22,8 +22,23 @@ live wherever the browser saves them and may be deleted normally.
 
 ## Revert the implementation
 
-Revert the Track 02 commit with `git revert <track-commit-sha>`, or remove only
-this directory on an uncommitted copy. No shared or root files need restoration.
+The public application entered `main` through merge commit `9f240bc`:
+
+```bash
+git revert -m 1 9f240bc
+```
+
+Then make a small integration commit that removes or marks Track 02 withdrawn
+in:
+
+- `moonshots/002-autonomous-invention-lab/index.html`
+- `moonshots/002-autonomous-invention-lab/RESULTS.json`
+- `moonshots/002-autonomous-invention-lab/JUDGING.md`
+- `moonshots/002-autonomous-invention-lab/README.md`
+
+On an uncommitted copy, remove only this track directory and the same shared
+references. Never reset the repository or revert only the source-tip commit:
+Track 02 was built through several commits before its merge.
 
 ## Verify zero residue
 

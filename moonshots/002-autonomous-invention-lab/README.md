@@ -52,4 +52,12 @@ See [`SELECTION.md`](SELECTION.md) for the decision record.
 
 ## Status
 
-**Active — three applications building in parallel**
+**Complete — three working applications, experiments, and pitches**
+
+## Result
+
+- **Winner:** [Ghost Ops](tracks/03-ghost-ops/)
+- **Developer-value award:** [Counterfactual Repro Lab](tracks/02-counterfactual-repro-lab/)
+- **Trust/recovery award:** [Resurrection Proof](tracks/01-resurrection-proof/)
+
+See [`JUDGING.md`](JUDGING.md) and [`RESULTS.json`](RESULTS.json).

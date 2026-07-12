@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "status": "complete",
+  "rubric": "rubric.json",
+  "winner": "03-ghost-ops",
+  "tracks": [
+    {
+      "id": "01-resurrection-proof",
+      "title": "Resurrection Proof",
+      "source_commit": "36c5370e3225b2dd5b8dac7f3afef6dc76f4b63a",
+      "lab_score": 9.35,
+      "tests_passed": 14,
+      "experiment": {
+        "runs": 10,
+        "clean_restores": "10/10",
+        "canaries": "40/40",
+        "corruptions_rejected": "10/10",
+        "cleanups": "10/10"
+      },
+      "award": "Best trust and recovery proof"
+    },
+    {
+      "id": "02-counterfactual-repro-lab",
+      "title": "Counterfactual Repro Lab",
+      "source_commit": "5bb3d546225ed42fc33fa16d5189f4b47324d94a",
+      "lab_score": 9.4,
+      "tests_passed": 27,
+      "experiment": {
+        "trials": 36,
+        "baseline_failures": "9/9",
+        "control_failures": "18/18",
+        "causal_passes": "9/9",
+        "cause_accuracy": "100%",
+        "verified_cleanups": "36/36"
+      },
+      "award": "Strongest immediate developer value"
+    },
+    {
+      "id": "03-ghost-ops",
+      "title": "Ghost Ops",
+      "source_commit": "e81d717c01d7a98b3c022d14c83bb66a6d3ebb49",
+      "lab_score": 9.55,
+      "tests_passed": 12,
+      "experiment": {
+        "paired_runs": 200,
+        "containment_score_delta": 42.995,
+        "paired_wins": "200/200",
+        "spread_events_containment": 0.625,
+        "spread_events_recovery_first": 4.585
+      },
+      "award": "Moonshot 002 winner"
+    }
+  ],
+  "disclaimer": "Lab scores apply the published rubric to prototype evidence. They are editorial judgments, not customer-validation results."
+}
+

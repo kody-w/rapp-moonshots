@@ -10,8 +10,7 @@
 | Prestige TV Pilot | idea |
 | Agent Olympics | idea |
 | Fleet as a Starship | idea |
-| Autonomous Invention Laboratory | **active as 002** |
+| Autonomous Invention Laboratory | **complete as 002** |
 | Sealed Surprise Moonshot | idea |
 
 Ideas become numbered moonshots only when execution begins.
-

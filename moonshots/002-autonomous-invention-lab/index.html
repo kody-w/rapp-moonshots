@@ -116,6 +116,8 @@
       text-decoration: none;
       pointer-events: none;
     }
+    .launch.ready { pointer-events: auto; color: var(--cp-accent); border-color: var(--cp-accent); }
+    .evidence { color: var(--cp-success); font-size: 10px; font-weight: 700; margin: -5px 0 12px; }
     .stage { display: grid; grid-template-columns: 1fr .75fr; gap: 14px; }
     .stage-panel { padding: 18px; }
     .stage-label { color: var(--cp-text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; font-weight: 800; }
@@ -126,6 +128,7 @@
     .status-list { display: grid; gap: 9px; margin-top: 12px; }
     .status { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; font-size: 11px; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cp-warning); }
+    .dot.complete { background: var(--cp-success); }
     .status span:last-child { color: var(--cp-text-muted); }
     .footer { margin-top: 16px; color: var(--cp-text-muted); font-size: 10px; display: flex; justify-content: space-between; gap: 16px; }
     @media (max-width: 1000px) { .tracks { grid-template-columns: 1fr; } .stage { grid-template-columns: 1fr; } }
@@ -138,14 +141,14 @@
       <div>
         <div class="eyebrow">Moonshot 002 · RAPP Invention Laboratory</div>
         <h1>Three inventions enter.</h1>
-        <p class="subtitle">Independent fleet teams are building real applications in parallel. Score the evidence, launch each prototype, and choose which invention earns the moonshot.</p>
+        <p class="subtitle">Independent fleet teams built three real applications in parallel. Score the evidence, launch each prototype, and challenge the lab’s Moonshot 002 verdict.</p>
       </div>
       <button class="button" id="themeButton" type="button">Toggle theme</button>
     </header>
 
     <section class="card challenge">
       <div><strong>The challenge</strong><span>Discover three novel, buildable inventions from existing RAPP assets. Require experiments, adversarial review, working applications, and a Shark Tank final.</span></div>
-      <div class="timer">BUILDING</div>
+      <div class="timer">LIVE</div>
     </section>
 
     <section class="tracks" id="tracks"></section>
@@ -163,11 +166,11 @@
         </div>
       </article>
       <article class="card stage-panel">
-        <div class="stage-label">Parallel build floor</div>
+        <div class="stage-label">Parallel build floor · complete</div>
         <div class="status-list">
-          <div class="status"><span class="dot"></span><strong>Resurrection Proof</strong><span>building</span></div>
-          <div class="status"><span class="dot"></span><strong>Counterfactual Repro Lab</strong><span>building</span></div>
-          <div class="status"><span class="dot"></span><strong>Ghost Ops</strong><span>building</span></div>
+          <div class="status"><span class="dot complete"></span><strong>Resurrection Proof</strong><span>14 tests · 10 drills</span></div>
+          <div class="status"><span class="dot complete"></span><strong>Counterfactual Repro Lab</strong><span>27 tests · 36 trials</span></div>
+          <div class="status"><span class="dot complete"></span><strong>Ghost Ops</strong><span>12 tests · 200 pairs</span></div>
         </div>
       </article>
     </section>
@@ -183,7 +186,11 @@
         name: "Resurrection Proof",
         hook: "Prove an agent estate can actually come back from disaster.",
         pitch: "Backups tell you files exist. Resurrection Proof tells you your digital intelligence can come back from the dead.",
-        reason: "It converts disaster recovery from a promise into a repeatable product demonstration."
+        reason: "It converts disaster recovery from a promise into a repeatable product demonstration.",
+        evidence: "10/10 restores · 40/40 canaries · 10/10 corruptions rejected",
+        href: "tracks/01-resurrection-proof/README.md",
+        launchLabel: "Run locally",
+        defaults: [9, 9, 10, 10, 9, 9]
       },
       {
         id: "repro",
@@ -191,7 +198,11 @@
         name: "Counterfactual Repro Lab",
         hook: "Change one environment variable until a failure flips.",
         pitch: "CI tells you where software failed. Counterfactual Repro Lab discovers the smallest environmental difference that caused it.",
-        reason: "It turns cross-platform debugging from log comparison into causal experimentation."
+        reason: "It turns cross-platform debugging from log comparison into causal experimentation.",
+        evidence: "36 trials · 100% cause accuracy · zero residue",
+        href: "tracks/02-counterfactual-repro-lab/README.md",
+        launchLabel: "Run locally",
+        defaults: [9, 10, 10, 10, 8, 9]
       },
       {
         id: "ghost",
@@ -199,16 +210,30 @@
         name: "Ghost Ops",
         hook: "Infrastructure rehearses disasters before they happen.",
         pitch: "Ghost Ops is a flight simulator for AI-native operations—and every exercise leaves behind a recovery playbook.",
-        reason: "It transforms dry incident response into an unforgettable, repeatable learning experience."
+        reason: "It transforms dry incident response into an unforgettable, repeatable learning experience.",
+        evidence: "200 paired runs · +42.995 containment points · 200/200 wins",
+        href: "tracks/03-ghost-ops/index.html",
+        launchLabel: "Launch app",
+        defaults: [10, 9, 10, 9, 10, 9]
       }
     ];
-    const criteria = ["Novelty", "Pain", "Proof", "Demo", "Leverage"];
+    const criteria = [
+      { label: "Novelty", weight: 0.20 },
+      { label: "Pain", weight: 0.20 },
+      { label: "Application", weight: 0.20 },
+      { label: "Proof", weight: 0.15 },
+      { label: "Demo", weight: 0.15 },
+      { label: "Leverage", weight: 0.10 }
+    ];
     const saved = JSON.parse(localStorage.getItem("rappInventionScores") || "{}");
     const scores = {};
     const tracksRoot = document.getElementById("tracks");
 
     for (const invention of inventions) {
-      scores[invention.id] = saved[invention.id] || [8, 8, 7, 8, 8];
+      const stored = saved[invention.id];
+      scores[invention.id] = Array.isArray(stored) && stored.length === criteria.length
+        ? stored
+        : invention.defaults;
       const card = document.createElement("article");
       card.className = "card track";
       const head = document.createElement("div");
@@ -228,11 +253,15 @@
       pitch.className = "pitch";
       pitch.textContent = invention.pitch;
       body.append(pitch);
+      const evidence = document.createElement("div");
+      evidence.className = "evidence";
+      evidence.textContent = invention.evidence;
+      body.append(evidence);
       criteria.forEach((criterion, index) => {
         const row = document.createElement("label");
         row.className = "score-row";
         const label = document.createElement("span");
-        label.textContent = criterion;
+        label.textContent = criterion.label;
         const input = document.createElement("input");
         input.type = "range";
         input.min = "1";
@@ -245,7 +274,7 @@
           value.textContent = input.value;
           persist();
           renderWinner();
-          total.textContent = score(invention.id).toFixed(1);
+          total.textContent = score(invention.id).toFixed(2);
         });
         row.append(label, input, value);
         body.append(row);
@@ -254,10 +283,11 @@
       footer.className = "track-total";
       const total = document.createElement("span");
       total.className = "score";
-      total.textContent = score(invention.id).toFixed(1);
-      const launch = document.createElement("span");
-      launch.className = "launch";
-      launch.textContent = "Prototype building";
+      total.textContent = score(invention.id).toFixed(2);
+      const launch = document.createElement("a");
+      launch.className = "launch ready";
+      launch.href = invention.href;
+      launch.textContent = invention.launchLabel;
       footer.append(total, launch);
       body.append(footer);
       card.append(head, body);
@@ -265,14 +295,17 @@
     }
 
     function score(id) {
-      return scores[id].reduce((sum, value) => sum + value, 0) / scores[id].length;
+      return scores[id].reduce(
+        (sum, value, index) => sum + value * criteria[index].weight,
+        0
+      );
     }
     function persist() {
       localStorage.setItem("rappInventionScores", JSON.stringify(scores));
     }
     function renderWinner() {
       const winner = [...inventions].sort((a, b) => score(b.id) - score(a.id))[0];
-      document.getElementById("winner").textContent = `${winner.name} · ${score(winner.id).toFixed(1)}`;
+      document.getElementById("winner").textContent = `${winner.name} · ${score(winner.id).toFixed(2)}`;
       document.getElementById("winnerReason").textContent = winner.reason;
     }
     document.getElementById("themeButton").addEventListener("click", () => {
