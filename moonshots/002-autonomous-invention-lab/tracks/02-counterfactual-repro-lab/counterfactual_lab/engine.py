@@ -10,7 +10,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Callable, Dict, List, Mapping, Optional
+from typing import Callable, Dict, List, Mapping, Optional, Tuple
 
 from .scenarios import BOUNDS, SCENARIOS, Intervention, Scenario
 
@@ -24,6 +24,10 @@ class UnknownScenarioError(ValueError):
 
 class FixtureExecutionError(RuntimeError):
     """Raised when the fixed fixture does not return valid evidence."""
+
+
+class FixtureDriftError(RuntimeError):
+    """Raised when fixture source changes after its experiment snapshot."""
 
 
 class ExperimentCancelled(RuntimeError):
@@ -63,6 +67,7 @@ class ExperimentRunner:
         self._raise_if_cancelled(cancel_event)
         scenario = SCENARIOS[scenario_id]
         run_id = experiment_id or uuid.uuid4().hex
+        fixture_snapshot, fixture_snapshot_sha256 = self._capture_fixture_snapshot()
         started = time.perf_counter()
         total_trials = self.repetitions * (1 + len(scenario.interventions))
         completed = 0
@@ -79,7 +84,13 @@ class ExperimentRunner:
         for repetition in range(1, self.repetitions + 1):
             self._raise_if_cancelled(cancel_event)
             trial = self._run_trial(
-                scenario, baseline_environment, "baseline", repetition, run_id
+                scenario,
+                baseline_environment,
+                "baseline",
+                repetition,
+                run_id,
+                fixture_snapshot,
+                fixture_snapshot_sha256,
             )
             self._raise_if_cancelled(cancel_event)
             baseline_trials.append(trial)
@@ -126,6 +137,8 @@ class ExperimentRunner:
                     "intervention-{0}".format(index),
                     repetition,
                     run_id,
+                    fixture_snapshot,
+                    fixture_snapshot_sha256,
                 )
                 self._raise_if_cancelled(cancel_event)
                 trials.append(trial)
@@ -184,6 +197,7 @@ class ExperimentRunner:
             raise WorkspaceCleanupError(
                 "A completed receipt requires verified deletion of every workspace"
             )
+        self._verify_fixture_source(fixture_snapshot_sha256)
 
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
         baseline_label = "PASS" if baseline_passed else "FAIL"
@@ -209,6 +223,7 @@ class ExperimentRunner:
             "schema": "counterfactual-repro-recipe/v1",
             "scenario": scenario.id,
             "fixture": "seeded-safe-fixture/v1",
+            "fixture_snapshot_sha256": fixture_snapshot_sha256,
             "baseline": baseline_environment,
             "change_exactly_one": {
                 "variable": first_flip["variable"],
@@ -247,7 +262,9 @@ class ExperimentRunner:
             "baseline_capture": {
                 "controlled_environment": baseline_environment,
                 "fixture_id": "seeded-safe-fixture/v1",
-                "fixture_sha256": self._fixture_digest(),
+                "fixture_sha256": fixture_snapshot_sha256,
+                "fixture_snapshot_sha256": fixture_snapshot_sha256,
+                "fixture_source_verified_at_release": True,
                 "repetitions": self.repetitions,
                 "pass_count": sum(1 for status in baseline_statuses if status),
                 "repeatable": True,
@@ -276,7 +293,7 @@ class ExperimentRunner:
                 "earlier_controls_rejected": prior_controls,
             },
             "safety": {
-                "fixture": "fixed and local",
+                "fixture": "immutable per-experiment snapshot",
                 "shell": False,
                 "network_requests": 0,
                 "dependency_installs": 0,
@@ -308,6 +325,8 @@ class ExperimentRunner:
         phase: str,
         repetition: int,
         run_id: str,
+        fixture_snapshot: bytes,
+        fixture_snapshot_sha256: str,
     ) -> dict:
         workspace_id = "{0}-{1}-{2}-{3}".format(
             run_id[:12], phase, repetition, uuid.uuid4().hex[:8]
@@ -320,9 +339,15 @@ class ExperimentRunner:
         try:
             self._materialize(scenario.id, controlled_environment, workspace)
             manifest_sha256 = self._manifest_digest(workspace)
+            trial_fixture_path = workspace / ".counterfactual-fixture-snapshot.py"
+            self._write_fixture_snapshot(
+                trial_fixture_path,
+                fixture_snapshot,
+                fixture_snapshot_sha256,
+            )
             fixture_environment = self._fixture_environment(controlled_environment)
             completed = subprocess.run(
-                [sys.executable, "-I", str(self.fixture_path), scenario.id],
+                [sys.executable, "-I", str(trial_fixture_path), scenario.id],
                 cwd=str(workspace),
                 env=fixture_environment,
                 stdin=subprocess.DEVNULL,
@@ -354,6 +379,7 @@ class ExperimentRunner:
                 "expected": observation["expected"],
                 "actual": observation["actual"],
                 "manifest_sha256": manifest_sha256,
+                "fixture_snapshot_sha256": fixture_snapshot_sha256,
                 "environment_sha256": self._environment_digest(controlled_environment),
             }
         except subprocess.TimeoutExpired as error:
@@ -514,8 +540,46 @@ class ExperimentRunner:
             "Trial workspace residue detected; evidence receipt withheld"
         )
 
-    def _fixture_digest(self) -> str:
-        return hashlib.sha256(self.fixture_path.read_bytes()).hexdigest()
+    def _capture_fixture_snapshot(self) -> Tuple[bytes, str]:
+        try:
+            snapshot = self.fixture_path.read_bytes()
+        except OSError as error:
+            raise FixtureDriftError(
+                "Fixture source could not be snapshotted"
+            ) from error
+        return snapshot, hashlib.sha256(snapshot).hexdigest()
+
+    def _verify_fixture_source(self, expected_sha256: str) -> None:
+        try:
+            current = self.fixture_path.read_bytes()
+        except OSError as error:
+            raise FixtureDriftError(
+                "Fixture source could not be verified before receipt release"
+            ) from error
+        if hashlib.sha256(current).hexdigest() != expected_sha256:
+            raise FixtureDriftError(
+                "Fixture source changed during the experiment; "
+                "evidence receipt withheld"
+            )
+
+    @staticmethod
+    def _write_fixture_snapshot(
+        path: Path,
+        snapshot: bytes,
+        expected_sha256: str,
+    ) -> None:
+        try:
+            with path.open("xb") as fixture_file:
+                fixture_file.write(snapshot)
+            copied = path.read_bytes()
+        except OSError as error:
+            raise FixtureExecutionError(
+                "Immutable fixture snapshot could not be materialized"
+            ) from error
+        if hashlib.sha256(copied).hexdigest() != expected_sha256:
+            raise FixtureExecutionError(
+                "Materialized fixture snapshot failed integrity verification"
+            )
 
     @staticmethod
     def _manifest_digest(workspace: Path) -> str:

@@ -44,7 +44,7 @@ variables.
 Each trial records:
 
 - the allowlisted controlled environment and its SHA-256 digest,
-- a fixture and workspace-manifest digest,
+- the one pre-baseline fixture snapshot hash and workspace-manifest digest,
 - expected versus actual observation,
 - status, exit code, duration, and verified deletion evidence, and
 - zero inherited experiment/secret keys and zero private-data fields.
@@ -53,6 +53,9 @@ Each trial records:
 
 - The API accepts exactly one field: a seeded `scenario_id`.
 - The child process uses a fixed argument vector—never a shell.
+- Fixture bytes are captured once before baseline. Every trial executes an
+  exact hash-checked copy of those immutable bytes, and source drift is checked
+  again before any receipt is released.
 - The fixture receives a replacement allowlisted environment, not `os.environ`.
   On Windows, only required `SYSTEMROOT` bootstraps Python; its value is neither
   captured nor written to a receipt.
@@ -79,8 +82,9 @@ Exported recipes automatically use `python3` with `./launch.sh` on POSIX and
 
 The committed experiment ran 36 isolated trials: **3/3 causes identified,
 9/9 baseline failures reproduced, 9/9 counterfactual passes repeated, six
-controls rejected, and zero residual workspaces**. Median scenario time was
-538.89 ms. See [`EXPERIMENT.md`](EXPERIMENT.md) and the machine-readable
+controls rejected, 3/3 fixture sources verified before receipt, and zero
+residual workspaces**. Median scenario time was 574.04 ms. See
+[`EXPERIMENT.md`](EXPERIMENT.md) and the machine-readable
 [`evidence/experiment-results.json`](evidence/experiment-results.json).
 
 ## Review package

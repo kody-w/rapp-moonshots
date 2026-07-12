@@ -14,10 +14,11 @@ question: **what is the smallest environmental difference that caused it?**”
 Launch `./launch.sh`. Choose **The right tool, found second** and click
 **Run controlled experiment**.
 
-“Counterfactual Repro Lab captures the failure, then turns environment drift
-into a controlled experiment. Every rerun gets a fresh isolated workspace. The
-fixture never changes. The input never changes. The lab is physically allowed
-to change one bounded variable at a time.”
+“Counterfactual Repro Lab captures the failure, snapshots and hashes the
+fixture, then turns environment drift into a controlled experiment. Every rerun
+gets a fresh isolated workspace and the same immutable fixture bytes. The input
+never changes. The lab is physically allowed to change one bounded variable at
+a time.”
 
 Point to the live evidence stream as three baseline failures reproduce.
 
@@ -45,8 +46,8 @@ No arbitrary command. No network. No package install.”
 
 “Our falsifiable experiment ran 36 isolated trials. It found all three seeded
 causes, reproduced 9/9 baseline failures and 9/9 counterfactual passes, rejected
-six plausible controls, verified 36/36 workspace deletions, and took a median
-539 ms per scenario.”
+six plausible controls, verified all three fixture sources and 36/36 workspace
+deletions, and took a median 574 ms per scenario.”
 
 ## 2:20 — Why this is a moonshot
 

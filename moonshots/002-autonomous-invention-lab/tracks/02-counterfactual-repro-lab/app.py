@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 from counterfactual_lab import (
     ExperimentCancelled,
     ExperimentRunner,
+    FixtureDriftError,
     SCENARIOS,
     WorkspaceCleanupError,
     public_scenarios,
@@ -160,6 +161,15 @@ class RunRegistry:
                 run["status"] = "cancelled"
                 run["error"] = (
                     "Experiment cancelled during shutdown after verified cleanup."
+                )
+                run["cleanup_verified"] = True
+        except FixtureDriftError:
+            with self._lock:
+                run = self._runs[run_id]
+                run["status"] = "failed"
+                run["error"] = (
+                    "Fixture source changed during the experiment; "
+                    "the evidence receipt was withheld."
                 )
                 run["cleanup_verified"] = True
         except WorkspaceCleanupError:

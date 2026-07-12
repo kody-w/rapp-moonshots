@@ -67,6 +67,12 @@ def measure() -> dict:
                     "expected_cause": EXPECTED_CAUSES[scenario_id],
                     "observed_cause": flip["variable"],
                     "cause_correct": flip["variable"] == EXPECTED_CAUSES[scenario_id],
+                    "fixture_snapshot_sha256": result["baseline_capture"][
+                        "fixture_snapshot_sha256"
+                    ],
+                    "fixture_source_verified_at_release": result[
+                        "baseline_capture"
+                    ]["fixture_source_verified_at_release"],
                     "baseline_repeats": result["baseline_capture"]["repetitions"],
                     "baseline_failures": (
                         result["baseline_capture"]["repetitions"]
@@ -101,6 +107,7 @@ def measure() -> dict:
             "cause_accuracy": "3/3",
             "baseline_reproducibility": "9/9 failures",
             "counterfactual_reproducibility": "9/9 passes",
+            "fixture_source_integrity": "3/3 verified before receipt",
             "variables_changed_per_trial": 1,
             "verified_workspace_deletions": "36/36",
             "residual_workspaces": 0,
@@ -117,6 +124,9 @@ def measure() -> dict:
             "counterfactual_passes": sum(run["flip_passes"] for run in runs),
             "counterfactual_repeats": sum(run["flip_repeats"] for run in runs),
             "controls_rejected": sum(run["controls_rejected"] for run in runs),
+            "fixture_sources_verified": sum(
+                run["fixture_source_verified_at_release"] for run in runs
+            ),
             "total_trials": total_trials,
             "workspaces_created_and_cleaned": verified_cleanups,
             "residual_workspaces": sum(run["residual_workspaces"] for run in runs),
@@ -131,6 +141,8 @@ def measure() -> dict:
         summary["scenarios_correct"] == summary["scenarios_total"]
         and summary["baseline_failures"] == summary["baseline_repeats"]
         and summary["counterfactual_passes"] == summary["counterfactual_repeats"]
+        and summary["fixture_sources_verified"] == summary["scenarios_total"]
+        and all(len(run["fixture_snapshot_sha256"]) == 64 for run in runs)
         and summary["workspaces_created_and_cleaned"] == summary["total_trials"]
         and summary["residual_workspaces"] == 0
         and all(run["variables_changed_per_trial"] == 1 for run in runs)

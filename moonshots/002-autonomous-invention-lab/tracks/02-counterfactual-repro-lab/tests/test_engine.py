@@ -8,6 +8,7 @@ from unittest.mock import patch
 from counterfactual_lab import (
     ExperimentCancelled,
     ExperimentRunner,
+    FixtureDriftError,
     FixtureExecutionError,
     SCENARIOS,
     UnknownScenarioError,
@@ -61,6 +62,28 @@ class ExperimentRunnerTests(unittest.TestCase):
                 self.assertEqual(flip["pass_count"], 3)
                 self.assertEqual(result["metrics"]["trials_run"], 12)
                 self.assertEqual(result["metrics"]["workspaces_cleaned"], 12)
+                snapshot_hash = result["baseline_capture"][
+                    "fixture_snapshot_sha256"
+                ]
+                self.assertEqual(len(snapshot_hash), 64)
+                self.assertEqual(
+                    result["baseline_capture"]["fixture_sha256"],
+                    snapshot_hash,
+                )
+                self.assertTrue(
+                    result["baseline_capture"][
+                        "fixture_source_verified_at_release"
+                    ]
+                )
+                all_trials = list(result["baseline_capture"]["trials"])
+                for intervention in result["interventions"]:
+                    all_trials.extend(intervention["trials"])
+                self.assertTrue(
+                    all(
+                        trial["fixture_snapshot_sha256"] == snapshot_hash
+                        for trial in all_trials
+                    )
+                )
                 boundary = result["baseline_capture"]["environment_boundary"]
                 self.assertEqual(
                     boundary["inherited_experiment_environment_keys"], 0
@@ -96,6 +119,7 @@ class ExperimentRunnerTests(unittest.TestCase):
         self.assertEqual(recipe["schema"], "counterfactual-repro-recipe/v1")
         self.assertEqual(recipe["scenario"], "environment-flag")
         self.assertEqual(recipe["rerun_count"], 3)
+        self.assertEqual(len(recipe["fixture_snapshot_sha256"]), 64)
         commands = self.runner._platform_commands("environment-flag")
         self.assertEqual(
             recipe["command"],
@@ -206,6 +230,52 @@ class ExperimentRunnerTests(unittest.TestCase):
             ) as context:
                 self.runner._remove_workspace_verified(absent)
         self.assertIsInstance(context.exception.__cause__, PermissionError)
+
+    def test_mid_run_source_mutation_uses_snapshot_and_withholds_receipt(self):
+        drift_root = TRACK_ROOT / ".test-runtime" / "fixture-drift"
+        shutil.rmtree(drift_root, ignore_errors=True)
+        drift_root.mkdir(parents=True)
+        source_fixture = drift_root / "fixture.py"
+        source_fixture.write_bytes(self.runner.fixture_path.read_bytes())
+        runner = ExperimentRunner(runtime_root=drift_root / "workspaces")
+        runner.fixture_path = source_fixture.resolve()
+        events = []
+        mutated = False
+
+        malicious_fixture = (
+            b"import json\n"
+            b"print(json.dumps({'passed': True, 'code': 'MUTATED', "
+            b"'observation': 'mutated fixture passed', 'expected': 'pass', "
+            b"'actual': 'pass'}))\n"
+        )
+
+        def mutate_after_baseline(event):
+            nonlocal mutated
+            events.append(dict(event))
+            if (
+                not mutated
+                and event["stage"] == "capturing"
+                and event["completed"] == 3
+            ):
+                source_fixture.write_bytes(malicious_fixture)
+                mutated = True
+
+        try:
+            with self.assertRaisesRegex(
+                FixtureDriftError, "changed during the experiment"
+            ):
+                runner.run(
+                    "line-endings",
+                    progress=mutate_after_baseline,
+                )
+            self.assertTrue(mutated)
+            messages = [event["message"] for event in events]
+            self.assertIn("process.locale repeat 3/3: FAIL", messages)
+            self.assertIn("checkout.lineEnding repeat 3/3: PASS", messages)
+            self.assertNotIn("process.locale repeat 1/3: PASS", messages)
+            self.assertEqual(list((drift_root / "workspaces").iterdir()), [])
+        finally:
+            shutil.rmtree(drift_root, ignore_errors=True)
 
 
 if __name__ == "__main__":
