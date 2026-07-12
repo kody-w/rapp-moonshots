@@ -46,6 +46,22 @@ instrumentation.
 2. **Gaze Compass** — coarse compass sectors with center-rest cancellation.
 3. **Gesture Tunnel** — cumulative spatial layers navigated by motion and voice.
 
+## Unified product — Adaptive Orb
+
+The tournament feeds one final application rather than shipping three separate
+interfaces.
+
+Adaptive Orb keeps one AI conversation, one task/history model, and one
+camera/microphone privacy lifecycle while changing interaction grammar:
+
+- Orbit for broad spoken intent and predicted next actions;
+- Compass for precise follow-up selection; and
+- Tunnel for deep branches, revisions, and scenario navigation.
+
+The final product includes an offline deterministic AI demo, an optional
+server-side RAPP brainstem connector, and a mobile/installable iOS PWA. Browser
+credentials and raw camera/audio never enter persistent storage.
+
 ## Measured gates
 
 - exact task completion,
@@ -63,4 +79,4 @@ Safety and fallback parity are mandatory before speed can win.
 
 ## Status
 
-**Active — three validated interface applications complete; unified Adaptive Orb building**
+**Active — Adaptive Orb AI/PWA integration building**
