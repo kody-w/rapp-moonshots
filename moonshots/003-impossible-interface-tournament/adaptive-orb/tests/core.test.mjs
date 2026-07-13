@@ -424,6 +424,111 @@ test("export contains no raw media, transcript, persistence, or irreversible eff
   assert.equal(serialized.includes("audioData"), false);
 });
 
+test("public export and what changed redact model suggestion content", () => {
+  const { machine } = begin("accessible");
+  const request = machine.dispatch({
+    type: "CONVERSATION_INPUT",
+    text: "Create a private field note.",
+    source: "keyboard",
+    at: 100,
+  });
+  const privateValues = [
+    "ai-private-model-tag",
+    "Private model label",
+    "Private model detail",
+    "Private model prompt",
+    "private-model-branch",
+  ];
+  const response = {
+    message: "A response whose details remain memory only.",
+    scenario: "create",
+    summary: "Private response summary",
+    suggestions: [
+      {
+        id: privateValues[0],
+        label: privateValues[1],
+        detail: privateValues[2],
+        prompt: privateValues[3],
+        branch: privateValues[4],
+      },
+      {
+        id: "second",
+        label: "Second",
+        prompt: "Continue with the second option.",
+      },
+      {
+        id: "third",
+        label: "Third",
+        prompt: "Continue with the third option.",
+      },
+      {
+        id: "fourth",
+        label: "Fourth",
+        prompt: "Continue with the fourth option.",
+      },
+    ],
+  };
+  assert.equal(
+    machine.dispatch({
+      type: "AI_RESPONSE",
+      requestId: request.requestId,
+      response,
+      at: 200,
+    }).effect,
+    "ai-response",
+  );
+  assert.equal(
+    choose(machine, "ai-private-model-tag", "keyboard", 300).effect,
+    "ai-request",
+  );
+  const changed = machine.dispatch({
+    type: "WHAT_CHANGED",
+    source: "switch",
+    at: 400,
+  });
+  assert.match(changed.text, /confirmed ai option/i);
+  for (const privateValue of privateValues) {
+    assert.equal(changed.text.includes(privateValue), false, privateValue);
+  }
+
+  machine.record(
+    "test.private-event-boundary",
+    {
+      id: privateValues[0],
+      label: privateValues[1],
+      detail: privateValues[2],
+      prompt: privateValues[3],
+      branch: privateValues[4],
+      nested: {
+        message: privateValues[1],
+        text: privateValues[3],
+      },
+    },
+    450,
+  );
+  const serialized = JSON.stringify(machine.exportRecord(500));
+  for (const privateValue of [...privateValues, "Private response summary"]) {
+    assert.equal(serialized.includes(privateValue), false, privateValue);
+  }
+  assert.match(serialized, /confirmed-ai-option/);
+  assert.equal(
+    machine
+      .exportRecord(500)
+      .events.findLast((event) => event.type === "choice.confirmed")?.detail.id,
+    "confirmed-ai-option",
+  );
+  assert.ok(
+    machine
+      .exportRecord(500)
+      .events.every(
+        (event) =>
+          !Object.keys(event.detail).some((key) =>
+            ["label", "prompt", "text", "message", "summary"].includes(key),
+          ),
+      ),
+  );
+});
+
 test("AI conversation keeps one memory and task across contextual mode changes", () => {
   const { machine } = begin("accessible");
   const request = machine.dispatch({
@@ -575,6 +680,83 @@ test("cancel stop and background AI cancellation restore selectable options", ()
     assert.equal(selected.ok, true, cancellation);
     assert.equal(selected.effect, "ai-request", cancellation);
   }
+});
+
+test("second input and undo never restore an orphaned pending request", () => {
+  const { machine } = begin("accessible");
+  const first = machine.dispatch({
+    type: "CONVERSATION_INPUT",
+    text: "Create the first field note.",
+    source: "keyboard",
+    at: 100,
+  });
+  assert.equal(machine.state.conversation.pending, true);
+
+  const second = machine.dispatch({
+    type: "CONVERSATION_INPUT",
+    text: "Plan a replacement field note.",
+    source: "keyboard",
+    at: 150,
+  });
+  assert.ok(second.requestId > first.requestId);
+  assert.equal(machine.state.history.at(-1).conversation.pending, false);
+  assert.equal(
+    machine.dispatch({
+      type: "AI_RESPONSE",
+      requestId: first.requestId,
+      response: demoResponseFor(first.request, { scenarioHint: "create" }),
+      at: 175,
+    }).effect,
+    "rejected",
+  );
+  assert.equal(
+    machine.dispatch({
+      type: "AI_RESPONSE",
+      requestId: second.requestId,
+      response: demoResponseFor(second.request, { scenarioHint: "plan" }),
+      at: 200,
+    }).effect,
+    "ai-response",
+  );
+
+  assert.equal(
+    machine.dispatch({ type: "UNDO", source: "keyboard", at: 250 }).effect,
+    "undo",
+  );
+  assert.equal(machine.state.conversation.pending, false);
+  assert.ok(machine.state.options.length >= 4);
+  const restoredOptions = machine.state.options.map((option) => option.id);
+  assert.equal(
+    machine.dispatch({
+      type: "AI_RESPONSE",
+      requestId: second.requestId,
+      response: demoResponseFor(second.request, { scenarioHint: "plan" }),
+      at: 260,
+    }).effect,
+    "rejected",
+  );
+  assert.equal(machine.state.conversation.pending, false);
+  assert.deepEqual(
+    machine.state.options.map((option) => option.id),
+    restoredOptions,
+  );
+  assert.equal(
+    machine.dispatch({
+      type: "CYCLE",
+      delta: 1,
+      source: "switch",
+      at: 275,
+    }).ok,
+    true,
+  );
+  assert.equal(
+    machine.dispatch({
+      type: "CONFIRM",
+      source: "switch",
+      at: 300,
+    }).effect,
+    "ai-request",
+  );
 });
 
 test("an AI detour returns to the exact in-progress task checkpoint", () => {

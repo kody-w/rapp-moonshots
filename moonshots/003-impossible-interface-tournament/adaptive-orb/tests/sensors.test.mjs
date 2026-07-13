@@ -1055,6 +1055,98 @@ test("microphone regrant cancels narration before recognition starts", async () 
   }
 });
 
+test("controller and microphone startup cancel pre-existing global speech", async () => {
+  const originalRecognition = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "SpeechRecognition",
+  );
+  const originalSynthesis = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "speechSynthesis",
+  );
+  const originalNavigator = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "navigator",
+  );
+  let utteranceActive = true;
+  let synthesisCancels = 0;
+  let recognitionStarts = 0;
+  const phases = [];
+  class GuardedRecognition {
+    start() {
+      phases.push(["recognition-start", utteranceActive]);
+      recognitionStarts += 1;
+      this.onstart?.();
+    }
+
+    abort() {}
+  }
+  const track = {
+    kind: "audio",
+    readyState: "live",
+    addEventListener() {},
+    stop() {
+      this.readyState = "ended";
+    },
+  };
+  const stream = {
+    active: true,
+    getTracks: () => [track],
+  };
+  Object.defineProperty(globalThis, "SpeechRecognition", {
+    configurable: true,
+    value: GuardedRecognition,
+  });
+  Object.defineProperty(globalThis, "speechSynthesis", {
+    configurable: true,
+    value: {
+      cancel() {
+        synthesisCancels += 1;
+        utteranceActive = false;
+      },
+    },
+  });
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      mediaDevices: {
+        async getUserMedia() {
+          phases.push(["get-user-media", utteranceActive]);
+          utteranceActive = true;
+          return stream;
+        },
+      },
+    },
+  });
+  const controller = new AdaptiveSensorController({ video: null });
+  try {
+    assert.equal(utteranceActive, false);
+    utteranceActive = true;
+
+    assert.equal(await controller.enableMicrophone(), true);
+    assert.deepEqual(phases, [
+      ["get-user-media", false],
+      ["recognition-start", false],
+    ]);
+    assert.ok(synthesisCancels >= 4);
+    assert.equal(recognitionStarts, 1);
+    assert.equal(controller.speaking, false);
+  } finally {
+    controller.stop("pre-existing-speech-test");
+    for (const [name, descriptor] of [
+      ["SpeechRecognition", originalRecognition],
+      ["speechSynthesis", originalSynthesis],
+      ["navigator", originalNavigator],
+    ]) {
+      if (descriptor) {
+        Object.defineProperty(globalThis, name, descriptor);
+      } else {
+        delete globalThis[name];
+      }
+    }
+  }
+});
+
 test("recognition exhaustion stops capture and explicit enable recovers", async () => {
   const originalRecognition = Object.getOwnPropertyDescriptor(
     globalThis,

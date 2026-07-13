@@ -87,7 +87,7 @@ Verify a changed `CACHE_VERSION` produces a waiting worker, **Apply app update**
 sends `ACTIVATE_UPDATE`, old versioned static caches are deleted on activation,
 and the page reloads once on controller change.
 
-This release uses `adaptive-orb-static-v8`.
+This release uses `adaptive-orb-static-v9`.
 
 ## iOS standalone capability protocol
 
@@ -120,7 +120,16 @@ hardware under these cases:
     cycle/select with a nonempty recomputed option set;
 14. exact, sanitized, case, and `ai-` prefix suggestion-ID collisions; and
 15. 320×256/400%-zoom-equivalent landscape with safe radial geometry and
-    single-column vertical reachability.
+    single-column vertical reachability;
+16. a model suggestion with private ID, label, detail, prompt, and branch,
+    followed by confirmation, **What changed**, and export: only an
+    application-owned semantic category may appear;
+17. first input pending, second input accepted, then undo: the restored state
+    must be nonpending, reject stale delivery, and expose selectable options;
+    and
+18. synthesis active before controller creation and again across microphone
+    permission: it must be canceled before `getUserMedia` and immediately
+    before the first recognition start.
 
 Acceptance requires runtime detection on every launch, no pre-permission claim
 that hardware works, useful sensor-free AI before permission, a visible

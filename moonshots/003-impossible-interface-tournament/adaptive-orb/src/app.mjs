@@ -289,6 +289,7 @@ function showApplication() {
 }
 
 function createSensorController() {
+  cancelGlobalSpeech(window);
   return new AdaptiveSensorController({
     video: elements.sensorPreview,
     clock: () => performance.now(),
@@ -389,6 +390,7 @@ async function enableMicrophone() {
   ) {
     return false;
   }
+  cancelGlobalSpeech(window);
   sensorPermissionBusy = true;
   microphonePermissionAttempted = true;
   mobileMetrics.notePermissionRequest("microphone");

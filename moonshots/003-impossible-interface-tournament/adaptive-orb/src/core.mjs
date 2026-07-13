@@ -75,21 +75,134 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+const PRIVATE_EVENT_DETAIL_KEYS = new Set([
+  "aliases",
+  "branch",
+  "content",
+  "detail",
+  "label",
+  "message",
+  "prompt",
+  "suggestion",
+  "suggestions",
+  "summary",
+  "text",
+]);
+
+const PUBLIC_EVENT_DETAIL_KEYS = new Set([
+  "at",
+  "canceledPending",
+  "cause",
+  "change",
+  "changed",
+  "degraded",
+  "dwellMs",
+  "fields",
+  "from",
+  "id",
+  "kind",
+  "mode",
+  "orientation",
+  "provider",
+  "reacquire",
+  "reason",
+  "remaining",
+  "removed",
+  "requestId",
+  "restored",
+  "reversible",
+  "sameOrigin",
+  "scenario",
+  "sensor",
+  "sensorCause",
+  "source",
+  "status",
+  "suggestionCount",
+  "to",
+  "turn",
+]);
+
+function semanticChoiceCategory(id, confirmed = false) {
+  const value = String(id || "");
+  const normalized = value.toLowerCase();
+  if (normalized === "confirmed-ai-option") {
+    return "confirmed-ai-option";
+  }
+  if (
+    normalized.startsWith("ai-") ||
+    normalized === "ai-option"
+  ) {
+    return confirmed ? "confirmed-ai-option" : "ai-option";
+  }
+  return value;
+}
+
+function semanticHistoryReason(reason) {
+  const value = String(reason || "");
+  if (
+    value === "confirmed-ai-option" ||
+    /^confirm:ai-[a-z0-9_-]{1,80}$/i.test(value)
+  ) {
+    return "confirmed-ai-option";
+  }
+  if (
+    /^(?:voice-draft|conversation-input)$/.test(value) ||
+    /^confirm:[a-z0-9_-]{1,80}$/i.test(value) ||
+    /^[a-z][a-z0-9-]{0,79}$/i.test(value)
+  ) {
+    return value;
+  }
+  return "application-state-change";
+}
+
+function sanitizePublicEventDetail(value, key = "") {
+  if (
+    PRIVATE_EVENT_DETAIL_KEYS.has(key.toLowerCase()) ||
+    (key && !PUBLIC_EVENT_DETAIL_KEYS.has(key))
+  ) {
+    return undefined;
+  }
+  if (key === "id" && typeof value === "string") {
+    return semanticChoiceCategory(value);
+  }
+  if (["change", "restored"].includes(key) && typeof value === "string") {
+    return semanticHistoryReason(value);
+  }
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, 32)
+      .map((item) => sanitizePublicEventDetail(item))
+      .filter((item) => item !== undefined);
+  }
+  if (value && typeof value === "object") {
+    const sanitized = {};
+    for (const [childKey, childValue] of Object.entries(value)) {
+      const publicValue = sanitizePublicEventDetail(childValue, childKey);
+      if (publicValue !== undefined) {
+        sanitized[childKey] = publicValue;
+      }
+    }
+    return sanitized;
+  }
+  if (typeof value === "string") {
+    return value.slice(0, 160);
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "boolean" || value === null) {
+    return value;
+  }
+  return undefined;
+}
+
 function publicEvent(event) {
-  const sanitized = clone(event);
-  if (
-    typeof sanitized.detail?.id === "string" &&
-    sanitized.detail.id.startsWith("ai-")
-  ) {
-    sanitized.detail.id = "ai-suggestion";
-  }
-  if (
-    typeof sanitized.detail?.restored === "string" &&
-    sanitized.detail.restored.includes("ai-")
-  ) {
-    sanitized.detail.restored = "conversation-choice";
-  }
-  return sanitized;
+  return {
+    seq: Number.isFinite(event?.seq) ? event.seq : 0,
+    atMs: Number.isFinite(event?.atMs) ? event.atMs : 0,
+    type: String(event?.type || "application.event").slice(0, 80),
+    detail: sanitizePublicEventDetail(event?.detail || {}),
+  };
 }
 
 function normalizeSpeech(text) {
@@ -940,12 +1053,15 @@ class AdaptiveOrbMachine {
     if (!text || text.length > 4000) {
       return this.block("conversation-input-invalid", source, now, false);
     }
+    const conversation = this.state.conversation;
+    if (conversation.pending) {
+      this.cancelPendingAI("superseded by newer input", now);
+    }
     this.pushHistory("conversation-input");
     const scenario = inferScenario(
       text,
       scenarioHint || this.state.conversation.scenario || "create",
     );
-    const conversation = this.state.conversation;
     if (!conversation.focused && !conversation.returnContext) {
       conversation.returnContext = {
         stage: this.state.stage,
@@ -1099,7 +1215,12 @@ class AdaptiveOrbMachine {
     }`;
     this.record(
       "choice.highlighted",
-      { id, source, changed, mode: this.state.mode },
+      {
+        id: semanticChoiceCategory(id),
+        source,
+        changed,
+        mode: this.state.mode,
+      },
       now,
     );
     return { ok: true, effect: "highlight", id };
@@ -1130,7 +1251,15 @@ class AdaptiveOrbMachine {
       this.clearAim();
       this.state.lastAction = "dwell-gap-reset";
       this.state.announcement = "Sensor gap reset dwell. Reacquire the choice.";
-      this.record("dwell.reset", { reason: "sample-gap", id, reacquire: true }, now);
+      this.record(
+        "dwell.reset",
+        {
+          reason: "sample-gap",
+          id: semanticChoiceCategory(id),
+          reacquire: true,
+        },
+        now,
+      );
       return { ok: false, effect: "reset" };
     }
     const credited = Math.min(duration, 250);
@@ -1142,7 +1271,11 @@ class AdaptiveOrbMachine {
       this.state.announcement = "Choice armed. Gaze still cannot execute it.";
       this.record(
         "choice.armed",
-        { id: this.state.highlight, mode: this.state.mode, dwellMs: this.state.dwellMs },
+        {
+          id: semanticChoiceCategory(this.state.highlight),
+          mode: this.state.mode,
+          dwellMs: this.state.dwellMs,
+        },
         now,
       );
     }
@@ -1218,7 +1351,11 @@ class AdaptiveOrbMachine {
       return { ok: true, effect: "access-request" };
     }
 
-    this.pushHistory(`confirm:${candidate.id}`);
+    this.pushHistory(
+      candidate.id.startsWith("ai-")
+        ? "confirmed-ai-option"
+        : `confirm:${candidate.id}`,
+    );
     const modeAtCommit = this.state.mode;
     const result = this.applyOption(candidate, now);
     if (!result.ok) {
@@ -1235,7 +1372,12 @@ class AdaptiveOrbMachine {
     this.state.lastAction = "confirmed";
     this.record(
       "choice.confirmed",
-      { id: candidate.id, source, mode: modeAtCommit, reversible: true },
+      {
+        id: semanticChoiceCategory(candidate.id, true),
+        source,
+        mode: modeAtCommit,
+        reversible: true,
+      },
       now,
     );
     this.clearAim();
@@ -1436,6 +1578,11 @@ class AdaptiveOrbMachine {
         conversationAudit.requestId,
       );
     }
+    if (this.state.conversation.pending) {
+      this.state.conversation.notice =
+        "Pending AI response was not restored by undo.";
+    }
+    this.state.conversation.pending = false;
     this.state.completedAt = previous.completedAt;
     this.state.metrics.completionTimeMs = previous.completionTimeMs;
     this.state.metrics.undos += 1;
@@ -1496,12 +1643,10 @@ class AdaptiveOrbMachine {
 
   whatChanged(source, now) {
     const previous = this.state.history.at(-1)?.reason;
-    const change = previous
-      ? previous.replaceAll("-", " ")
-      : this.state.lastAction.replaceAll("-", " ");
+    const change = semanticHistoryReason(previous || this.state.lastAction);
     this.state.lastAction = "what-changed";
     this.state.announcement =
-      `What changed: ${change}. Confirmed task values and conversation history remain reversible.`;
+      `What changed: ${change.replaceAll("-", " ")}. Confirmed task values and conversation history remain reversible.`;
     this.record("conversation.what-changed", { source, change }, now);
     return { ok: true, effect: "what-changed", text: this.state.announcement };
   }
@@ -1761,14 +1906,16 @@ class AdaptiveOrbMachine {
   }
 
   pushHistory(reason) {
+    const conversation = clone(this.state.conversation);
+    conversation.pending = false;
     this.state.history.push({
-      reason,
+      reason: semanticHistoryReason(reason),
       task: clone(this.state.task),
       stage: this.state.stage,
       broadReady: this.state.broadReady,
       entryStep: this.state.entryStep,
       tunnelPath: [...this.state.tunnelPath],
-      conversation: clone(this.state.conversation),
+      conversation,
       completedAt: this.state.completedAt,
       completionTimeMs: this.state.metrics.completionTimeMs,
     });

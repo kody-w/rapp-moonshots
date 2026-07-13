@@ -232,6 +232,7 @@ class AdaptiveSensorController {
     generationSeed = 0,
     recognitionRetryBaseMs = 250,
   } = {}) {
+    cancelGlobalSpeech(globalThis);
     this.video = video;
     this.onAction = onAction;
     this.onAim = onAim;
@@ -387,12 +388,15 @@ class AdaptiveSensorController {
   }
 
   async enableMicrophone() {
+    const canceledNarration =
+      this.cancelNarrationForRecognitionRecovery();
     const microphoneLive = streamHasLiveTrack(
       this.microphoneStream,
       "audio",
     );
     if (
       microphoneLive &&
+      !canceledNarration &&
       !this.recognitionTerminal &&
       (this.recognition || this.recognitionRetry || this.speaking)
     ) {
@@ -424,6 +428,7 @@ class AdaptiveSensorController {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("media-unsupported");
       }
+      this.cancelNarrationForRecognitionRecovery();
       acquired = await navigator.mediaDevices.getUserMedia({
         video: false,
         audio: {
@@ -588,6 +593,7 @@ class AdaptiveSensorController {
   }
 
   async start() {
+    this.cancelNarrationForRecognitionRecovery();
     const generation = this.lifecycle.begin();
     this.lifecycleGeneration = generation;
     this.active = true;
@@ -610,6 +616,7 @@ class AdaptiveSensorController {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("media-unsupported");
       }
+      this.cancelNarrationForRecognitionRecovery();
       acquired = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: "user" },
@@ -1618,6 +1625,7 @@ class AdaptiveSensorController {
         status: "starting",
         at: this.clock(),
       });
+      this.cancelNarrationForRecognitionRecovery();
       recognition.start();
     } catch (error) {
       const terminal = ["NotAllowedError", "SecurityError", "NotSupportedError"].includes(
@@ -1655,14 +1663,14 @@ class AdaptiveSensorController {
   }
 
   cancelNarrationForRecognitionRecovery() {
-    if (!this.speaking) {
-      return false;
+    const wasSpeaking = this.speaking;
+    if (wasSpeaking) {
+      this.announcementEpoch += 1;
     }
-    this.announcementEpoch += 1;
     this.speaking = false;
     this.recognitionExpectedEnd = false;
     cancelGlobalSpeech(globalThis);
-    return true;
+    return wasSpeaking;
   }
 
   markRecognitionUnavailable(

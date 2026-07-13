@@ -48,6 +48,15 @@ test("generated index is self-contained and has the required product hooks", asy
   assert.match(html, /reason: "restart-exhausted"/);
   assert.match(html, /unique after normalization/);
   assert.match(html, /ai-canceled:/);
+  assert.match(html, /PRIVATE_EVENT_DETAIL_KEYS/);
+  assert.match(html, /PUBLIC_EVENT_DETAIL_KEYS/);
+  assert.match(html, /confirmed-ai-option/);
+  assert.match(html, /superseded by newer input/);
+  assert.match(html, /Pending AI response was not restored by undo/);
+  assert.match(
+    html,
+    /cancelNarrationForRecognitionRecovery\(\);\s+recognition\.start\(\)/,
+  );
   assert.match(html, /pendingDetectorBuffers/);
   assert.match(html, /EXPECTED_DETERMINISTIC_FINGERPRINT = "c1b6e39f"/);
   assert.match(html, /EXPECTED_CONVERSATION_FINGERPRINT = "071ba015"/);

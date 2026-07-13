@@ -339,6 +339,12 @@ check("AI adapters provide offline default and strict same-origin failover", () 
   assert.match(core, /conversation\.turns/);
   assert.match(core, /publicConversationSummary/);
   assert.match(core, /events: this\.state\.events\.map\(publicEvent\)/);
+  assert.match(core, /PRIVATE_EVENT_DETAIL_KEYS/);
+  assert.match(core, /PUBLIC_EVENT_DETAIL_KEYS/);
+  assert.match(core, /sanitizePublicEventDetail/);
+  assert.match(core, /confirmed-ai-option/);
+  assert.match(core, /Pending AI response was not restored by undo/);
+  assert.match(core, /cancelPendingAI\("superseded by newer input", now\)/);
   assert.match(ai, /"choice-selected"/);
   assert.match(app, /speakCurrentResponse/);
   assert.match(app, /speechSynthesis\.speak/);
@@ -377,6 +383,18 @@ check("recognition restarts distinguish clean ends and exhaust visibly", () => {
   assert.match(sensors, /reason: error === "aborted" \? "unexpected-aborted" : error/);
   assert.match(sensors, /cancelNarrationForRecognitionRecovery/);
   assert.match(sensors, /this\.announcementEpoch \+= 1/);
+  assert.match(
+    sensors,
+    /this\.cancelNarrationForRecognitionRecovery\(\);\s+acquired = await navigator\.mediaDevices\.getUserMedia/,
+  );
+  assert.match(
+    sensors,
+    /this\.cancelNarrationForRecognitionRecovery\(\);\s+recognition\.start\(\)/,
+  );
+  assert.match(
+    app,
+    /function createSensorController\(\) \{\s+cancelGlobalSpeech\(window\)/,
+  );
   assert.match(sensors, /kind: "ordinary-end"/);
   assert.match(sensors, /kind: "transient-failure"/);
   assert.match(sensors, /markRecognitionUnavailable/);
@@ -420,7 +438,7 @@ check("PWA manifest and service worker cache only local static allowlist", () =>
   assert.equal(manifest.scope, "./");
   assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512"));
-  assert.match(serviceWorker, /adaptive-orb-static-v8/);
+  assert.match(serviceWorker, /adaptive-orb-static-v9/);
   assert.match(serviceWorker, /STATIC_ASSETS/);
   assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.match(serviceWorker, /ACTIVATE_UPDATE/);

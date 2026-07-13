@@ -42,7 +42,7 @@
       "atMs": 300,
       "type": "choice.highlighted",
       "detail": {
-        "id": "ai-suggestion",
+        "id": "ai-option",
         "source": "voice",
         "changed": true,
         "mode": "orbit"
@@ -53,7 +53,7 @@
       "atMs": 325,
       "type": "choice.confirmed",
       "detail": {
-        "id": "ai-suggestion",
+        "id": "confirmed-ai-option",
         "source": "voice",
         "mode": "orbit",
         "reversible": true
@@ -109,7 +109,7 @@
       "atMs": 675,
       "type": "choice.highlighted",
       "detail": {
-        "id": "ai-suggestion",
+        "id": "ai-option",
         "source": "gaze",
         "changed": true,
         "mode": "compass"
@@ -120,7 +120,7 @@
       "atMs": 1575,
       "type": "choice.armed",
       "detail": {
-        "id": "ai-suggestion",
+        "id": "ai-option",
         "mode": "compass",
         "dwellMs": 900
       }
@@ -130,7 +130,7 @@
       "atMs": 1650,
       "type": "choice.confirmed",
       "detail": {
-        "id": "ai-suggestion",
+        "id": "confirmed-ai-option",
         "source": "gesture",
         "mode": "compass",
         "reversible": true
@@ -196,7 +196,7 @@
       "atMs": 2000,
       "type": "choice.highlighted",
       "detail": {
-        "id": "ai-suggestion",
+        "id": "ai-option",
         "source": "gesture",
         "changed": true,
         "mode": "tunnel"
@@ -207,7 +207,7 @@
       "atMs": 2900,
       "type": "choice.armed",
       "detail": {
-        "id": "ai-suggestion",
+        "id": "ai-option",
         "mode": "tunnel",
         "dwellMs": 900
       }
@@ -217,7 +217,7 @@
       "atMs": 2975,
       "type": "choice.confirmed",
       "detail": {
-        "id": "ai-suggestion",
+        "id": "confirmed-ai-option",
         "source": "gesture",
         "mode": "tunnel",
         "reversible": true
@@ -241,7 +241,7 @@
       "type": "history.undo",
       "detail": {
         "source": "voice",
-        "restored": "conversation-choice"
+        "restored": "confirmed-ai-option"
       }
     },
     {
@@ -292,7 +292,7 @@
       "atMs": 3350,
       "type": "choice.highlighted",
       "detail": {
-        "id": "ai-suggestion",
+        "id": "ai-option",
         "source": "voice",
         "changed": true,
         "mode": "compass"
@@ -321,7 +321,7 @@
       "atMs": 3375,
       "type": "choice.confirmed",
       "detail": {
-        "id": "ai-suggestion",
+        "id": "confirmed-ai-option",
         "source": "voice",
         "mode": "compass",
         "reversible": true

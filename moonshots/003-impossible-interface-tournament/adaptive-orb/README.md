@@ -155,8 +155,11 @@ cannot clear the newer speaking state, alter expected-abort state, or restart
 recognition. An explicit microphone recovery that overlaps narration first
 invalidates and cancels that utterance; a response resolving during permission
 is canceled again before recognition starts, so stale callbacks cannot restart
-twice. Any transition back to sensor-free stops camera, microphone, recognition,
-and synthesis before sensor-free status renders.
+twice. Controller creation, microphone acquisition, and recovery also cancel
+global synthesis unconditionally before media permission and immediately before
+recognition starts, including narration created before a controller existed.
+Any transition back to sensor-free stops camera, microphone, recognition, and
+synthesis before sensor-free status renders.
 
 After optional grants, the intended flow is hands-free: speak broad intent,
 hold a coarse direction to highlight, and gesture or speak to confirm. Global
@@ -194,6 +197,9 @@ buffers, and pending detector copies. Sensor-free transitions cancel synthesis
 and stop those resources before accessible status is committed or rendered.
 Canceling pending AI also recomputes choices and automatic mode from the shared
 conversation/task state, so parity cycling never lands on an empty option set.
+A newer input invalidates and normalizes any older pending request before its
+undo snapshot; undo always restores `pending: false`, retains monotonic request
+identity, and rebuilds selectable options.
 
 ## Memory and export
 
@@ -205,7 +211,9 @@ vendor processing; that boundary is disclosed before permission.
 **Export public-safe semantic JSON** is explicit. It contains scenario IDs,
 turn roles, fixed application-owned semantic labels, modes, task fields, safety
 metrics, and provider status—not conversation/model text, model-supplied option
-IDs, session ID, frames, audio, face boxes, or secrets.
+IDs, labels, prompts, session ID, frames, audio, face boxes, or secrets.
+Choice events and **What changed** use only application-owned categories such as
+`confirmed-ai-option`; every exported event detail is recursively sanitized.
 
 Mobile aggregates are added only at explicit export: glance-time proxy, voice
 repairs, false commits, one-hand touch/switch fallback, interruption/recovery
