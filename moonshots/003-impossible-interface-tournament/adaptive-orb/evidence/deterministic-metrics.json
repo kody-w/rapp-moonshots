@@ -84,7 +84,10 @@
     "rawFramesStored": false,
     "rawAudioStored": false,
     "rawTranscriptsStored": false,
+    "conversationTextMemoryOnly": true,
+    "conversationTextExported": false,
     "applicationNetworkClientsUsed": false,
+    "sameOriginCompanionOnly": true,
     "persistentStorageUsed": false,
     "browserSpeechVendorProcessingDisclosed": true
   }

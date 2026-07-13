@@ -3,13 +3,18 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   EXPECTED_DETERMINISTIC_FINGERPRINT,
+  EXPECTED_CONVERSATION_FINGERPRINT,
   runDeterministicSimulation,
+  runConversationSimulation,
   verifyDeterministicRecord,
+  verifyConversationRecord,
 } from "../src/core.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const evidenceDirectory = resolve(root, "evidence");
 const { machine, record } = runDeterministicSimulation();
+const { machine: conversationMachine, record: conversationRecord } =
+  runConversationSimulation();
 
 const metrics = {
   schemaVersion: record.schemaVersion,
@@ -54,6 +59,43 @@ const replay = {
   events: record.events,
 };
 
+const conversationMetrics = {
+  schemaVersion: 1,
+  product: "Adaptive Orb AI conversation",
+  conversationFingerprint: conversationRecord.conversationFingerprint,
+  expectedFingerprint: EXPECTED_CONVERSATION_FINGERPRINT,
+  exactStateVerified: verifyConversationRecord(conversationRecord),
+  externalInputLocked: conversationMachine.state.replayLocked,
+  complete: conversationRecord.complete,
+  exactTaskVerdict: conversationRecord.exactTaskVerdict,
+  task: conversationRecord.task,
+  conversation: conversationRecord.conversation,
+  modesUsed: conversationRecord.modesUsed,
+  modeTransitions: conversationRecord.metrics.modeTransitions,
+  completionTimeMs: conversationRecord.metrics.completionTimeMs,
+  errors: conversationRecord.metrics.errors,
+  falseCommits: conversationRecord.metrics.falseCommits,
+  gazeCommitAttemptsBlocked: conversationRecord.metrics.gazeCommitAttempts,
+  centerCancels: conversationRecord.metrics.centerCancels,
+  sensorLosses: conversationRecord.metrics.sensorLosses,
+  sensorRecoveries: conversationRecord.metrics.sensorRecoveries,
+  intentionalWrongBranches: conversationRecord.metrics.intentionalWrongBranches,
+  undos: conversationRecord.metrics.undos,
+  perMode: conversationRecord.metrics.perMode,
+  privacy: conversationRecord.privacy,
+  legacyTaskSafetyFingerprint: EXPECTED_DETERMINISTIC_FINGERPRINT,
+};
+
+const conversationReplay = {
+  schemaVersion: 1,
+  conversationFingerprint: conversationRecord.conversationFingerprint,
+  expectedFingerprint: EXPECTED_CONVERSATION_FINGERPRINT,
+  exactStateVerified: verifyConversationRecord(conversationRecord),
+  externalInputLocked: conversationMachine.state.replayLocked,
+  semanticEventCount: conversationRecord.events.length,
+  events: conversationRecord.events,
+};
+
 await mkdir(evidenceDirectory, { recursive: true });
 await Promise.all([
   writeFile(
@@ -64,8 +106,16 @@ await Promise.all([
     resolve(evidenceDirectory, "deterministic-replay.json"),
     `${JSON.stringify(replay, null, 2)}\n`,
   ),
+  writeFile(
+    resolve(evidenceDirectory, "conversation-metrics.json"),
+    `${JSON.stringify(conversationMetrics, null, 2)}\n`,
+  ),
+  writeFile(
+    resolve(evidenceDirectory, "conversation-replay.json"),
+    `${JSON.stringify(conversationReplay, null, 2)}\n`,
+  ),
 ]);
 
 process.stdout.write(
-  `Wrote deterministic evidence ${record.deterministicFingerprint}: exact=${record.exactTaskVerdict}, modes=${record.modesUsed.join(",")}.\n`,
+  `Wrote task evidence ${record.deterministicFingerprint} and conversation evidence ${conversationRecord.conversationFingerprint}: exact=${conversationRecord.exactTaskVerdict}, modes=${conversationRecord.modesUsed.join(",")}.\n`,
 );

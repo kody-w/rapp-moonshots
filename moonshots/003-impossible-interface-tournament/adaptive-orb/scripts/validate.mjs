@@ -2,26 +2,49 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runDeterministicSimulation } from "../src/core.mjs";
+import {
+  runConversationSimulation,
+  runDeterministicSimulation,
+} from "../src/core.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFile(resolve(root, path), "utf8");
-const [html, template, styles, app, sensors, session, core, packageText, build] =
+const [
+  html,
+  template,
+  styles,
+  app,
+  ai,
+  sensors,
+  session,
+  core,
+  packageText,
+  build,
+  manifestText,
+  serviceWorker,
+  server,
+] =
   await Promise.all([
     read("index.html"),
     read("src/index.template.html"),
     read("src/styles.css"),
     read("src/app.mjs"),
+    read("src/ai.mjs"),
     read("src/sensors.mjs"),
     read("src/session.mjs"),
     read("src/core.mjs"),
     read("package.json"),
     read("scripts/build.mjs"),
+    read("manifest.webmanifest"),
+    read("service-worker.js"),
+    read("server.py"),
   ]);
 const evidenceFiles = process.argv.includes("--check-evidence")
   ? await Promise.all([
       read("evidence/deterministic-metrics.json"),
       read("evidence/deterministic-replay.json"),
+      read("evidence/conversation-metrics.json"),
+      read("evidence/conversation-replay.json"),
     ])
   : null;
 
@@ -119,14 +142,17 @@ check("component styles contain no hardcoded colors", () => {
   assert.doesNotMatch(styles, /\bhsla?\(/i);
   for (const line of template.split("\n")) {
     if (/#[\da-f]{3,8}\b|rgba?\(|hsla?\(/i.test(line)) {
-      assert.match(line, /--cp-/);
+      assert.ok(
+        /--cp-/.test(line) || /<meta name="theme-color"/.test(line),
+        line,
+      );
     }
   }
 });
 
-check("artifact is self-contained with no external assets or iframe composition", () => {
+check("artifact is self-contained with local-only PWA assets and no iframe", () => {
   assert.doesNotMatch(html, /<script[^>]+\bsrc\s*=/i);
-  assert.doesNotMatch(html, /<link[^>]+\bhref\s*=/i);
+  assert.doesNotMatch(html, /<link[^>]+\bhref\s*=\s*["'](?:https?:|\/\/)/i);
   assert.doesNotMatch(html, /<img[^>]+\bsrc\s*=/i);
   assert.doesNotMatch(html, /<iframe\b/i);
   assert.doesNotMatch(html, /https?:\/\//i);
@@ -134,16 +160,20 @@ check("artifact is self-contained with no external assets or iframe composition"
   assert.doesNotMatch(html, /url\(\s*["']?(?:https?:|\/\/)/i);
 });
 
-check("application has a fail-closed CSP and no client networking", () => {
-  assert.match(html, /connect-src 'none'/);
+check("application CSP permits only same-origin companion networking", () => {
+  assert.match(html, /connect-src 'self'/);
+  assert.match(html, /worker-src 'self'/);
+  assert.match(ai, /endpoint = "\/api\/chat"/);
+  assert.match(ai, /credentials: "same-origin"/);
+  assert.match(ai, /cache: "no-store"/);
+  assert.match(ai, /redirect: "error"/);
+  assert.doesNotMatch(html, /RAPP_BRAINSTEM_(?:URL|SECRET)/);
   for (const forbidden of [
-    /\bfetch\s*\(/,
     /\bXMLHttpRequest\b/,
     /\bWebSocket\b/,
     /\bEventSource\b/,
     /\bsendBeacon\b/,
     /\bRTCPeerConnection\b/,
-    /\bserviceWorker\b/,
   ]) {
     assert.doesNotMatch(html, forbidden);
   }
@@ -157,9 +187,9 @@ check("application uses no persistence, recording, or analytics APIs", () => {
     /\bcaches\.(?:open|match|put)\b/,
     /\bMediaRecorder\b/,
     /\bgetDisplayMedia\b/,
-    /\banalytics\b/i,
+    /\b(?:gtag|googleAnalytics|mixpanel|segment\.track)\b/i,
   ]) {
-    assert.doesNotMatch(`${app}\n${sensors}\n${core}`, forbidden);
+    assert.doesNotMatch(`${app}\n${ai}\n${sensors}\n${core}`, forbidden);
   }
 });
 
@@ -238,16 +268,85 @@ check("all detector-derived buffers are registered and zeroed", () => {
   );
 });
 
-check("deterministic replay is input-locked and exact before success", () => {
+check("multi-turn deterministic replay is input-locked and exact before success", () => {
   assert.match(core, /REPLAY_AUTHORITY/);
   assert.match(core, /replay-rejected/);
   assert.match(core, /EXPECTED_DETERMINISTIC_FINGERPRINT = "c1b6e39f"/);
+  assert.match(core, /EXPECTED_CONVERSATION_FINGERPRINT = "071ba015"/);
   assert.match(core, /verifyDeterministicRecord/);
+  assert.match(core, /verifyConversationRecord/);
   assert.match(app, /replayLocked = true/);
-  assert.match(app, /verifyDeterministicRecord\(record\)/);
-  const verificationAt = app.indexOf("verifyDeterministicRecord(record)");
-  const successAt = app.indexOf("Verified exact replay");
+  assert.match(app, /verifyConversationRecord\(record\)/);
+  const verificationAt = app.indexOf("verifyConversationRecord(record)");
+  const successAt = app.indexOf("Verified AI conversation replay");
   assert.ok(verificationAt >= 0 && successAt > verificationAt);
+});
+
+check("AI adapters provide offline default and strict same-origin failover", () => {
+  for (const scenario of ["create", "plan", "explain", "navigate"]) {
+    assert.match(ai, new RegExp(`${scenario}: Object\\.freeze`));
+  }
+  assert.match(ai, /class DemoAIAdapter/);
+  assert.match(ai, /class CompanionAIAdapter/);
+  assert.match(ai, /class AdaptiveAIAdapter/);
+  assert.match(ai, /preferCompanion = false/);
+  assert.match(ai, /Companion unavailable/);
+  assert.match(ai, /conversation_history/);
+  assert.match(core, /conversation\.turns/);
+  assert.match(core, /publicConversationSummary/);
+  assert.match(core, /events: this\.state\.events\.map\(publicEvent\)/);
+  assert.match(ai, /"choice-selected"/);
+  assert.match(app, /speakCurrentResponse/);
+  assert.match(app, /speechSynthesis\.speak/);
+  assert.match(template, /class="response-focus"/);
+  assert.doesNotMatch(template, /<(?:input|textarea)\b/i);
+});
+
+check("stdlib companion keeps credentials server-side and validates strictly", () => {
+  assert.match(server, /from http\.server import SimpleHTTPRequestHandler, ThreadingHTTPServer/);
+  assert.match(server, /DEFAULT_BIND = "127\.0\.0\.1"/);
+  assert.match(server, /BODY_CAP_BYTES = 64 \* 1024/);
+  assert.match(server, /RAPP_BRAINSTEM_URL/);
+  assert.match(server, /RAPP_BRAINSTEM_SECRET/);
+  assert.match(server, /Authorization/);
+  assert.match(server, /class NoRedirectHandler/);
+  assert.match(server, /strict_json_loads/);
+  assert.match(server, /timeout=configured_timeout\(\)/);
+  assert.match(server, /set\(payload\) != ALLOWED_REQUEST_KEYS/);
+  assert.match(server, /Cache-Control", "no-store"/);
+  assert.match(server, /parsed_path = urlsplit\(self\.path\)/);
+  assert.doesNotMatch(html, /server-only-secret|api[_-]?key/i);
+});
+
+check("PWA manifest and service worker cache only local static allowlist", () => {
+  const manifest = JSON.parse(manifestText);
+  assert.equal(manifest.display, "standalone");
+  assert.equal(manifest.start_url, "./");
+  assert.equal(manifest.scope, "./");
+  assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192"));
+  assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512"));
+  assert.match(serviceWorker, /adaptive-orb-static-v1/);
+  assert.match(serviceWorker, /STATIC_ASSETS/);
+  assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api\/"\)/);
+  assert.match(serviceWorker, /ACTIVATE_UPDATE/);
+  assert.doesNotMatch(
+    serviceWorker,
+    /conversation_history|user_input|MediaStream|calibration|metrics/,
+  );
+  assert.match(app, /navigator\.serviceWorker\.register/);
+  assert.match(app, /updateViaCache: "none"/);
+});
+
+check("mobile and iOS hooks expose safe-area install and capability degradation", () => {
+  assert.match(template, /apple-mobile-web-app-capable/);
+  assert.match(template, /apple-touch-icon/);
+  assert.match(template, /Share → Add to Home Screen/);
+  assert.match(template, /require HTTPS or localhost/);
+  assert.match(styles, /env\(safe-area-inset-top\)/);
+  assert.match(styles, /env\(safe-area-inset-bottom\)/);
+  assert.match(styles, /orientation: landscape/);
+  assert.match(sensors, /webkitSpeechRecognition/);
+  assert.match(sensors, /frame-motion fallback/);
 });
 
 check("honest FaceDetector fallback and vendor speech disclosure are visible", () => {
@@ -273,7 +372,7 @@ check("the product is one adaptive orb with three shared grammars", () => {
 });
 
 check("deterministic query and JSON export are wired", () => {
-  assert.match(app, /query\.get\("simulate"\) === "1"/);
+  assert.match(app, /startupQuery\.get\("simulate"\) === "1"/);
   assert.match(app, /DETERMINISTIC_SCRIPT/);
   assert.match(app, /application\/json/);
   assert.match(core, /exactTaskVerdict/);
@@ -317,13 +416,17 @@ check("package is dependency-free", () => {
   assert.equal(packageJson.dependencies, undefined);
   assert.equal(packageJson.devDependencies, undefined);
   assert.match(packageJson.scripts.test, /node --test/);
+  assert.match(packageJson.scripts["test:python"], /unittest discover/);
 });
 
 if (process.argv.includes("--check-evidence")) {
   check("checked-in evidence exactly matches deterministic core", () => {
     const { record } = runDeterministicSimulation();
+    const { record: conversationRecord } = runConversationSimulation();
     const metrics = JSON.parse(evidenceFiles[0]);
     const replay = JSON.parse(evidenceFiles[1]);
+    const conversationMetrics = JSON.parse(evidenceFiles[2]);
+    const conversationReplay = JSON.parse(evidenceFiles[3]);
     assert.equal(metrics.deterministicFingerprint, record.deterministicFingerprint);
     assert.deepEqual(metrics.verification, {
       expectedFingerprint: "c1b6e39f",
@@ -340,6 +443,31 @@ if (process.argv.includes("--check-evidence")) {
     assert.equal(replay.externalInputLocked, true);
     assert.equal(replay.eventCount, record.events.length);
     assert.deepEqual(replay.events, record.events);
+    assert.equal(
+      conversationMetrics.conversationFingerprint,
+      conversationRecord.conversationFingerprint,
+    );
+    assert.equal(conversationMetrics.expectedFingerprint, "071ba015");
+    assert.equal(conversationMetrics.exactStateVerified, true);
+    assert.equal(conversationMetrics.externalInputLocked, true);
+    assert.deepEqual(conversationMetrics.task, conversationRecord.task);
+    assert.deepEqual(
+      conversationMetrics.conversation,
+      conversationRecord.conversation,
+    );
+    assert.deepEqual(
+      conversationMetrics.modeTransitions,
+      conversationRecord.metrics.modeTransitions,
+    );
+    assert.equal(
+      conversationReplay.conversationFingerprint,
+      conversationRecord.conversationFingerprint,
+    );
+    assert.equal(
+      conversationReplay.semanticEventCount,
+      conversationRecord.events.length,
+    );
+    assert.deepEqual(conversationReplay.events, conversationRecord.events);
   });
 }
 

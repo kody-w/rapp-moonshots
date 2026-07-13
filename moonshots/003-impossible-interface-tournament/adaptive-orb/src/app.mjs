@@ -1,4 +1,5 @@
-import { AdaptiveOrbMachine, DETERMINISTIC_SCRIPT, DWELL_TARGET_MS, EXPECTED_DETERMINISTIC_FINGERPRINT, choiceShapeForState, dispatchDeterministicStep, verifyDeterministicRecord } from "./core.mjs";
+import { AI_SCENARIOS, AdaptiveAIAdapter, createEphemeralSessionId } from "./ai.mjs";
+import { AdaptiveOrbMachine, CONVERSATION_DETERMINISTIC_SCRIPT, DWELL_TARGET_MS, EXPECTED_CONVERSATION_FINGERPRINT, choiceShapeForState, conversationFingerprintFor, dispatchDeterministicStep, verifyConversationRecord } from "./core.mjs";
 import { AdaptiveSensorController } from "./sensors.mjs";
 import { RadialAimCoordinator, performSensorFreeTransition } from "./session.mjs";
 import { renderTournamentComparison } from "./comparison.mjs";
@@ -11,11 +12,18 @@ const elements = {
   startAccessible: byId("startAccessible"),
   startSimulation: byId("startSimulation"),
   modeStatus: byId("modeStatus"),
+  aiStatus: byId("aiStatus"),
+  pwaStatus: byId("pwaStatus"),
   sensorStatus: byId("sensorStatus"),
   safetyBanner: byId("safetyBanner"),
   safetyTitle: byId("safetyTitle"),
   safetyDetail: byId("safetyDetail"),
   taskValues: byId("taskValues"),
+  responseKicker: byId("responseKicker"),
+  responseTitle: byId("responseTitle"),
+  responseText: byId("responseText"),
+  conversationLandmarks: byId("conversationLandmarks"),
+  speakResponse: byId("speakResponse"),
   grammarTitle: byId("grammarTitle"),
   grammarDescription: byId("grammarDescription"),
   cameraState: byId("cameraState"),
@@ -40,6 +48,8 @@ const elements = {
   restChoice: byId("restChoice"),
   undoChoice: byId("undoChoice"),
   modeTransitions: byId("modeTransitions"),
+  conversationTurns: byId("conversationTurns"),
+  aiResponses: byId("aiResponses"),
   falseCommits: byId("falseCommits"),
   centerCancels: byId("centerCancels"),
   voiceRepairs: byId("voiceRepairs"),
@@ -49,6 +59,9 @@ const elements = {
   comparisonTable: byId("comparisonTable"),
   comparisonPanel: byId("comparisonPanel"),
   exportMetrics: byId("exportMetrics"),
+  companionMode: byId("companionMode"),
+  installApp: byId("installApp"),
+  applyUpdate: byId("applyUpdate"),
   useAccessible: byId("useAccessible"),
   stopSensors: byId("stopSensors"),
   resumeSession: byId("resumeSession"),
@@ -69,12 +82,12 @@ const grammarCopy = {
   tunnel: {
     title: "Gesture Tunnel",
     description:
-      "Nested route layers remain in one history. Coarse motion navigates; a nod or spoken confirmation chooses.",
+      "Nested explanations, revisions, tools, and route layers remain in one history. Coarse motion navigates; a nod or spoken confirmation chooses.",
   },
 };
 
 const stageCopy = {
-  intent: ["Broad intent · depth 0", "Speak the route intent"],
+  intent: ["Broad intent · depth 0", "Speak or choose an AI scenario"],
   destination: ["Stable choices · depth 1", "Select destination"],
   gate: ["Stable choices · depth 1", "Select gate"],
   review: ["Nested review · depth 3", "Traverse and review"],
@@ -82,25 +95,38 @@ const stageCopy = {
   complete: ["Exact task verdict", "Task complete"],
 };
 
+const startupQuery = new URLSearchParams(window.location.search);
+const ephemeralSessionId = createEphemeralSessionId();
+const aiAdapter = new AdaptiveAIAdapter();
 let logicalNow = null;
 let machine = createMachine();
 let sensorController = null;
 const aimCoordinator = new RadialAimCoordinator();
 let lastChoiceSignature = "";
 let lastTaskSignature = "";
+let lastConversationSignature = "";
 let lastEventSignature = "";
 let lastComparisonSignature = "";
 let lastModeStatsSignature = "";
 let simulationRunning = false;
-let replayLocked = false;
+let replayLocked = startupQuery.get("simulate") === "1";
 let sensorTransitioning = false;
+let preferCompanion = startupQuery.get("companion") === "1";
+let deferredInstallPrompt = null;
+let waitingServiceWorker = null;
+let reloadingForWorker = false;
+let applyingServiceWorkerUpdate = false;
+let activeAIAbort = null;
 
 function sessionNow() {
   return logicalNow === null ? performance.now() : logicalNow;
 }
 
 function createMachine() {
-  return new AdaptiveOrbMachine({ clock: () => sessionNow() });
+  return new AdaptiveOrbMachine({
+    clock: () => sessionNow(),
+    sessionId: ephemeralSessionId,
+  });
 }
 
 function showApplication() {
@@ -135,7 +161,7 @@ function createSensorController() {
         text,
         source: "voice",
       });
-      if (result.effect !== "access-request") {
+      if (!["access-request", "ai-request"].includes(result.effect)) {
         sensorController?.announce(machine.state.announcement);
       }
     },
@@ -146,7 +172,7 @@ function createSensorController() {
 }
 
 async function startLive() {
-  if (machine.state.status !== "idle") {
+  if (replayLocked || machine.state.status !== "idle") {
     return;
   }
   showApplication();
@@ -161,14 +187,14 @@ async function startLive() {
       "Sensors unavailable. Sensor-free controls are active with the same task.";
   } else {
     sensorController.announce(
-      "Adaptive Orb ready. Speak: route three cobalt beacons at fourteen thirty, fragile.",
+      "Adaptive Orb ready. Ask me to create, plan, explain, or navigate. Say a mode name at any time.",
     );
   }
   render();
 }
 
 function startAccessible() {
-  if (machine.state.status !== "idle") {
+  if (replayLocked || machine.state.status !== "idle") {
     return;
   }
   showApplication();
@@ -183,7 +209,11 @@ function sleep(milliseconds) {
 }
 
 async function startSimulation() {
-  if (simulationRunning || machine.state.status !== "idle") {
+  if (
+    simulationRunning ||
+    machine.state.status !== "idle" ||
+    (replayLocked && startupQuery.get("simulate") !== "1")
+  ) {
     return;
   }
   simulationRunning = true;
@@ -191,12 +221,12 @@ async function startSimulation() {
   showApplication();
   logicalNow = 0;
   elements.assertiveStatus.textContent =
-    "Deterministic simulation started. It will visibly use Orbit, Compass, and Tunnel.";
-  for (let index = 0; index < DETERMINISTIC_SCRIPT.length; index += 1) {
-    const scripted = DETERMINISTIC_SCRIPT[index];
+    "Deterministic multi-turn AI conversation started across Orbit, Compass, and Tunnel.";
+  for (let index = 0; index < CONVERSATION_DETERMINISTIC_SCRIPT.length; index += 1) {
+    const scripted = CONVERSATION_DETERMINISTIC_SCRIPT[index];
     logicalNow = scripted.at;
     dispatchDeterministicStep(machine, scripted);
-    if (index < DETERMINISTIC_SCRIPT.length - 1) {
+    if (index < CONVERSATION_DETERMINISTIC_SCRIPT.length - 1) {
       render();
     }
     const important =
@@ -209,24 +239,104 @@ async function startSimulation() {
   }
   simulationRunning = false;
   const record = machine.exportRecord(logicalNow);
+  record.conversationFingerprint = conversationFingerprintFor(record);
   const verified =
-    record.deterministicFingerprint === EXPECTED_DETERMINISTIC_FINGERPRINT &&
-    verifyDeterministicRecord(record);
+    record.conversationFingerprint === EXPECTED_CONVERSATION_FINGERPRINT &&
+    verifyConversationRecord(record);
   if (verified) {
     machine.state.announcement =
-      `Verified exact replay ${EXPECTED_DETERMINISTIC_FINGERPRINT}. All three modes passed.`;
+      `Verified AI conversation replay ${EXPECTED_CONVERSATION_FINGERPRINT}. All three modes and the exact cobalt task passed.`;
     elements.comparisonPanel.open = true;
     elements.assertiveStatus.textContent =
-      "Verified exact task complete using all three modes, one sensor loss recovery, one wrong branch, and undo.";
+      "Verified one multi-turn AI conversation across all scenarios and modes, plus the exact reversible cobalt task.";
     elements.app.dataset.simulationComplete = "true";
-    elements.app.dataset.replayFingerprint = record.deterministicFingerprint;
+    elements.app.dataset.replayFingerprint = record.conversationFingerprint;
   } else {
     machine.state.announcement =
-      `Replay verification failed. Expected ${EXPECTED_DETERMINISTIC_FINGERPRINT}; no success is claimed.`;
+      `Replay verification failed. Expected ${EXPECTED_CONVERSATION_FINGERPRINT}; no success is claimed.`;
     elements.assertiveStatus.textContent = machine.state.announcement;
     elements.app.dataset.simulationComplete = "false";
   }
   render();
+}
+
+function speakCurrentResponse() {
+  const text = machine.state.conversation.currentResponse;
+  if (!text || replayLocked) {
+    return false;
+  }
+  if (sensorController) {
+    sensorController.announce(text);
+    return true;
+  }
+  if (
+    typeof speechSynthesis === "undefined" ||
+    typeof SpeechSynthesisUtterance === "undefined"
+  ) {
+    elements.assertiveStatus.textContent =
+      "Speech synthesis is unavailable. The response remains visible.";
+    return false;
+  }
+  speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 0.96;
+  utterance.pitch = 1;
+  speechSynthesis.speak(utterance);
+  return true;
+}
+
+async function requestAIResponse(result) {
+  if (
+    replayLocked ||
+    result.effect !== "ai-request" ||
+    !result.request ||
+    !Number.isInteger(result.requestId)
+  ) {
+    return;
+  }
+  activeAIAbort?.abort();
+  const controller = new AbortController();
+  activeAIAbort = controller;
+  const companionRequested = preferCompanion;
+  if (companionRequested) {
+    machine.dispatch({
+      type: "AI_PROVIDER_ATTEMPT",
+      provider: "brainstem",
+      at: sessionNow(),
+    });
+  }
+  try {
+    const response = await aiAdapter.respond(result.request, {
+      preferCompanion: companionRequested,
+      scenarioHint: result.scenario,
+      signal: controller.signal,
+    });
+    if (controller.signal.aborted || replayLocked) {
+      return;
+    }
+    const accepted = machine.dispatch({
+      type: "AI_RESPONSE",
+      requestId: result.requestId,
+      response,
+      companionAttempted: companionRequested,
+      at: sessionNow(),
+    });
+    if (accepted.ok) {
+      render();
+      if (machine.state.sessionKind === "live") {
+        sensorController?.announce(machine.state.conversation.currentResponse);
+      }
+    }
+  } catch {
+    if (!controller.signal.aborted) {
+      elements.assertiveStatus.textContent =
+        "AI response could not be validated. Conversation state was preserved.";
+    }
+  } finally {
+    if (activeAIAbort === controller) {
+      activeAIAbort = null;
+    }
+  }
 }
 
 function handleSensorAim(sample) {
@@ -261,7 +371,10 @@ function handleSensorGesture(gesture) {
       at: gesture.at,
     });
   }
-  if (result?.ok && result.effect !== "access-request") {
+  if (
+    result?.ok &&
+    !["access-request", "ai-request"].includes(result.effect)
+  ) {
     sensorController?.announce(machine.state.announcement);
   }
 }
@@ -273,6 +386,10 @@ function dispatchAndRender(action) {
       effect: "replay-rejected",
       reason: "deterministic-replay-locked",
     };
+  }
+  if (["STOP", "CANCEL", "UNDO"].includes(action.type)) {
+    activeAIAbort?.abort();
+    activeAIAbort = null;
   }
   const result = machine.dispatch(action);
   if (result.effect === "access-request") {
@@ -297,6 +414,9 @@ function dispatchAndRender(action) {
     sensorController = null;
   }
   render();
+  if (result.effect === "ai-request") {
+    void requestAIResponse(result);
+  }
   return result;
 }
 
@@ -325,20 +445,82 @@ function displayValue(value) {
 }
 
 function renderTask() {
-  const signature = JSON.stringify(machine.state.task);
+  const conversation = machine.state.conversation;
+  const signature = JSON.stringify({
+    task: machine.state.task,
+    scenario: conversation.scenario,
+    turns: conversation.turns.length,
+    branch: conversation.branchPath,
+    provider: conversation.provider,
+  });
   if (signature === lastTaskSignature) {
     return;
   }
   lastTaskSignature = signature;
   elements.taskValues.replaceChildren();
-  for (const [key, value] of Object.entries(machine.state.task)) {
+  const values = [
+    ["Scenario", conversation.scenario || "choose"],
+    ["Turns", conversation.turns.length],
+    ["Branch", conversation.branchPath.at(-1) || "root"],
+    ["AI", conversation.provider],
+    ...Object.entries(machine.state.task)
+      .filter(([, value]) => value !== null && value !== false)
+      .map(([key, value]) => [fieldLabel(key), displayValue(value)]),
+  ];
+  for (const [key, value] of values) {
     const item = document.createElement("li");
     const label = document.createElement("span");
     const current = document.createElement("strong");
-    label.textContent = fieldLabel(key);
+    label.textContent = key;
     current.textContent = displayValue(value);
     item.append(label, current);
     elements.taskValues.append(item);
+  }
+}
+
+function renderConversation() {
+  const conversation = machine.state.conversation;
+  const recent = conversation.turns.slice(-6);
+  const signature = JSON.stringify({
+    pending: conversation.pending,
+    scenario: conversation.scenario,
+    response: conversation.currentResponse,
+    provider: conversation.provider,
+    degraded: conversation.degraded,
+    notice: conversation.notice,
+    recent: recent.map((turn) => [
+      turn.role,
+      turn.semantic,
+      turn.scenario,
+      turn.mode,
+    ]),
+  });
+  if (signature === lastConversationSignature) {
+    return;
+  }
+  lastConversationSignature = signature;
+  const scenario = conversation.scenario
+    ? AI_SCENARIOS[conversation.scenario]
+    : null;
+  elements.responseKicker.textContent =
+    `${conversation.provider === "brainstem" ? "RAPP Brainstem" : "Offline demo AI"} · memory-only`;
+  elements.responseTitle.textContent = conversation.pending
+    ? `Preparing ${scenario?.title || "AI"} response`
+    : scenario
+      ? `${scenario.title} · adaptive response`
+      : "Choose a scenario or speak broadly";
+  elements.responseText.textContent =
+    conversation.currentResponse ||
+    "Demo AI is ready offline. Voice Orbit will turn broad intent into predicted response and action petals.";
+  elements.conversationLandmarks.replaceChildren();
+  for (const [index, turn] of recent.entries()) {
+    const item = document.createElement("li");
+    const role = turn.role === "assistant" ? "AI" : "You";
+    item.textContent =
+      `${role} · ${turn.semantic} · ${turn.mode || "orbit"}`;
+    item.dataset.role = turn.role;
+    item.style.setProperty("--turn-index", String(index));
+    elements.conversationLandmarks.append(item);
   }
 }
 
@@ -356,7 +538,7 @@ function renderChoices() {
       button.type = "button";
       button.className = "choice";
       button.dataset.optionId = candidate.id;
-      button.disabled = replayLocked;
+      button.disabled = replayLocked || machine.state.conversation.pending;
       button.setAttribute(
         "aria-label",
         `${candidate.label}. ${candidate.detail}. Highlight only; separate confirmation required.`,
@@ -378,7 +560,7 @@ function renderChoices() {
 
   for (const button of elements.choiceLayer.querySelectorAll(".choice")) {
     const highlighted = button.dataset.optionId === machine.state.highlight;
-    button.disabled = replayLocked;
+    button.disabled = replayLocked || machine.state.conversation.pending;
     button.dataset.highlighted = String(highlighted);
     button.dataset.armed = String(highlighted && machine.state.armed);
     button.setAttribute("aria-pressed", String(highlighted));
@@ -411,7 +593,7 @@ function renderEvents() {
   }
   lastEventSignature = signature;
   elements.eventTrace.replaceChildren();
-  for (const event of recent.toReversed()) {
+  for (const event of [...recent].reverse()) {
     const item = document.createElement("li");
     item.textContent = `${String(event.atMs).padStart(4, "0")} ms · ${event.type}`;
     item.dataset.important = String(
@@ -447,7 +629,14 @@ function render() {
   const record = machine.exportRecord(sessionNow());
   const grammar = grammarCopy[state.mode];
   const stage =
-    state.stage === "intent" && state.entryStep
+    state.conversation.focused
+      ? [
+          `${state.conversation.scenario || "Scenario"} conversation · depth ${state.conversation.shape.depth}`,
+          state.conversation.pending
+            ? "AI response pending"
+            : `${AI_SCENARIOS[state.conversation.scenario]?.title || "Choose"} response petals`,
+        ]
+      : state.stage === "intent" && state.entryStep
       ? [
           `Semantic entry · ${state.entryStep}`,
           `Select ${state.entryStep}`,
@@ -459,6 +648,12 @@ function render() {
     state.modePreference === "auto" ? "auto" : "spoken/manual"
   }`;
   elements.modeStatus.dataset.active = "true";
+  elements.aiStatus.textContent = state.conversation.degraded
+    ? "Companion unavailable · demo AI"
+    : state.conversation.provider === "brainstem"
+      ? "RAPP Brainstem · same origin"
+      : "Demo AI · offline";
+  elements.aiStatus.dataset.active = String(state.conversation.provider === "brainstem");
   elements.sensorStatus.textContent =
     state.sessionKind === "accessible"
       ? "Sensor-free"
@@ -504,13 +699,21 @@ function render() {
   elements.dwellRing.style.setProperty("--dwell", `${percentage}%`);
 
   elements.modeTransitions.textContent = String(state.metrics.modeTransitions.length);
+  elements.conversationTurns.textContent = String(state.conversation.turns.length);
+  elements.aiResponses.textContent =
+    `${state.conversation.metrics.responses} / ${state.conversation.metrics.failovers}`;
   elements.falseCommits.textContent = String(state.metrics.falseCommits);
   elements.centerCancels.textContent = String(state.metrics.centerCancels);
   elements.voiceRepairs.textContent = String(state.metrics.voiceRepairs);
   elements.sensorRecovery.textContent = `${state.metrics.sensorLosses} / ${state.metrics.sensorRecoveries}`;
-  elements.confirmChoice.disabled = !state.highlight || !state.armed;
+  elements.confirmChoice.disabled =
+    state.conversation.pending || !state.highlight || !state.armed;
   elements.undoChoice.disabled = state.history.length === 0;
   elements.resumeSession.disabled = !state.freezeCauses.includes("user-stop");
+  elements.speakResponse.disabled = !state.conversation.currentResponse;
+  elements.companionMode.textContent = preferCompanion
+    ? "AI: prefer companion"
+    : "AI: offline demo";
   if (replayLocked) {
     for (const control of [
       elements.previousChoice,
@@ -519,6 +722,10 @@ function render() {
       elements.restChoice,
       elements.undoChoice,
       elements.centerOrb,
+      elements.speakResponse,
+      elements.companionMode,
+      elements.installApp,
+      elements.applyUpdate,
       elements.exportMetrics,
       elements.useAccessible,
       elements.stopSensors,
@@ -529,6 +736,7 @@ function render() {
   }
 
   renderTask();
+  renderConversation();
   renderChoices();
   renderEvents();
   renderModeStats(record);
@@ -596,6 +804,73 @@ function stopSession(source) {
   return dispatchAndRender({ type: "STOP", source });
 }
 
+function toggleCompanion() {
+  if (replayLocked) {
+    return;
+  }
+  preferCompanion = !preferCompanion;
+  machine.state.conversation.notice = preferCompanion
+    ? "Companion preferred. The next AI turn will use same-origin /api/chat and fail over safely."
+    : "Offline deterministic demo AI selected. No application AI request will be made.";
+  machine.state.announcement = machine.state.conversation.notice;
+  elements.assertiveStatus.textContent = machine.state.conversation.notice;
+  render();
+}
+
+async function promptInstall() {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    elements.installApp.disabled = true;
+    return;
+  }
+  byId("installHelp").open = true;
+  elements.assertiveStatus.textContent =
+    "On iPhone or iPad, use Safari Share, then Add to Home Screen.";
+}
+
+function offerServiceWorkerUpdate(worker) {
+  waitingServiceWorker = worker;
+  elements.applyUpdate.hidden = false;
+  elements.pwaStatus.textContent = "App update ready";
+}
+
+async function registerOfflineApp() {
+  if (!("serviceWorker" in navigator)) {
+    elements.pwaStatus.textContent = "Offline install unavailable";
+    return;
+  }
+  try {
+    const registration = await navigator.serviceWorker.register(
+      "./service-worker.js",
+      {
+        scope: "./",
+        updateViaCache: "none",
+      },
+    );
+    elements.pwaStatus.textContent = navigator.standalone
+      ? "Installed · offline shell"
+      : "Offline shell ready";
+    if (registration.waiting) {
+      offerServiceWorkerUpdate(registration.waiting);
+    }
+    registration.addEventListener("updatefound", () => {
+      const installing = registration.installing;
+      installing?.addEventListener("statechange", () => {
+        if (
+          installing.state === "installed" &&
+          navigator.serviceWorker.controller
+        ) {
+          offerServiceWorkerUpdate(installing);
+        }
+      });
+    });
+  } catch {
+    elements.pwaStatus.textContent = "Online only · install help available";
+  }
+}
+
 elements.startLive.addEventListener("click", startLive);
 elements.startAccessible.addEventListener("click", startAccessible);
 elements.startSimulation.addEventListener("click", startSimulation);
@@ -618,6 +893,13 @@ elements.undoChoice.addEventListener("click", () =>
   dispatchAndRender({ type: "UNDO", source: "touch" }),
 );
 elements.exportMetrics.addEventListener("click", exportMetrics);
+elements.speakResponse.addEventListener("click", speakCurrentResponse);
+elements.companionMode.addEventListener("click", toggleCompanion);
+elements.installApp.addEventListener("click", promptInstall);
+elements.applyUpdate.addEventListener("click", () => {
+  applyingServiceWorkerUpdate = true;
+  waitingServiceWorker?.postMessage({ type: "ACTIVATE_UPDATE" });
+});
 elements.useAccessible.addEventListener("click", () => transitionToSensorFree("touch"));
 elements.stopSensors.addEventListener("click", () => transitionToSensorFree("end-sensors"));
 elements.resumeSession.addEventListener("click", () => {
@@ -668,6 +950,23 @@ document.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("resize", layoutChoices);
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  elements.installApp.disabled = false;
+  elements.pwaStatus.textContent = "Install available";
+});
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  elements.installApp.disabled = true;
+  elements.pwaStatus.textContent = "Installed · offline shell";
+});
+navigator.serviceWorker?.addEventListener("controllerchange", () => {
+  if (applyingServiceWorkerUpdate && !reloadingForWorker) {
+    reloadingForWorker = true;
+    window.location.reload();
+  }
+});
 document.addEventListener("visibilitychange", () => {
   if (document.hidden && machine.state.status !== "idle") {
     machine.dispatch({ type: "CENTER", source: "visibility" });
@@ -675,6 +974,11 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 window.addEventListener("pagehide", () => {
+  activeAIAbort?.abort();
+  activeAIAbort = null;
+  if (typeof speechSynthesis !== "undefined") {
+    speechSynthesis.cancel();
+  }
   if (machine.state.status !== "idle") {
     machine.dispatch({ type: "PAGEHIDE", source: "pagehide" });
   }
@@ -687,7 +991,11 @@ window.addEventListener("pageshow", (event) => {
   }
 });
 
-const query = new URLSearchParams(window.location.search);
-if (query.get("simulate") === "1") {
+void registerOfflineApp();
+
+if (startupQuery.get("simulate") === "1") {
+  elements.startLive.disabled = true;
+  elements.startAccessible.disabled = true;
+  elements.startSimulation.disabled = true;
   requestAnimationFrame(startSimulation);
 }

@@ -11,6 +11,7 @@ test("generated index is self-contained and has the required product hooks", asy
   assert.match(html, /Gaze Compass/);
   assert.match(html, /Gesture Tunnel/);
   assert.match(html, /class="center-orb"/);
+  assert.match(html, /class="response-focus"/);
   assert.match(html, /getUserMedia/);
   assert.match(html, /FaceDetector/);
   assert.match(html, /SpeechRecognition/);
@@ -21,10 +22,15 @@ test("generated index is self-contained and has the required product hooks", asy
   assert.match(html, /class RadialAimCoordinator/);
   assert.match(html, /pendingDetectorBuffers/);
   assert.match(html, /EXPECTED_DETERMINISTIC_FINGERPRINT = "c1b6e39f"/);
+  assert.match(html, /EXPECTED_CONVERSATION_FINGERPRINT = "071ba015"/);
+  assert.match(html, /class AdaptiveAIAdapter/);
+  assert.match(html, /navigator\.serviceWorker\.register/);
+  assert.match(html, /\/api\/chat/);
   assert.match(html, /replay-rejected/);
   assert.doesNotMatch(html, /<iframe\b/i);
+  assert.doesNotMatch(html, /<(?:input|textarea)\b/i);
   assert.doesNotMatch(html, /<script[^>]+\bsrc=/i);
-  assert.doesNotMatch(html, /<link[^>]+\bhref=/i);
+  assert.doesNotMatch(html, /<link[^>]+\bhref=["'](?:https?:|\/\/)/i);
   assert.doesNotMatch(html, /https?:\/\//i);
 });
 

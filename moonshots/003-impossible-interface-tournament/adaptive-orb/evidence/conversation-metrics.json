@@ -1,0 +1,224 @@
+{
+  "schemaVersion": 1,
+  "product": "Adaptive Orb AI conversation",
+  "conversationFingerprint": "071ba015",
+  "expectedFingerprint": "071ba015",
+  "exactStateVerified": true,
+  "externalInputLocked": true,
+  "complete": true,
+  "exactTaskVerdict": true,
+  "task": {
+    "action": "route",
+    "quantity": 3,
+    "color": "cobalt",
+    "time": "14:30",
+    "handling": "fragile",
+    "destination": "ORION-7",
+    "gate": "North Gate",
+    "confirmed": true,
+    "returnedHome": true
+  },
+  "conversation": {
+    "memoryOnly": true,
+    "textExported": false,
+    "turnCount": 12,
+    "activeScenario": "navigate",
+    "scenariosUsed": [
+      "create",
+      "plan",
+      "explain",
+      "navigate"
+    ],
+    "branchDepth": 0,
+    "provider": "demo",
+    "degraded": false,
+    "semanticTurns": [
+      {
+        "index": 1,
+        "role": "user",
+        "scenario": "create",
+        "semantic": "intent:create",
+        "mode": "orbit"
+      },
+      {
+        "index": 2,
+        "role": "assistant",
+        "scenario": "create",
+        "semantic": "response:create",
+        "mode": "orbit",
+        "provider": "demo"
+      },
+      {
+        "index": 3,
+        "role": "user",
+        "scenario": "create",
+        "semantic": "choice-selected",
+        "mode": "orbit"
+      },
+      {
+        "index": 4,
+        "role": "assistant",
+        "scenario": "create",
+        "semantic": "response:create",
+        "mode": "orbit",
+        "provider": "demo"
+      },
+      {
+        "index": 5,
+        "role": "user",
+        "scenario": "plan",
+        "semantic": "intent:plan",
+        "mode": "orbit"
+      },
+      {
+        "index": 6,
+        "role": "assistant",
+        "scenario": "plan",
+        "semantic": "response:plan",
+        "mode": "compass",
+        "provider": "demo"
+      },
+      {
+        "index": 7,
+        "role": "user",
+        "scenario": "plan",
+        "semantic": "choice-selected",
+        "mode": "compass"
+      },
+      {
+        "index": 8,
+        "role": "assistant",
+        "scenario": "plan",
+        "semantic": "response:plan",
+        "mode": "compass",
+        "provider": "demo"
+      },
+      {
+        "index": 9,
+        "role": "user",
+        "scenario": "explain",
+        "semantic": "intent:explain",
+        "mode": "compass"
+      },
+      {
+        "index": 10,
+        "role": "assistant",
+        "scenario": "explain",
+        "semantic": "response:explain",
+        "mode": "tunnel",
+        "provider": "demo"
+      },
+      {
+        "index": 11,
+        "role": "user",
+        "scenario": "navigate",
+        "semantic": "intent:navigate",
+        "mode": "tunnel"
+      },
+      {
+        "index": 12,
+        "role": "assistant",
+        "scenario": "navigate",
+        "semantic": "response:navigate",
+        "mode": "compass",
+        "provider": "demo"
+      }
+    ]
+  },
+  "modesUsed": [
+    "orbit",
+    "compass",
+    "tunnel"
+  ],
+  "modeTransitions": [
+    {
+      "atMs": 625,
+      "from": "orbit",
+      "to": "compass",
+      "source": "auto:ai-response"
+    },
+    {
+      "atMs": 1850,
+      "from": "compass",
+      "to": "orbit",
+      "source": "auto:conversation-input"
+    },
+    {
+      "atMs": 1950,
+      "from": "orbit",
+      "to": "tunnel",
+      "source": "auto:ai-response"
+    },
+    {
+      "atMs": 3200,
+      "from": "tunnel",
+      "to": "orbit",
+      "source": "auto:conversation-input"
+    },
+    {
+      "atMs": 3300,
+      "from": "orbit",
+      "to": "compass",
+      "source": "auto:ai-response"
+    },
+    {
+      "atMs": 3375,
+      "from": "compass",
+      "to": "orbit",
+      "source": "auto:task-focus"
+    },
+    {
+      "atMs": 4400,
+      "from": "orbit",
+      "to": "compass",
+      "source": "auto:task-advanced"
+    },
+    {
+      "atMs": 9300,
+      "from": "compass",
+      "to": "tunnel",
+      "source": "auto:task-advanced"
+    }
+  ],
+  "completionTimeMs": 12700,
+  "errors": 3,
+  "falseCommits": 0,
+  "gazeCommitAttemptsBlocked": 1,
+  "centerCancels": 1,
+  "sensorLosses": 1,
+  "sensorRecoveries": 1,
+  "intentionalWrongBranches": 2,
+  "undos": 2,
+  "perMode": {
+    "orbit": {
+      "activeMs": 1850,
+      "dwellMs": 0,
+      "confirmations": 2,
+      "transitionsIn": 4
+    },
+    "compass": {
+      "activeMs": 6200,
+      "dwellMs": 4500,
+      "confirmations": 4,
+      "transitionsIn": 3
+    },
+    "tunnel": {
+      "activeMs": 4650,
+      "dwellMs": 3600,
+      "confirmations": 4,
+      "transitionsIn": 2
+    }
+  },
+  "privacy": {
+    "rawFramesStored": false,
+    "rawAudioStored": false,
+    "rawTranscriptsStored": false,
+    "conversationTextMemoryOnly": true,
+    "conversationTextExported": false,
+    "applicationNetworkClientsUsed": false,
+    "sameOriginCompanionOnly": true,
+    "persistentStorageUsed": false,
+    "browserSpeechVendorProcessingDisclosed": true
+  },
+  "legacyTaskSafetyFingerprint": "c1b6e39f"
+}

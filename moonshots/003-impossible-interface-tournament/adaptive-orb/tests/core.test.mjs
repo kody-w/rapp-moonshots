@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { demoResponseFor } from "../src/ai.mjs";
 import {
   AdaptiveOrbMachine,
+  CONVERSATION_DETERMINISTIC_SCRIPT,
   DETERMINISTIC_SCRIPT,
+  EXPECTED_CONVERSATION_FINGERPRINT,
   EXPECTED_TASK,
   EXPECTED_DETERMINISTIC_FINGERPRINT,
   chooseModeForShape,
   dispatchDeterministicStep,
   parseBroadIntent,
   runDeterministicSimulation,
+  runConversationSimulation,
   taskMatchesExpected,
   verifyDeterministicRecord,
+  verifyConversationRecord,
 } from "../src/core.mjs";
 
 function begin(kind = "live") {
@@ -356,6 +361,19 @@ test("deterministic replay rejects every external action without state drift", (
     { type: "ACCESSIBLE", source: "external" },
     { type: "STOP", source: "external" },
     { type: "PAGEHIDE", source: "external" },
+    {
+      type: "CONVERSATION_INPUT",
+      text: "external prompt",
+      source: "external",
+    },
+    {
+      type: "AI_RESPONSE",
+      requestId: 1,
+      response: { message: "external response" },
+      source: "external",
+    },
+    { type: "AI_PROVIDER_ATTEMPT", provider: "brainstem", source: "external" },
+    { type: "TASK_FOCUS", source: "external" },
   ]) {
     const result = machine.dispatch({ ...action, at: 10 });
     assert.equal(result.effect, "replay-rejected", action.type);
@@ -384,7 +402,10 @@ test("export contains no raw media, transcript, persistence, or irreversible eff
     rawFramesStored: false,
     rawAudioStored: false,
     rawTranscriptsStored: false,
+    conversationTextMemoryOnly: true,
+    conversationTextExported: false,
     applicationNetworkClientsUsed: false,
+    sameOriginCompanionOnly: true,
     persistentStorageUsed: false,
     browserSpeechVendorProcessingDisclosed: true,
   });
@@ -393,4 +414,164 @@ test("export contains no raw media, transcript, persistence, or irreversible eff
   assert.equal(serialized.includes("transcript"), false);
   assert.equal(serialized.includes("frameData"), false);
   assert.equal(serialized.includes("audioData"), false);
+});
+
+test("AI conversation keeps one memory and task across contextual mode changes", () => {
+  const { machine } = begin("accessible");
+  const request = machine.dispatch({
+    type: "CONVERSATION_INPUT",
+    text: "Plan a focused afternoon with four priorities.",
+    source: "touch",
+    at: 100,
+  });
+  assert.equal(request.effect, "ai-request");
+  const response = demoResponseFor(request.request, { scenarioHint: "plan" });
+  assert.equal(
+    machine.dispatch({
+      type: "AI_RESPONSE",
+      requestId: request.requestId,
+      response,
+      at: 200,
+    }).effect,
+    "ai-response",
+  );
+  assert.equal(machine.state.mode, "compass");
+  assert.equal(machine.state.conversation.turns.length, 2);
+  assert.equal(machine.state.conversation.scenario, "plan");
+  machine.dispatch({
+    type: "AI_PROVIDER_ATTEMPT",
+    provider: "brainstem",
+    at: 225,
+  });
+  assert.equal(
+    machine.exportRecord(225).privacy.applicationNetworkClientsUsed,
+    true,
+  );
+  const conversation = structuredClone(machine.state.conversation);
+  const task = structuredClone(machine.state.task);
+  const history = structuredClone(machine.state.history);
+  machine.dispatch({ type: "VOICE", text: "tunnel", source: "voice", at: 250 });
+  assert.equal(machine.state.mode, "tunnel");
+  assert.deepEqual(machine.state.conversation, conversation);
+  assert.deepEqual(machine.state.task, task);
+  assert.deepEqual(machine.state.history, history);
+  machine.dispatch({ type: "VOICE", text: "auto mode", source: "voice", at: 300 });
+  assert.equal(machine.state.mode, "compass");
+  const privateSuggestionId = response.suggestions[0].id;
+  machine.dispatch({
+    type: "AIM",
+    id: privateSuggestionId,
+    source: "keyboard",
+    at: 325,
+  });
+  machine.dispatch({ type: "CONFIRM", source: "keyboard", at: 350 });
+  assert.equal(
+    JSON.stringify(machine.exportRecord(350)).includes(privateSuggestionId),
+    false,
+  );
+});
+
+test("conversation branches are reversible and stale AI responses cannot revive stop", () => {
+  const { machine } = begin("accessible");
+  const explain = machine.dispatch({
+    type: "CONVERSATION_INPUT",
+    text: "Explain how offline updates work.",
+    source: "keyboard",
+    at: 100,
+  });
+  machine.dispatch({
+    type: "AI_RESPONSE",
+    requestId: explain.requestId,
+    response: demoResponseFor(explain.request, { scenarioHint: "explain" }),
+    at: 200,
+  });
+  const turns = structuredClone(machine.state.conversation.turns);
+  const wrongBranch = choose(machine, "ai-explain-wrong", "keyboard", 300);
+  assert.deepEqual(machine.state.conversation.branchPath, ["wrong-analytics"]);
+  machine.dispatch({ type: "UNDO", source: "keyboard", at: 400 });
+  assert.deepEqual(machine.state.conversation.branchPath, []);
+  assert.deepEqual(machine.state.conversation.turns, turns);
+
+  const pending = machine.dispatch({
+    type: "CONVERSATION_INPUT",
+    text: "Plan another option.",
+    source: "keyboard",
+    at: 500,
+  });
+  assert.ok(pending.requestId > wrongBranch.requestId);
+  assert.equal(
+    machine.dispatch({
+      type: "AI_RESPONSE",
+      requestId: wrongBranch.requestId,
+      response: demoResponseFor(wrongBranch.request, {
+        scenarioHint: "explain",
+      }),
+      at: 505,
+    }).effect,
+    "rejected",
+  );
+  assert.equal(machine.state.conversation.pending, true);
+  machine.dispatch({ type: "STOP", source: "keyboard", at: 510 });
+  const turnCount = machine.state.conversation.turns.length;
+  const stale = machine.dispatch({
+    type: "AI_RESPONSE",
+    requestId: pending.requestId,
+    response: demoResponseFor(pending.request, { scenarioHint: "plan" }),
+    at: 520,
+  });
+  assert.equal(stale.effect, "rejected");
+  assert.equal(machine.state.conversation.turns.length, turnCount);
+});
+
+test("an AI detour returns to the exact in-progress task checkpoint", () => {
+  const { machine } = begin("accessible");
+  captureBroad(machine);
+  assert.equal(machine.state.stage, "destination");
+  const task = structuredClone(machine.state.task);
+  const request = machine.dispatch({
+    type: "VOICE",
+    text: "Explain how the route safety model works.",
+    source: "voice",
+    at: 300,
+  });
+  assert.equal(request.effect, "ai-request");
+  machine.dispatch({
+    type: "AI_RESPONSE",
+    requestId: request.requestId,
+    response: demoResponseFor(request.request, { scenarioHint: "explain" }),
+    at: 400,
+  });
+  assert.equal(machine.state.conversation.focused, true);
+  assert.equal(machine.state.mode, "tunnel");
+  choose(machine, "resume-task", "keyboard", 500);
+  assert.equal(machine.state.conversation.focused, false);
+  assert.equal(machine.state.stage, "destination");
+  assert.deepEqual(machine.state.task, task);
+  assert.ok(
+    machine.state.options.some((candidate) => candidate.id === "destination-orion"),
+  );
+});
+
+test("multi-turn simulation spans scenarios and modes while retaining exact task", () => {
+  const { record } = runConversationSimulation();
+  assert.equal(
+    record.conversationFingerprint,
+    EXPECTED_CONVERSATION_FINGERPRINT,
+  );
+  assert.equal(verifyConversationRecord(record), true);
+  assert.deepEqual(record.conversation.scenariosUsed, [
+    "create",
+    "plan",
+    "explain",
+    "navigate",
+  ]);
+  assert.equal(record.conversation.turnCount, 12);
+  assert.equal(record.conversation.textExported, false);
+  assert.equal(record.exactTaskVerdict, true);
+  assert.deepEqual(record.task, EXPECTED_TASK);
+  assert.deepEqual(record.modesUsed, ["orbit", "compass", "tunnel"]);
+  assert.ok(CONVERSATION_DETERMINISTIC_SCRIPT.length > DETERMINISTIC_SCRIPT.length);
+  const serialized = JSON.stringify(record);
+  assert.equal(serialized.includes("calm launch story"), false);
+  assert.equal(serialized.includes("offline-first application"), false);
 });

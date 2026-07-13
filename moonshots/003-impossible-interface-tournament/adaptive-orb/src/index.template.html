@@ -8,9 +8,13 @@
     />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self' data: blob:; connect-src 'none'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'self' data: blob:; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
     />
-    <title>Adaptive Orb · Impossible Interface Tournament</title>
+    <meta name="theme-color" content="#b11f4b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Adaptive Orb" />
+    <title>Adaptive Orb · adaptive AI conversation</title>
     <script>
       (() => {
         const param = new URLSearchParams(window.location.search).get("scoutTheme");
@@ -19,6 +23,8 @@
         document.documentElement.setAttribute("data-theme", theme);
       })();
     </script>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png" />
     <style>
       :root {
         color-scheme: light;
@@ -80,12 +86,12 @@
 
     <section class="launch-screen" id="launchScreen" aria-labelledby="launchTitle">
       <div class="launch-card">
-        <p class="eyebrow">Moonshot 003 · unified finalist</p>
+        <p class="eyebrow">One AI conversation · three adaptive grammars</p>
         <h1 id="launchTitle">Adaptive Orb</h1>
         <p class="launch-lede">
-          One shared route moves between Voice Orbit, Gaze Compass, and Gesture
-          Tunnel. After this single start action, the live path is designed for
-          voice and coarse camera motion without normal keyboard or pointer use.
+          Speak a broad request, select stable follow-ups, and travel through
+          deeper revisions without opening a chat box. One memory-only
+          conversation moves between Voice Orbit, Gaze Compass, and Gesture Tunnel.
         </p>
         <div class="disclosure" role="note" aria-label="Sensor and speech disclosure">
           <strong>Before permission:</strong> camera frames are analyzed only in
@@ -100,24 +106,35 @@
           </button>
           <button id="startAccessible" type="button">Start sensor-free access</button>
           <button id="startSimulation" type="button">
-            Run deterministic all-mode task
+            Run multi-turn AI simulation
           </button>
         </div>
         <p class="small-note">
-          This is a coarse webcam gaze/head/frame-motion estimate—not eye tracking,
-          medical sensing, or an accessibility certification.
+          GitHub Pages uses deterministic demo AI with no credentials or network.
+          The optional companion sends conversation text only to a same-origin
+          operator-configured RAPP Brainstem proxy.
         </p>
+        <details class="launch-help">
+          <summary>Install on iPhone or iPad</summary>
+          <p>
+            In Safari, choose Share → Add to Home Screen. Camera and microphone
+            require HTTPS or localhost. If speech or sensing is unavailable,
+            large touch, keyboard, and switch controls remain.
+          </p>
+        </details>
       </div>
     </section>
 
     <main class="app-shell" id="app" hidden>
       <header class="topbar">
         <div>
-          <p class="eyebrow">Impossible Interface Tournament</p>
+          <p class="eyebrow">Adaptive AI conversation</p>
           <h1>Adaptive Orb</h1>
         </div>
         <div class="status-cluster" aria-label="Session status">
           <span class="status-chip" id="modeStatus">Orbit · auto</span>
+          <span class="status-chip" id="aiStatus">Demo AI · offline</span>
+          <span class="status-chip" id="pwaStatus">Web app preparing</span>
           <span class="status-chip" id="sensorStatus">Sensors preparing</span>
           <span class="status-chip privacy-chip">Local frames · no storage</span>
         </div>
@@ -130,10 +147,10 @@
 
       <section class="task-ribbon" aria-labelledby="taskTitle">
         <div>
-          <p class="eyebrow" id="taskTitle">Shared cobalt-beacon task</p>
+          <p class="eyebrow" id="taskTitle">Shared conversation and task memory</p>
           <p id="taskPrompt">
-            Route three cobalt beacons at 14:30, mark them fragile, send them to
-            ORION-7 through North Gate, confirm, then return home.
+            Speak a create, plan, explain, or navigate intent. The exact cobalt
+            task remains available as a reversible navigation scenario.
           </p>
         </div>
         <ol class="task-values" id="taskValues" aria-label="Current route values"></ol>
@@ -181,6 +198,25 @@
             </div>
           </div>
 
+          <section class="response-focus" aria-labelledby="responseTitle">
+            <div class="response-heading">
+              <div>
+                <p class="eyebrow" id="responseKicker">Memory-only AI response</p>
+                <h2 id="responseTitle">Choose a scenario or speak broadly</h2>
+              </div>
+              <button id="speakResponse" type="button">Speak response</button>
+            </div>
+            <p id="responseText">
+              Demo AI is ready offline. Voice Orbit will turn broad intent into
+              predicted response and action petals.
+            </p>
+            <ol
+              class="conversation-landmarks"
+              id="conversationLandmarks"
+              aria-label="Recent semantic conversation landmarks"
+            ></ol>
+          </section>
+
           <div
             class="orb-stage mode-orbit"
             id="orbStage"
@@ -225,9 +261,11 @@
         </section>
 
         <aside class="context-card" aria-labelledby="historyTitle">
-          <p class="eyebrow">One task · one history</p>
-          <h2 id="historyTitle">Safety ledger</h2>
+          <p class="eyebrow">One conversation · one history</p>
+          <h2 id="historyTitle">Conversation safety ledger</h2>
           <dl class="metric-ledger">
+            <div><dt>Conversation turns</dt><dd id="conversationTurns">0</dd></div>
+            <div><dt>AI responses / failovers</dt><dd id="aiResponses">0 / 0</dd></div>
             <div><dt>Mode transitions</dt><dd id="modeTransitions">0</dd></div>
             <div><dt>False commits</dt><dd id="falseCommits">0</dd></div>
             <div><dt>Center cancels</dt><dd id="centerCancels">0</dd></div>
@@ -275,15 +313,35 @@
             clears the arm and freezes sensor-derived confirmation.
           </p>
           <p>
-            <strong>Speech boundary:</strong> Web Speech may use browser/vendor
-            processing. No transcript, audio, frame, analytics identifier, or
-            application network request is stored or exported.
+            <strong>Speech and AI boundary:</strong> Web Speech may use
+            browser/vendor processing. Conversation text stays in memory. Demo AI
+            makes no request; companion mode sends only the explicit Brainstem
+            contract to same-origin <code>/api/chat</code>. Exports omit text.
+          </p>
+        </div>
+      </details>
+
+      <details class="detail-card" id="installHelp">
+        <summary>Install, offline behavior, and iOS help</summary>
+        <div class="disclosure-grid">
+          <p>
+            <strong>iOS:</strong> Safari Share → Add to Home Screen. Use HTTPS
+            for camera/microphone. <code>webkitSpeechRecognition</code> is used
+            when available; otherwise use touch or switch parity.
+          </p>
+          <p>
+            <strong>Offline:</strong> the service worker caches only the app shell,
+            manifest, and local icons. It never caches media, conversation,
+            companion responses, calibration, or metrics.
           </p>
         </div>
       </details>
 
       <footer class="footer-actions">
-        <button id="exportMetrics" type="button">Export local JSON metrics</button>
+        <button id="exportMetrics" type="button">Export public-safe semantic JSON</button>
+        <button id="companionMode" type="button">AI: offline demo</button>
+        <button id="installApp" type="button">Install app</button>
+        <button id="applyUpdate" type="button" hidden>Apply app update</button>
         <button id="useAccessible" type="button">Continue sensor-free</button>
         <button id="stopSensors" type="button">End sensors</button>
         <button id="resumeSession" type="button">Resume safety pause</button>

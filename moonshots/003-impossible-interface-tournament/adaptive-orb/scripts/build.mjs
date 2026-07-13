@@ -96,15 +96,19 @@ async function loadTournamentEvidence() {
 
 function stripModuleSyntax(source) {
   return source
-    .replace(/^import\s+.*?;\s*$/gm, "")
+    .replace(
+      /^import\s+(?:\{[\s\S]*?\}|[^;\n]+)\s+from\s+["'][^"']+["'];\s*$/gm,
+      "",
+    )
     .replace(/\nexport\s*\{[\s\S]*?\};\s*$/m, "\n")
     .trim();
 }
 
-const [template, styles, core, sensors, session, comparison, app, evidence] =
+const [template, styles, ai, core, sensors, session, comparison, app, evidence] =
   await Promise.all([
     readFile(resolve(root, "src/index.template.html"), "utf8"),
     readFile(resolve(root, "src/styles.css"), "utf8"),
+    readFile(resolve(root, "src/ai.mjs"), "utf8"),
     readFile(resolve(root, "src/core.mjs"), "utf8"),
     readFile(resolve(root, "src/sensors.mjs"), "utf8"),
     readFile(resolve(root, "src/session.mjs"), "utf8"),
@@ -115,6 +119,7 @@ const [template, styles, core, sensors, session, comparison, app, evidence] =
 
 const bundledScript = [
   `const BUILD_TOURNAMENT_EVIDENCE = Object.freeze(${JSON.stringify(evidence)});`,
+  stripModuleSyntax(ai),
   stripModuleSyntax(core),
   stripModuleSyntax(sensors),
   stripModuleSyntax(session),

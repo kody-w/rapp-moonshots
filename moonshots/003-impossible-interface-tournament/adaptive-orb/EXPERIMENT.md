@@ -2,111 +2,86 @@
 
 ## Hypothesis
 
-A shape-selected interaction grammar can outperform any single prototype
-without weakening its safety boundary: broad voice drafts in Orbit, stable
-radial choices in Compass, and nested recovery in Tunnel can share one task and
-one sensor lifecycle with zero gaze-only commits.
+One AI conversation can change interaction grammar with context without
+changing ownership of memory, task, history, safety, sensing, or metrics:
+broad intent should favor Orbit, stable follow-ups Compass, and nested
+explanations/revisions Tunnel.
 
-The claim is falsified if a mode switch changes task/history/safety state, gaze
-executes, stale sensing confirms, or the exact shared task cannot finish using
-all three modes.
-
-## Fixed task
-
-> Route three cobalt beacons at 14:30, mark them fragile, send them to ORION-7
-> through North Gate, confirm, then return home.
+The claim fails if a mode switch loses a turn/task/freeze, gaze commits,
+stale sensing confirms, AI failover loses context, exported evidence contains
+conversation text, or offline installation caches sensitive data.
 
 ## Deterministic protocol
 
 Run `npm run evidence` or open `?simulate=1`.
 
-1. Capture and explicitly accept broad intent in Orbit.
-2. Automatically enter Compass.
-3. Dwell on ORION-7 and attempt a gaze confirmation; require rejection.
-4. Return to center; require aim/dwell cancellation.
-5. Re-arm ORION-7, inject stale content, and attempt voice confirmation;
-   require freeze.
-6. Recover content freshness and explicitly confirm ORION-7 and North Gate.
-7. Automatically enter Tunnel.
-8. Explicitly enter the wrong Amend branch, then say undo.
-9. Confirm the exact route and Return home.
-10. Export metrics and compare the exact fingerprint.
+1. Start an input-locked memory-only session.
+2. Ask Create for broad creative help; accept an Outline petal in Orbit.
+3. Ask Plan for four bounded priorities; automatically enter Compass, dwell,
+   and explicitly gesture-confirm Deep work.
+4. Ask Explain about offline updates; automatically enter Tunnel.
+5. Enter an intentionally wrong analytics branch, receive a response, then
+   undo to the exact prior explanation.
+6. Ask Navigate for the routing scenario; automatically return to Compass.
+7. Enter the exact cobalt task inside the same conversation/history.
+8. Run the retained all-mode safety fixture: blocked gaze commit, center rest,
+   invalid-content freeze/recovery, ORION-7/North Gate, wrong route branch,
+   undo, confirm, and home.
+9. Verify exact state before announcing success.
 
 ## Checked-in result
 
-Generated from the state machine, not hand-entered:
-
 | Measure | Deterministic result |
 |---|---:|
-| Exact task verdict | true |
-| Scripted completion | 8,700 ms |
-| Modes used | Orbit, Compass, Tunnel |
-| Automatic transitions | 2 |
-| Errors | 2 |
+| Conversation turns | 12 |
+| Scenarios | Create, Plan, Explain, Navigate |
+| Modes | Orbit, Compass, Tunnel |
+| Contextual transitions | 8 |
+| Exact cobalt task | true |
+| Scripted completion | 12,700 ms |
 | False commits | 0 |
-| Blocked gaze commit attempts | 1 |
+| Blocked gaze commits | 1 |
 | Center cancels | 1 |
-| Voice repairs | 2 |
 | Sensor loss / recovery | 1 / 1 |
-| Recovery duration | 350 ms |
-| Intentional wrong branch / undo | 1 / 1 |
-| Orbit confirmations | 1 |
-| Compass dwell / confirmations | 3,600 ms / 2 |
-| Tunnel dwell / confirmations | 2,700 ms / 3 |
-| Raw frame/audio/transcript storage | false / false / false |
-| Application network/persistence | false / false |
+| Intentional wrong branches / undo | 2 / 2 |
+| Conversation text exported | false |
+| Application AI network in demo | false |
 
-Fingerprint: `c1b6e39f`.
+Conversation fingerprint: `071ba015`.
 
-## Acceptance gates
+The unchanged task-only regression still verifies `c1b6e39f`. Timings prove
+deterministic event ordering, not human performance.
 
-- task equals all nine expected fields, including confirmation and home;
-- every mode has at least one confirmation and mode transitions are ordered;
-- gaze and dwell never execute;
-- center clears highlight, dwell, arm, and gesture epoch;
-- independent freeze causes recover independently;
-- stale generation, frame, content, and processed-estimate samples fail closed;
-- delayed permission/play and detector work cannot revive an old generation;
-- stop/cancel/undo preempt mixed ordinary speech;
-- sensor-free keyboard/touch/switch control completes the same task;
-- sensor-free control enters quantity, color, time, and handling through visible
-  semantic options without direct voice dispatch;
-- every sensor-free transition stops camera, microphone, and recognition before
-  accessible state is committed or rendered;
-- invalid content immediately revokes aim and requires fresh content plus a
-  separately accepted processed estimate;
-- long sensor gaps clear dwell and require a new highlight; duplicate/invalid
-  dwell samples add no events;
-- gesture epochs include highlighted choice identity;
-- every pending detector working copy is zeroed on completion or teardown;
-- deterministic mode rejects external input and verifies fingerprint
-  `c1b6e39f` before any success announcement;
-- JSON contains no raw media or raw transcript;
-- generated HTML has exact Clawpilot tokens, no external asset, and
-  `connect-src 'none'`;
-- checked-in evidence exactly equals a fresh replay.
+## AI adapter protocol
 
-## Live study protocol
+For each request, compare:
 
-The deterministic fixture proves logic, not usability. A consented live study
-should compare Adaptive Orb with each original track under the same browser,
-camera position, lighting, task wording, and injected failure.
+1. offline `DemoAIAdapter` with a fetch stub that must remain unused;
+2. valid same-origin companion response;
+3. unavailable, timed-out, malformed, oversized, or stale companion response.
 
-Record only semantic metrics:
+Acceptance requires exact Brainstem request keys, no browser credential field,
+bounded response options, visible demo fallback, current request identity, and
+unchanged prior turns/task/history. Companion output is text-rendered and may
+suggest reversible branches; it cannot execute HTML, scripts, tools, or
+external actions.
 
-- exact completion and time;
-- mode changes, repairs, center cancels, and undo;
-- false commits and blocked confirmations;
-- calibration/freshness loss and recovery;
-- per-mode dwell and confirmation source;
-- workload, fatigue, and confidence;
-- browser, OS, `FaceDetector` availability, and vendor speech boundary.
+## PWA/offline protocol
 
-Do not record video or audio. Stop the study after any gaze-only execution or
-irreversible effect. Report scripted and human timings separately.
+Install once, then take the server offline. Root and `?simulate=1` must load
+from the static cache. Inspect Cache Storage: only root/index, manifest, and the
+three local icons may exist. `/api/chat`, POST, media, transcript, response,
+calibration, metrics, and blob exports must never be intercepted or cached.
 
-## Interpretation boundary
+Verify a changed `CACHE_VERSION` produces a waiting worker, **Apply app update**
+sends `ACTIVATE_UPDATE`, old versioned static caches are deleted on activation,
+and the page reloads once on controller change.
 
-The fixture does not establish precise gaze, gesture recognition, universal
-accessibility, browser-vendor speech privacy, or safe consequential control.
-Those claims remain explicitly out of scope.
+## Live study boundary
+
+A consented live study should record only semantic measures: completion,
+repairs, mode changes, wrong highlights, false nods, center cancels, undo,
+sensor loss/recovery, provider/failover, workload, and browser capabilities.
+Never record media or transcripts. Separate demo, companion, scripted, and
+human results. Stop after any gaze-only execution, secret exposure, sensitive
+cache entry, or irreversible effect.

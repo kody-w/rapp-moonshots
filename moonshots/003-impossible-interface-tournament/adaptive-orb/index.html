@@ -8,9 +8,13 @@
     />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self' data: blob:; connect-src 'none'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'self' data: blob:; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
     />
-    <title>Adaptive Orb · Impossible Interface Tournament</title>
+    <meta name="theme-color" content="#b11f4b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Adaptive Orb" />
+    <title>Adaptive Orb · adaptive AI conversation</title>
     <script>
       (() => {
         const param = new URLSearchParams(window.location.search).get("scoutTheme");
@@ -19,6 +23,8 @@
         document.documentElement.setAttribute("data-theme", theme);
       })();
     </script>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png" />
     <style>
       :root {
         color-scheme: light;
@@ -84,6 +90,7 @@ html {
 
 body {
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   background: var(--cp-bg);
   color: var(--cp-text);
@@ -104,6 +111,7 @@ button {
   background: var(--cp-surface);
   color: var(--cp-text);
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 button:hover {
@@ -155,7 +163,11 @@ button:disabled {
   display: grid;
   min-height: 100vh;
   place-items: center;
-  padding: 24px;
+  padding:
+    max(24px, env(safe-area-inset-top))
+    max(24px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom))
+    max(24px, env(safe-area-inset-left));
   background:
     radial-gradient(circle at top, var(--cp-accent-soft), var(--cp-bg) 46%),
     var(--cp-bg);
@@ -214,10 +226,25 @@ button:disabled {
   font-size: 0.82rem;
 }
 
+.launch-help {
+  margin-top: 16px;
+  color: var(--cp-text-muted);
+}
+
+.launch-help summary {
+  color: var(--cp-text);
+  cursor: pointer;
+  font-weight: 700;
+}
+
 .app-shell {
   width: min(1500px, 100%);
   margin: 0 auto;
-  padding: 20px clamp(12px, 3vw, 36px) 48px;
+  padding:
+    max(20px, env(safe-area-inset-top))
+    max(clamp(12px, 3vw, 36px), env(safe-area-inset-right))
+    max(48px, env(safe-area-inset-bottom))
+    max(clamp(12px, 3vw, 36px), env(safe-area-inset-left));
 }
 
 .topbar {
@@ -419,6 +446,55 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.response-focus {
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid var(--cp-border);
+  border-left: 4px solid var(--cp-accent);
+  border-radius: 16px;
+  background: var(--cp-surface-soft);
+}
+
+.response-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.response-heading h2 {
+  font-size: clamp(1rem, 2vw, 1.25rem);
+}
+
+.response-focus > p {
+  margin: 10px 0;
+  color: var(--cp-text);
+}
+
+.conversation-landmarks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conversation-landmarks li {
+  padding: 4px 7px;
+  border: 1px solid var(--cp-border);
+  border-radius: 0.625rem;
+  background: var(--cp-surface);
+  color: var(--cp-text-muted);
+  font-family: Consolas, "Courier New", Courier, monospace;
+  font-size: 0.64rem;
+}
+
+.conversation-landmarks li[data-role="assistant"] {
+  border-color: var(--cp-accent);
+  color: var(--cp-text);
 }
 
 .mode-meter {
@@ -828,6 +904,7 @@ button:disabled {
   justify-content: center;
   gap: 8px;
   padding: 18px 0;
+  padding-bottom: max(18px, env(safe-area-inset-bottom));
 }
 
 .sr-only {
@@ -914,11 +991,12 @@ button:disabled {
 
   .orb-stage {
     width: 100%;
+    min-height: min(94vw, 520px);
   }
 
   .choice {
-    width: 102px;
-    min-height: 58px;
+    width: clamp(100px, 29vw, 126px);
+    min-height: 64px;
     padding: 5px;
   }
 
@@ -930,9 +1008,33 @@ button:disabled {
     display: none;
   }
 
+  .response-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .response-heading button {
+    width: 100%;
+  }
+
   .disclosure-grid,
   .mode-stats {
     grid-template-columns: 1fr;
+  }
+
+  @media (orientation: landscape) and (max-height: 620px) {
+    .orb-stage {
+      width: min(72vh, 620px);
+    }
+
+    .response-focus {
+      padding: 10px;
+    }
+
+    .conversation-landmarks {
+      max-height: 48px;
+      overflow: hidden;
+    }
   }
 }
 
@@ -964,12 +1066,12 @@ button:disabled {
 
     <section class="launch-screen" id="launchScreen" aria-labelledby="launchTitle">
       <div class="launch-card">
-        <p class="eyebrow">Moonshot 003 · unified finalist</p>
+        <p class="eyebrow">One AI conversation · three adaptive grammars</p>
         <h1 id="launchTitle">Adaptive Orb</h1>
         <p class="launch-lede">
-          One shared route moves between Voice Orbit, Gaze Compass, and Gesture
-          Tunnel. After this single start action, the live path is designed for
-          voice and coarse camera motion without normal keyboard or pointer use.
+          Speak a broad request, select stable follow-ups, and travel through
+          deeper revisions without opening a chat box. One memory-only
+          conversation moves between Voice Orbit, Gaze Compass, and Gesture Tunnel.
         </p>
         <div class="disclosure" role="note" aria-label="Sensor and speech disclosure">
           <strong>Before permission:</strong> camera frames are analyzed only in
@@ -984,24 +1086,35 @@ button:disabled {
           </button>
           <button id="startAccessible" type="button">Start sensor-free access</button>
           <button id="startSimulation" type="button">
-            Run deterministic all-mode task
+            Run multi-turn AI simulation
           </button>
         </div>
         <p class="small-note">
-          This is a coarse webcam gaze/head/frame-motion estimate—not eye tracking,
-          medical sensing, or an accessibility certification.
+          GitHub Pages uses deterministic demo AI with no credentials or network.
+          The optional companion sends conversation text only to a same-origin
+          operator-configured RAPP Brainstem proxy.
         </p>
+        <details class="launch-help">
+          <summary>Install on iPhone or iPad</summary>
+          <p>
+            In Safari, choose Share → Add to Home Screen. Camera and microphone
+            require HTTPS or localhost. If speech or sensing is unavailable,
+            large touch, keyboard, and switch controls remain.
+          </p>
+        </details>
       </div>
     </section>
 
     <main class="app-shell" id="app" hidden>
       <header class="topbar">
         <div>
-          <p class="eyebrow">Impossible Interface Tournament</p>
+          <p class="eyebrow">Adaptive AI conversation</p>
           <h1>Adaptive Orb</h1>
         </div>
         <div class="status-cluster" aria-label="Session status">
           <span class="status-chip" id="modeStatus">Orbit · auto</span>
+          <span class="status-chip" id="aiStatus">Demo AI · offline</span>
+          <span class="status-chip" id="pwaStatus">Web app preparing</span>
           <span class="status-chip" id="sensorStatus">Sensors preparing</span>
           <span class="status-chip privacy-chip">Local frames · no storage</span>
         </div>
@@ -1014,10 +1127,10 @@ button:disabled {
 
       <section class="task-ribbon" aria-labelledby="taskTitle">
         <div>
-          <p class="eyebrow" id="taskTitle">Shared cobalt-beacon task</p>
+          <p class="eyebrow" id="taskTitle">Shared conversation and task memory</p>
           <p id="taskPrompt">
-            Route three cobalt beacons at 14:30, mark them fragile, send them to
-            ORION-7 through North Gate, confirm, then return home.
+            Speak a create, plan, explain, or navigate intent. The exact cobalt
+            task remains available as a reversible navigation scenario.
           </p>
         </div>
         <ol class="task-values" id="taskValues" aria-label="Current route values"></ol>
@@ -1065,6 +1178,25 @@ button:disabled {
             </div>
           </div>
 
+          <section class="response-focus" aria-labelledby="responseTitle">
+            <div class="response-heading">
+              <div>
+                <p class="eyebrow" id="responseKicker">Memory-only AI response</p>
+                <h2 id="responseTitle">Choose a scenario or speak broadly</h2>
+              </div>
+              <button id="speakResponse" type="button">Speak response</button>
+            </div>
+            <p id="responseText">
+              Demo AI is ready offline. Voice Orbit will turn broad intent into
+              predicted response and action petals.
+            </p>
+            <ol
+              class="conversation-landmarks"
+              id="conversationLandmarks"
+              aria-label="Recent semantic conversation landmarks"
+            ></ol>
+          </section>
+
           <div
             class="orb-stage mode-orbit"
             id="orbStage"
@@ -1109,9 +1241,11 @@ button:disabled {
         </section>
 
         <aside class="context-card" aria-labelledby="historyTitle">
-          <p class="eyebrow">One task · one history</p>
-          <h2 id="historyTitle">Safety ledger</h2>
+          <p class="eyebrow">One conversation · one history</p>
+          <h2 id="historyTitle">Conversation safety ledger</h2>
           <dl class="metric-ledger">
+            <div><dt>Conversation turns</dt><dd id="conversationTurns">0</dd></div>
+            <div><dt>AI responses / failovers</dt><dd id="aiResponses">0 / 0</dd></div>
             <div><dt>Mode transitions</dt><dd id="modeTransitions">0</dd></div>
             <div><dt>False commits</dt><dd id="falseCommits">0</dd></div>
             <div><dt>Center cancels</dt><dd id="centerCancels">0</dd></div>
@@ -1159,15 +1293,35 @@ button:disabled {
             clears the arm and freezes sensor-derived confirmation.
           </p>
           <p>
-            <strong>Speech boundary:</strong> Web Speech may use browser/vendor
-            processing. No transcript, audio, frame, analytics identifier, or
-            application network request is stored or exported.
+            <strong>Speech and AI boundary:</strong> Web Speech may use
+            browser/vendor processing. Conversation text stays in memory. Demo AI
+            makes no request; companion mode sends only the explicit Brainstem
+            contract to same-origin <code>/api/chat</code>. Exports omit text.
+          </p>
+        </div>
+      </details>
+
+      <details class="detail-card" id="installHelp">
+        <summary>Install, offline behavior, and iOS help</summary>
+        <div class="disclosure-grid">
+          <p>
+            <strong>iOS:</strong> Safari Share → Add to Home Screen. Use HTTPS
+            for camera/microphone. <code>webkitSpeechRecognition</code> is used
+            when available; otherwise use touch or switch parity.
+          </p>
+          <p>
+            <strong>Offline:</strong> the service worker caches only the app shell,
+            manifest, and local icons. It never caches media, conversation,
+            companion responses, calibration, or metrics.
           </p>
         </div>
       </details>
 
       <footer class="footer-actions">
-        <button id="exportMetrics" type="button">Export local JSON metrics</button>
+        <button id="exportMetrics" type="button">Export public-safe semantic JSON</button>
+        <button id="companionMode" type="button">AI: offline demo</button>
+        <button id="installApp" type="button">Install app</button>
+        <button id="applyUpdate" type="button" hidden>Apply app update</button>
         <button id="useAccessible" type="button">Continue sensor-free</button>
         <button id="stopSensors" type="button">End sensors</button>
         <button id="resumeSession" type="button">Resume safety pause</button>
@@ -1180,8 +1334,634 @@ button:disabled {
     <script type="module">
       const BUILD_TOURNAMENT_EVIDENCE = Object.freeze({"voiceOrbit":{"exact":true,"completionMs":2700,"falseCommits":0,"sensorLosses":0,"sensorRecoveries":0,"source":"Track 01 runDeterministicSimulation()"},"gazeCompass":{"exact":true,"completionMs":12500,"falseCommits":0,"sensorLosses":1,"sensorRecoveries":1,"source":"Track 02 evidence/simulation-metrics.json"},"gestureTunnel":{"exact":true,"completionMs":12450,"falseCommits":1,"sensorLosses":1,"sensorRecoveries":1,"source":"Track 03 evidence/deterministic-metrics.json"}});
 
+const AI_SCENARIOS = Object.freeze({
+  create: Object.freeze({
+    id: "create",
+    title: "Create",
+    detail: "Shape a draft from broad intent",
+    prompt: "Help me create a calm launch story for a small accessibility tool.",
+    mode: "orbit",
+  }),
+  plan: Object.freeze({
+    id: "plan",
+    title: "Plan",
+    detail: "Compare stable priorities and next steps",
+    prompt: "Plan a focused afternoon with four concrete priorities.",
+    mode: "compass",
+  }),
+  explain: Object.freeze({
+    id: "explain",
+    title: "Explain",
+    detail: "Travel through a layered explanation",
+    prompt: "Explain how an offline-first application handles updates.",
+    mode: "tunnel",
+  }),
+  navigate: Object.freeze({
+    id: "navigate",
+    title: "Navigate",
+    detail: "Choose a route, tool, or scenario",
+    prompt: "Navigate the cobalt beacon routing scenario.",
+    mode: "compass",
+  }),
+});
+
+const RESPONSE_SHAPES = Object.freeze({
+  orbit: Object.freeze({
+    breadth: 5,
+    stable: false,
+    depth: 0,
+    hierarchical: false,
+  }),
+  compass: Object.freeze({
+    breadth: 5,
+    stable: true,
+    depth: 1,
+    hierarchical: false,
+  }),
+  tunnel: Object.freeze({
+    breadth: 5,
+    stable: false,
+    depth: 3,
+    hierarchical: true,
+  }),
+});
+
+const DEMO_RESPONSES = Object.freeze({
+  create: Object.freeze({
+    message:
+      "I framed the creative intent around calm confidence, local control, and one clear invitation. Choose the direction you want me to develop.",
+    summary: "Creative direction framed around calm, local control",
+    suggestions: Object.freeze([
+      Object.freeze({
+        id: "create-outline",
+        label: "Outline",
+        detail: "Build a concise story arc",
+        prompt: "Develop a concise three-part outline.",
+        branch: "outline",
+      }),
+      Object.freeze({
+        id: "create-variations",
+        label: "Variations",
+        detail: "Explore several directions",
+        prompt: "Generate three distinct creative directions.",
+        branch: "variations",
+      }),
+      Object.freeze({
+        id: "create-tone",
+        label: "Tune the tone",
+        detail: "Calm, direct, or playful",
+        prompt: "Refine the voice to feel calm and direct.",
+        branch: "tone",
+      }),
+      Object.freeze({
+        id: "create-audience",
+        label: "Audience",
+        detail: "Focus the message",
+        prompt: "Adapt the concept for first-time users.",
+        branch: "audience",
+      }),
+      Object.freeze({
+        id: "create-review",
+        label: "Review",
+        detail: "Inspect assumptions",
+        prompt: "Review the concept for unclear assumptions.",
+        branch: "review",
+      }),
+    ]),
+    shape: RESPONSE_SHAPES.orbit,
+  }),
+  plan: Object.freeze({
+    message:
+      "I organized the plan into four stable priorities with recovery space. The compass is best here because the alternatives are bounded and comparable.",
+    summary: "Four bounded priorities prepared for comparison",
+    suggestions: Object.freeze([
+      Object.freeze({
+        id: "plan-focus",
+        label: "Deep work",
+        detail: "Protect the first focus block",
+        prompt: "Prioritize the deep-work block.",
+        branch: "focus",
+      }),
+      Object.freeze({
+        id: "plan-people",
+        label: "People",
+        detail: "Group communication work",
+        prompt: "Prioritize communication and collaboration.",
+        branch: "people",
+      }),
+      Object.freeze({
+        id: "plan-admin",
+        label: "Admin",
+        detail: "Clear bounded maintenance",
+        prompt: "Prioritize the bounded administrative tasks.",
+        branch: "admin",
+      }),
+      Object.freeze({
+        id: "plan-buffer",
+        label: "Recovery",
+        detail: "Reserve transition time",
+        prompt: "Protect recovery and transition time.",
+        branch: "buffer",
+      }),
+      Object.freeze({
+        id: "plan-risks",
+        label: "Risks",
+        detail: "Inspect schedule pressure",
+        prompt: "Show the plan's main scheduling risks.",
+        branch: "risks",
+      }),
+    ]),
+    shape: RESPONSE_SHAPES.compass,
+  }),
+  explain: Object.freeze({
+    message:
+      "An offline-first update has nested layers: the page, the cache version, activation, and rollback. Enter a layer without losing the explanation above it.",
+    summary: "Offline update explanation divided into nested layers",
+    suggestions: Object.freeze([
+      Object.freeze({
+        id: "explain-cache",
+        label: "Static cache",
+        detail: "What is allowed offline",
+        prompt: "Go deeper into the static cache allowlist.",
+        branch: "cache",
+      }),
+      Object.freeze({
+        id: "explain-update",
+        label: "Update",
+        detail: "Waiting worker and activation",
+        prompt: "Go deeper into service worker update activation.",
+        branch: "update",
+      }),
+      Object.freeze({
+        id: "explain-rollback",
+        label: "Rollback",
+        detail: "Remove a bad worker safely",
+        prompt: "Go deeper into unregister and rollback.",
+        branch: "rollback",
+      }),
+      Object.freeze({
+        id: "explain-privacy",
+        label: "Privacy",
+        detail: "What must never enter cache",
+        prompt: "Go deeper into privacy exclusions.",
+        branch: "privacy",
+      }),
+      Object.freeze({
+        id: "explain-wrong",
+        label: "Wrong branch",
+        detail: "Intentional revision drill",
+        prompt: "Open an intentionally irrelevant analytics branch.",
+        branch: "wrong-analytics",
+        intentionalWrong: true,
+      }),
+    ]),
+    shape: RESPONSE_SHAPES.tunnel,
+  }),
+  navigate: Object.freeze({
+    message:
+      "I found a reversible local routing scenario. Choose the cobalt task for the full all-mode safety drill, or inspect another destination first.",
+    summary: "Reversible navigation choices prepared",
+    suggestions: Object.freeze([
+      Object.freeze({
+        id: "begin-cobalt-task",
+        label: "Cobalt task",
+        detail: "Run the exact routing scenario",
+        prompt: "Begin the exact cobalt beacon task.",
+        branch: "cobalt",
+        effect: "task-demo",
+      }),
+      Object.freeze({
+        id: "navigate-orion",
+        label: "ORION-7",
+        detail: "Inspect destination context",
+        prompt: "Inspect ORION-7.",
+        branch: "orion",
+      }),
+      Object.freeze({
+        id: "navigate-gates",
+        label: "Gate map",
+        detail: "Compare four stable gates",
+        prompt: "Show the gate map.",
+        branch: "gates",
+      }),
+      Object.freeze({
+        id: "navigate-tools",
+        label: "Tools",
+        detail: "Open the nested tool tunnel",
+        prompt: "Open the navigation tools.",
+        branch: "tools",
+      }),
+      Object.freeze({
+        id: "navigate-home",
+        label: "Home",
+        detail: "Return to scenario petals",
+        prompt: "Return to the scenario petals.",
+        branch: "home",
+      }),
+    ]),
+    shape: RESPONSE_SHAPES.compass,
+  }),
+});
+
+const MAX_USER_INPUT = 4000;
+const MAX_HISTORY_TURNS = 24;
+const MAX_RESPONSE_TEXT = 12000;
+
+function inferScenario(text, fallback = "create") {
+  const normalized = String(text || "").toLowerCase();
+  if (
+    /\b(plan|schedule|priority|priorities|prioritize|prioritized|agenda)\b/.test(
+      normalized,
+    )
+  ) {
+    return "plan";
+  }
+  if (/\b(explain|understand|why|how does|how an|teach)\b/.test(normalized)) {
+    return "explain";
+  }
+  if (/\b(navigate|route|destination|gate|cobalt|beacon)\b/.test(normalized)) {
+    return "navigate";
+  }
+  if (/\b(create|write|design|draft|story|brainstorm)\b/.test(normalized)) {
+    return "create";
+  }
+  return Object.hasOwn(AI_SCENARIOS, fallback) ? fallback : "create";
+}
+
+function validateConversationHistory(history) {
+  if (!Array.isArray(history) || history.length > MAX_HISTORY_TURNS) {
+    throw new TypeError("conversation_history must be a bounded array");
+  }
+  return history.map((turn) => {
+    if (
+      !turn ||
+      !["user", "assistant"].includes(turn.role) ||
+      typeof turn.content !== "string" ||
+      turn.content.length === 0 ||
+      turn.content.length > MAX_USER_INPUT
+    ) {
+      throw new TypeError("conversation_history contains an invalid turn");
+    }
+    return { role: turn.role, content: turn.content };
+  });
+}
+
+function validateAIRequest(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError("AI request must be an object");
+  }
+  const keys = Object.keys(value).sort();
+  if (
+    JSON.stringify(keys) !==
+    JSON.stringify(["conversation_history", "session_id", "user_input"])
+  ) {
+    throw new TypeError("AI request must use the Brainstem contract exactly");
+  }
+  if (
+    typeof value.user_input !== "string" ||
+    value.user_input.trim().length === 0 ||
+    value.user_input.length > MAX_USER_INPUT
+  ) {
+    throw new TypeError("user_input is invalid");
+  }
+  if (
+    typeof value.session_id !== "string" ||
+    !/^[A-Za-z0-9._:-]{1,128}$/.test(value.session_id)
+  ) {
+    throw new TypeError("session_id is invalid");
+  }
+  return {
+    user_input: value.user_input.trim(),
+    conversation_history: validateConversationHistory(value.conversation_history),
+    session_id: value.session_id,
+  };
+}
+
+function normalizeSuggestion(value, index) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    typeof value.label !== "string" ||
+    typeof value.prompt !== "string"
+  ) {
+    throw new TypeError("AI response contains an invalid suggestion");
+  }
+  const allowed = new Set([
+    "id",
+    "label",
+    "detail",
+    "prompt",
+    "branch",
+    "effect",
+    "intentionalWrong",
+  ]);
+  if (Object.keys(value).some((key) => !allowed.has(key))) {
+    throw new TypeError("AI suggestion contains unsupported fields");
+  }
+  const label = value.label.trim().slice(0, 80);
+  const prompt = value.prompt.trim().slice(0, MAX_USER_INPUT);
+  if (!label || !prompt) {
+    throw new TypeError("AI suggestion text is empty");
+  }
+  const rawId =
+    typeof value.id === "string" && value.id
+      ? value.id
+      : `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${index + 1}`;
+  const id = rawId.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80);
+  return {
+    id: id.startsWith("ai-") ? id : `ai-${id}`,
+    label,
+    detail:
+      typeof value.detail === "string"
+        ? value.detail.trim().slice(0, 120)
+        : "Continue this conversation branch",
+    prompt,
+    branch:
+      typeof value.branch === "string"
+        ? value.branch.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80)
+        : id,
+    effect: value.effect === "task-demo" ? "task-demo" : "conversation-action",
+    intentionalWrong: value.intentionalWrong === true,
+  };
+}
+
+function normalizeShape(value, scenario) {
+  const fallback = DEMO_RESPONSES[scenario].shape;
+  if (!value || typeof value !== "object") {
+    return { ...fallback };
+  }
+  const breadth = Number(value.breadth);
+  const depth = Number(value.depth);
+  return {
+    breadth:
+      Number.isInteger(breadth) && breadth >= 1 && breadth <= 8
+        ? breadth
+        : fallback.breadth,
+    stable: value.stable === true,
+    depth: Number.isInteger(depth) && depth >= 0 && depth <= 12 ? depth : fallback.depth,
+    hierarchical: value.hierarchical === true,
+  };
+}
+
+function normalizeAIResponse(value, { scenarioHint = "create", provider = "demo" } = {}) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    typeof value.message !== "string"
+  ) {
+    throw new TypeError("AI response must contain message");
+  }
+  const allowed = new Set([
+    "message",
+    "scenario",
+    "summary",
+    "suggestions",
+    "shape",
+    "provider",
+    "degraded",
+    "notice",
+  ]);
+  if (Object.keys(value).some((key) => !allowed.has(key))) {
+    throw new TypeError("AI response contains unsupported fields");
+  }
+  const message = value.message.trim();
+  if (!message || message.length > MAX_RESPONSE_TEXT) {
+    throw new TypeError("AI response message is invalid");
+  }
+  const scenario = Object.hasOwn(AI_SCENARIOS, value.scenario)
+    ? value.scenario
+    : inferScenario(message, scenarioHint);
+  const fallback = DEMO_RESPONSES[scenario];
+  const rawSuggestions =
+    Array.isArray(value.suggestions) && value.suggestions.length
+      ? value.suggestions
+      : fallback.suggestions;
+  if (rawSuggestions.length < 4 || rawSuggestions.length > 8) {
+    throw new TypeError("AI response must contain four to eight suggestions");
+  }
+  return {
+    message,
+    scenario,
+    summary:
+      typeof value.summary === "string" && value.summary.trim()
+        ? value.summary.trim().slice(0, 180)
+        : fallback.summary,
+    suggestions: rawSuggestions.map(normalizeSuggestion),
+    shape: normalizeShape(value.shape, scenario),
+    provider: provider === "brainstem" ? "brainstem" : "demo",
+    degraded: value.degraded === true,
+    notice:
+      typeof value.notice === "string" ? value.notice.trim().slice(0, 180) : null,
+  };
+}
+
+function demoResponseFor(request, { scenarioHint } = {}) {
+  const normalized = validateAIRequest(request);
+  const scenario = inferScenario(normalized.user_input, scenarioHint);
+  const fixture = DEMO_RESPONSES[scenario];
+  let message = fixture.message;
+  let summary = fixture.summary;
+  const input = normalized.user_input.toLowerCase();
+  if (scenario === "create" && /\boutline\b/.test(input)) {
+    message =
+      "I developed a three-part arc: name the human friction, show the calm adaptive moment, then close with local control. You can now revise tone, audience, or assumptions.";
+    summary = "Three-part creative outline drafted";
+  } else if (
+    scenario === "plan" &&
+    /\b(?:deep work|focus block)\b/.test(input)
+  ) {
+    message =
+      "Deep work is now first, followed by communication, bounded admin, and a protected recovery buffer. The remaining compass petals let you inspect tradeoffs without losing the plan.";
+    summary = "Deep work prioritized with recovery preserved";
+  } else if (scenario === "explain" && /\banalytics\b/.test(input)) {
+    message =
+      "That analytics branch is intentionally outside this offline update explanation. It is marked as a wrong turn so undo can demonstrate return to the exact parent context.";
+    summary = "Intentional wrong explanation branch identified";
+  }
+  return normalizeAIResponse(
+    {
+      ...fixture,
+      message,
+      summary,
+      scenario,
+    },
+    { scenarioHint: scenario, provider: "demo" },
+  );
+}
+
+class DemoAIAdapter {
+  async respond(request, context = {}) {
+    return demoResponseFor(request, context);
+  }
+}
+
+class CompanionAIAdapter {
+  constructor({
+    fetchImpl = globalThis.fetch,
+    endpoint = "/api/chat",
+    timeoutMs = 9000,
+  } = {}) {
+    if (endpoint !== "/api/chat") {
+      throw new TypeError("Companion endpoint must remain same-origin /api/chat");
+    }
+    this.fetchImpl = fetchImpl;
+    this.endpoint = endpoint;
+    this.timeoutMs = Math.min(15000, Math.max(1000, Number(timeoutMs) || 9000));
+  }
+
+  async respond(request, { scenarioHint, signal } = {}) {
+    const normalized = validateAIRequest(request);
+    if (typeof this.fetchImpl !== "function") {
+      throw new Error("companion-fetch-unavailable");
+    }
+    const controller = new AbortController();
+    const abortFromCaller = () => controller.abort();
+    if (signal?.aborted) {
+      controller.abort();
+    } else {
+      signal?.addEventListener("abort", abortFromCaller, { once: true });
+    }
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await this.fetchImpl(this.endpoint, {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        redirect: "error",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(normalized),
+        signal: controller.signal,
+      });
+      if (!response?.ok) {
+        throw new Error(`companion-http-${response?.status || "failed"}`);
+      }
+      const payload = await response.json();
+      return normalizeAIResponse(payload, {
+        scenarioHint,
+        provider: "brainstem",
+      });
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abortFromCaller);
+    }
+  }
+}
+
+class AdaptiveAIAdapter {
+  constructor({
+    demo = new DemoAIAdapter(),
+    companion = new CompanionAIAdapter(),
+  } = {}) {
+    this.demo = demo;
+    this.companion = companion;
+  }
+
+  async respond(
+    request,
+    { preferCompanion = false, scenarioHint, signal } = {},
+  ) {
+    if (preferCompanion) {
+      try {
+        return await this.companion.respond(request, { scenarioHint, signal });
+      } catch {
+        if (signal?.aborted) {
+          throw new Error("ai-request-aborted");
+        }
+        const fallback = await this.demo.respond(request, { scenarioHint });
+        return {
+          ...fallback,
+          degraded: true,
+          notice: "Companion unavailable. Continued with the offline deterministic demo AI.",
+        };
+      }
+    }
+    return this.demo.respond(request, { scenarioHint });
+  }
+}
+
+function createEphemeralSessionId(cryptoObject = globalThis.crypto) {
+  if (typeof cryptoObject?.randomUUID === "function") {
+    return `orb-${cryptoObject.randomUUID()}`;
+  }
+  const random = Math.random().toString(36).slice(2, 14);
+  return `orb-${Date.now().toString(36)}-${random}`;
+}
+
+function buildBrainstemRequest(conversation) {
+  const turns = Array.isArray(conversation?.turns) ? conversation.turns : [];
+  let lastUserIndex = -1;
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    if (turns[index].role === "user") {
+      lastUserIndex = index;
+      break;
+    }
+  }
+  if (lastUserIndex < 0) {
+    throw new TypeError("Conversation has no user input");
+  }
+  const history = turns
+    .slice(Math.max(0, lastUserIndex - MAX_HISTORY_TURNS), lastUserIndex)
+    .filter(
+      (turn) =>
+        ["user", "assistant"].includes(turn.role) &&
+        typeof turn.text === "string" &&
+        turn.text.length > 0,
+    )
+    .map((turn) => ({
+      role: turn.role,
+      content: turn.text.slice(0, MAX_USER_INPUT),
+    }))
+    .slice(-MAX_HISTORY_TURNS);
+  return validateAIRequest({
+    user_input: turns[lastUserIndex].text,
+    conversation_history: history,
+    session_id: conversation.sessionId,
+  });
+}
+
+function publicConversationSummary(conversation) {
+  const turns = Array.isArray(conversation?.turns) ? conversation.turns : [];
+  return {
+    memoryOnly: true,
+    textExported: false,
+    turnCount: turns.length,
+    activeScenario: conversation?.scenario || null,
+    scenariosUsed: [...new Set(turns.map((turn) => turn.scenario).filter(Boolean))],
+    branchDepth: Array.isArray(conversation?.branchPath)
+      ? conversation.branchPath.length
+      : 0,
+    provider: conversation?.provider || "demo",
+    degraded: conversation?.degraded === true,
+    semanticTurns: turns.map((turn, index) => {
+      const semanticTurn = {
+        index: index + 1,
+        role: turn.role,
+        scenario: turn.scenario || null,
+        semantic:
+          turn.role === "assistant"
+            ? `response:${turn.scenario || "general"}`
+            : String(turn.semantic || "").startsWith("intent:")
+              ? `intent:${turn.scenario || "general"}`
+              : String(turn.semantic || "").startsWith("scenario:")
+                ? `scenario:${turn.scenario || "general"}`
+                : "choice-selected",
+        mode: turn.mode || null,
+      };
+      if (turn.role === "assistant") {
+        semanticTurn.provider = turn.provider || "demo";
+      }
+      return semanticTurn;
+    }),
+  };
+}
+
 const MODE_NAMES = Object.freeze(["orbit", "compass", "tunnel"]);
 const EXPECTED_DETERMINISTIC_FINGERPRINT = "c1b6e39f";
+const EXPECTED_CONVERSATION_FINGERPRINT = "071ba015";
 const REPLAY_AUTHORITY = Symbol("adaptive-orb-deterministic-replay");
 const SENSOR_FREE_AUTHORITY = Symbol("adaptive-orb-sensors-stopped");
 const DWELL_TARGET_MS = Object.freeze({
@@ -1216,8 +1996,51 @@ function createTask() {
   };
 }
 
+function createConversation(sessionId = "orb-local-session") {
+  return {
+    sessionId,
+    focused: true,
+    pending: false,
+    requestId: 0,
+    scenario: null,
+    turns: [],
+    currentResponse: null,
+    responseSummary: "Choose a scenario or speak a broad intent.",
+    suggestions: [],
+    shape: { ...RESPONSE_SHAPES.orbit },
+    branchPath: [],
+    returnContext: null,
+    provider: "demo",
+    degraded: false,
+    notice: null,
+    companionAttempted: false,
+    metrics: {
+      requests: 0,
+      responses: 0,
+      failovers: 0,
+    },
+  };
+}
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function publicEvent(event) {
+  const sanitized = clone(event);
+  if (
+    typeof sanitized.detail?.id === "string" &&
+    sanitized.detail.id.startsWith("ai-")
+  ) {
+    sanitized.detail.id = "ai-suggestion";
+  }
+  if (
+    typeof sanitized.detail?.restored === "string" &&
+    sanitized.detail.restored.includes("ai-")
+  ) {
+    sanitized.detail.restored = "conversation-choice";
+  }
+  return sanitized;
 }
 
 function normalizeSpeech(text) {
@@ -1315,6 +2138,38 @@ function option(id, label, detail, effect, aliases = [], extra = {}) {
 }
 
 function optionsForState(state) {
+  if (state.conversation?.focused && state.conversation.pending) {
+    return [];
+  }
+  if (state.conversation?.focused && state.conversation.suggestions.length) {
+    const suggestions = state.conversation.suggestions.map((suggestion) =>
+      option(
+        suggestion.id,
+        suggestion.label,
+        suggestion.detail,
+        suggestion.effect,
+        [suggestion.label, suggestion.prompt],
+        {
+          prompt: suggestion.prompt,
+          branch: suggestion.branch,
+          intentionalWrong: suggestion.intentionalWrong === true,
+        },
+      ),
+    );
+    if (state.conversation.returnContext) {
+      suggestions.push(
+        option(
+          "resume-task",
+          "Resume task",
+          "Return to the exact saved task checkpoint",
+          "task-demo",
+          ["resume task", "return to task"],
+        ),
+      );
+    }
+    return suggestions;
+  }
+
   if (state.stage === "intent") {
     if (state.broadReady) {
       return [
@@ -1417,16 +2272,26 @@ function optionsForState(state) {
       ];
     }
     return [
+      ...Object.values(AI_SCENARIOS).map((scenario) =>
+        option(
+          `scenario-${scenario.id}`,
+          scenario.title,
+          scenario.detail,
+          "scenario",
+          [scenario.id, scenario.title],
+          {
+            scenario: scenario.id,
+            prompt: scenario.prompt,
+          },
+        ),
+      ),
       option(
         "route-beacons",
-        "Route beacons",
+        "Cobalt task",
         "Begin semantic quantity, color, time, and handling entry",
         "entry-action",
-        ["route beacons"],
+        ["route beacons", "cobalt task"],
       ),
-      option("schedule-load", "Schedule a load", "Describe a future route", "prompt"),
-      option("inspect-route", "Inspect a route", "No route is active yet", "prompt"),
-      option("privacy", "Privacy boundary", "Review local sensing", "privacy"),
       option(
         "sensor-free",
         "Sensor-free access",
@@ -1602,6 +2467,12 @@ function optionsForState(state) {
 
 function choiceShapeForState(state) {
   const options = optionsForState(state);
+  if (state.conversation?.focused) {
+    return {
+      ...state.conversation.shape,
+      breadth: options.length || state.conversation.shape.breadth,
+    };
+  }
   if (state.stage === "intent") {
     return { breadth: options.length, stable: false, depth: 0, hierarchical: false };
   }
@@ -1681,7 +2552,7 @@ function initialSensors() {
 }
 
 class AdaptiveOrbMachine {
-  constructor({ clock = () => Date.now() } = {}) {
+  constructor({ clock = () => Date.now(), sessionId = "orb-local-session" } = {}) {
     this.clock = clock;
     this.recoveryStartedAt = new Map();
     this.state = {
@@ -1694,6 +2565,7 @@ class AdaptiveOrbMachine {
       broadReady: false,
       entryStep: null,
       task: createTask(),
+      conversation: createConversation(sessionId),
       tunnelPath: [],
       mode: "orbit",
       modePreference: "auto",
@@ -1758,6 +2630,27 @@ class AdaptiveOrbMachine {
         return this.switchMode(action.mode, action.source || "manual", now, true);
       case "AUTO_MODE":
         return this.useAutoMode(action.source || "manual", now);
+      case "CONVERSATION_INPUT":
+        return this.conversationInput(
+          action.text,
+          action.source || "external",
+          now,
+          action.scenario,
+        );
+      case "AI_RESPONSE":
+        return this.acceptAIResponse(action, now);
+      case "AI_PROVIDER_ATTEMPT":
+        if (action.provider !== "brainstem") {
+          return this.block("ai-provider-invalid", "ai-adapter", now, false);
+        }
+        this.state.conversation.companionAttempted = true;
+        return this.record(
+          "conversation.companion-attempted",
+          { sameOrigin: true },
+          now,
+        );
+      case "TASK_FOCUS":
+        return this.focusTask(action.source || "manual", now);
       case "SENSOR_STATUS":
         return this.sensorStatus(action, now);
       case "SENSOR_SAMPLE":
@@ -1778,6 +2671,7 @@ class AdaptiveOrbMachine {
         }
         return this.enterAccessibleMode(action.source || "manual", now);
       case "PAGEHIDE":
+        this.cancelPendingAI("page-hidden");
         this.addFreezeCause("page-hidden", now, false);
         this.state.status = "stopped";
         this.clearAim();
@@ -1835,10 +2729,10 @@ class AdaptiveOrbMachine {
 
     this.state.announcement =
       kind === "accessible"
-        ? "Sensor-free access active. Cycle, highlight, then confirm."
+        ? "Sensor-free conversation active. Choose a scenario, then confirm."
         : kind === "simulation"
-          ? "Deterministic all-mode replay started."
-          : "Permission granted once. Preparing local sensors.";
+          ? "Deterministic multi-turn conversation replay started."
+          : "Permission granted once. Speak a creative, planning, explanation, or navigation intent.";
     this.state.lastAction = "started";
     return this.record("session.started", { kind }, now);
   }
@@ -1903,6 +2797,29 @@ class AdaptiveOrbMachine {
 
     if (this.state.stage === "intent") {
       const parsed = parseBroadIntent(text);
+      const isRouteTask =
+        parsed.action === "route" ||
+        hasWord(text, "beacon") ||
+        hasWord(text, "beacons") ||
+        hasWord(text, "cobalt");
+      if (this.state.conversation.focused && !isRouteTask) {
+        const matchedConversation = this.state.options.find((candidate) =>
+          candidate.aliases.some((alias) => text === normalizeSpeech(alias)),
+        );
+        if (matchedConversation) {
+          this.highlight(matchedConversation.id, "voice", now);
+          this.state.announcement =
+            `${matchedConversation.label} highlighted. Say confirm to choose.`;
+          return {
+            ok: true,
+            effect: "highlight",
+            id: matchedConversation.id,
+          };
+        }
+        return this.conversationInput(rawText, source, now);
+      }
+      this.state.conversation.focused = false;
+      this.state.conversation.returnContext = null;
       const keys = Object.keys(parsed);
       if (keys.length === 0) {
         return this.voiceRepair("broad-intent-unrecognized", now);
@@ -1934,7 +2851,163 @@ class AdaptiveOrbMachine {
       return { ok: true, effect: "highlight", id: matched.id };
     }
 
+    if (
+      /\b(?:create|write|design|draft|brainstorm|plan|schedule|explain|why|how|navigate|help me)\b/.test(
+        text,
+      )
+    ) {
+      return this.conversationInput(rawText, source, now);
+    }
+
     return this.voiceRepair("choice-unrecognized", now);
+  }
+
+  conversationInput(rawText, source, now, scenarioHint) {
+    const text = String(rawText || "").trim();
+    if (!text || text.length > 4000) {
+      return this.block("conversation-input-invalid", source, now, false);
+    }
+    this.pushHistory("conversation-input");
+    const scenario = inferScenario(
+      text,
+      scenarioHint || this.state.conversation.scenario || "create",
+    );
+    const conversation = this.state.conversation;
+    if (!conversation.focused && !conversation.returnContext) {
+      conversation.returnContext = {
+        stage: this.state.stage,
+        broadReady: this.state.broadReady,
+        entryStep: this.state.entryStep,
+        tunnelPath: [...this.state.tunnelPath],
+      };
+    }
+    conversation.focused = true;
+    conversation.pending = true;
+    conversation.requestId += 1;
+    conversation.scenario = scenario;
+    conversation.shape = { ...RESPONSE_SHAPES.orbit };
+    conversation.notice = null;
+    conversation.metrics.requests += 1;
+    conversation.turns.push({
+      role: "user",
+      text,
+      semantic: `intent:${scenario}`,
+      scenario,
+      mode: this.state.mode,
+    });
+    if (conversation.turns.length > 48) {
+      conversation.turns.splice(0, conversation.turns.length - 48);
+    }
+    this.clearAim();
+    this.refreshOptionsAndMode("conversation-input", now);
+    this.state.lastAction = "ai-request";
+    this.state.announcement =
+      `Demo AI is preparing a ${scenario} response. The conversation remains in memory only.`;
+    this.record(
+      "conversation.user-intent",
+      {
+        scenario,
+        source,
+        requestId: conversation.requestId,
+        turn: conversation.turns.length,
+      },
+      now,
+    );
+    return {
+      ok: true,
+      effect: "ai-request",
+      requestId: conversation.requestId,
+      scenario,
+      request: buildBrainstemRequest(conversation),
+    };
+  }
+
+  acceptAIResponse(action, now) {
+    const conversation = this.state.conversation;
+    if (
+      !conversation.pending ||
+      action.requestId !== conversation.requestId
+    ) {
+      this.record(
+        "conversation.response-rejected",
+        { reason: "request-id", requestId: action.requestId },
+        now,
+      );
+      return { ok: false, effect: "rejected", reason: "stale-ai-response" };
+    }
+    let response;
+    try {
+      response = normalizeAIResponse(action.response, {
+        scenarioHint: conversation.scenario,
+        provider: action.response?.provider,
+      });
+    } catch {
+      return this.block("ai-response-invalid", "ai-adapter", now, false);
+    }
+    conversation.pending = false;
+    conversation.scenario = response.scenario;
+    conversation.currentResponse = response.message;
+    conversation.responseSummary = response.summary;
+    conversation.suggestions = response.suggestions;
+    conversation.shape = response.shape;
+    conversation.provider = response.provider;
+    conversation.degraded = response.degraded;
+    conversation.notice = response.notice;
+    conversation.companionAttempted =
+      conversation.companionAttempted || action.companionAttempted === true;
+    conversation.metrics.responses += 1;
+    if (response.degraded) {
+      conversation.metrics.failovers += 1;
+    }
+    this.refreshOptionsAndMode("ai-response", now);
+    conversation.turns.push({
+      role: "assistant",
+      text: response.message,
+      semantic: response.summary,
+      scenario: response.scenario,
+      mode: this.state.mode,
+      provider: response.provider,
+    });
+    if (conversation.turns.length > 48) {
+      conversation.turns.splice(0, conversation.turns.length - 48);
+    }
+    this.state.lastAction = "ai-response";
+    this.state.announcement = response.degraded
+      ? response.notice
+      : `${response.summary}. ${response.suggestions.length} response petals are ready.`;
+    this.record(
+      "conversation.assistant-response",
+      {
+        scenario: response.scenario,
+        provider: response.provider,
+        degraded: response.degraded,
+        suggestionCount: response.suggestions.length,
+        turn: conversation.turns.length,
+      },
+      now,
+    );
+    return { ok: true, effect: "ai-response", response };
+  }
+
+  focusTask(source, now) {
+    const conversation = this.state.conversation;
+    const returnContext = conversation.returnContext;
+    conversation.focused = false;
+    conversation.pending = false;
+    conversation.suggestions = [];
+    conversation.branchPath = [];
+    conversation.returnContext = null;
+    this.state.stage = returnContext?.stage || "intent";
+    this.state.entryStep = returnContext?.entryStep || null;
+    this.state.broadReady = returnContext?.broadReady === true;
+    this.state.tunnelPath = returnContext?.tunnelPath || [];
+    this.clearAim();
+    this.refreshOptionsAndMode("task-focus", now);
+    this.state.lastAction = "task-focus";
+    this.state.announcement =
+      "Exact cobalt task opened inside the same conversation and history.";
+    this.record("conversation.task-focused", { source }, now);
+    return { ok: true, effect: "task-focus" };
   }
 
   highlight(id, source, now) {
@@ -2033,6 +3106,12 @@ class AdaptiveOrbMachine {
     if (!this.state.armed) {
       return this.block("choice-not-armed", source, now, source === "voice");
     }
+    if (
+      this.state.conversation.pending &&
+      ["scenario", "conversation-action"].includes(candidate.effect)
+    ) {
+      return this.block("ai-response-pending", source, now, source === "voice");
+    }
 
     const sensorDerived =
       source === "gesture" ||
@@ -2088,12 +3167,68 @@ class AdaptiveOrbMachine {
     );
     this.clearAim();
     this.refreshOptionsAndMode("task-advanced", now);
-    return { ok: true, effect: result.effect, id: candidate.id };
+    return {
+      ok: true,
+      effect: result.effect,
+      id: candidate.id,
+      requestId: result.requestId,
+      scenario: result.scenario,
+      request: result.request,
+    };
   }
 
   applyOption(candidate, now) {
     switch (candidate.effect) {
+      case "scenario":
+      case "conversation-action": {
+        const conversation = this.state.conversation;
+        const scenario =
+          candidate.scenario ||
+          conversation.scenario ||
+          inferScenario(candidate.prompt, "create");
+        conversation.focused = true;
+        conversation.pending = true;
+        conversation.requestId += 1;
+        conversation.scenario = scenario;
+        conversation.notice = null;
+        conversation.metrics.requests += 1;
+        if (candidate.effect === "scenario") {
+          conversation.branchPath = [];
+        } else {
+          conversation.branchPath.push(candidate.branch || candidate.id);
+        }
+        if (candidate.intentionalWrong) {
+          this.state.metrics.intentionalWrongBranches += 1;
+          this.state.metrics.errors += 1;
+        }
+        conversation.turns.push({
+          role: "user",
+          text: candidate.prompt,
+          semantic:
+            candidate.effect === "scenario"
+              ? `scenario:${scenario}`
+              : `choice:${candidate.branch || candidate.id}`,
+          scenario,
+          mode: this.state.mode,
+        });
+        if (conversation.turns.length > 48) {
+          conversation.turns.splice(0, conversation.turns.length - 48);
+        }
+        this.state.announcement =
+          `${candidate.label} entered. AI response is pending in memory only.`;
+        return {
+          ok: true,
+          effect: "ai-request",
+          requestId: conversation.requestId,
+          scenario,
+          request: buildBrainstemRequest(conversation),
+        };
+      }
+      case "task-demo":
+        return this.focusTask("conversation-choice", now);
       case "entry-action":
+        this.state.conversation.focused = false;
+        this.state.conversation.returnContext = null;
         this.state.task.action = "route";
         this.state.entryStep = "quantity";
         this.state.announcement = "Route selected. Choose beacon quantity.";
@@ -2207,11 +3342,27 @@ class AdaptiveOrbMachine {
       return this.block("nothing-to-undo", source, now, false);
     }
     const previous = this.state.history.pop();
+    const conversationAudit = {
+      companionAttempted: this.state.conversation.companionAttempted,
+      metrics: clone(this.state.conversation.metrics),
+      requestId: this.state.conversation.requestId,
+    };
     this.state.task = previous.task;
     this.state.stage = previous.stage;
     this.state.broadReady = previous.broadReady;
     this.state.entryStep = previous.entryStep;
     this.state.tunnelPath = previous.tunnelPath;
+    if (previous.conversation) {
+      this.state.conversation = previous.conversation;
+      this.state.conversation.companionAttempted =
+        this.state.conversation.companionAttempted ||
+        conversationAudit.companionAttempted;
+      this.state.conversation.metrics = conversationAudit.metrics;
+      this.state.conversation.requestId = Math.max(
+        this.state.conversation.requestId,
+        conversationAudit.requestId,
+      );
+    }
     this.state.completedAt = previous.completedAt;
     this.state.metrics.completionTimeMs = previous.completionTimeMs;
     this.state.metrics.undos += 1;
@@ -2224,6 +3375,7 @@ class AdaptiveOrbMachine {
   }
 
   cancel(source, now) {
+    this.cancelPendingAI("canceled");
     const hadPending = Boolean(this.state.highlight || this.state.tunnelPath.length);
     this.clearAim();
     if (this.state.tunnelPath.length) {
@@ -2238,6 +3390,7 @@ class AdaptiveOrbMachine {
   }
 
   stop(source, now) {
+    this.cancelPendingAI("stopped");
     this.addFreezeCause("user-stop", now, false);
     this.state.status = "paused";
     this.clearAim();
@@ -2495,6 +3648,7 @@ class AdaptiveOrbMachine {
       broadReady: this.state.broadReady,
       entryStep: this.state.entryStep,
       tunnelPath: [...this.state.tunnelPath],
+      conversation: clone(this.state.conversation),
       completedAt: this.state.completedAt,
       completionTimeMs: this.state.metrics.completionTimeMs,
     });
@@ -2508,6 +3662,16 @@ class AdaptiveOrbMachine {
     this.state.highlightSource = null;
     this.state.armed = false;
     this.state.dwellMs = 0;
+  }
+
+  cancelPendingAI(reason) {
+    if (!this.state.conversation.pending) {
+      return false;
+    }
+    this.state.conversation.pending = false;
+    this.state.conversation.requestId += 1;
+    this.state.conversation.notice = `Pending AI response ${reason}.`;
+    return true;
   }
 
   refreshOptionsAndMode(reason, now) {
@@ -2565,6 +3729,7 @@ class AdaptiveOrbMachine {
       exactTaskVerdict: taskMatchesExpected(this.state.task),
       noIrreversibleAction: true,
       task: clone(this.state.task),
+      conversation: publicConversationSummary(this.state.conversation),
       activeMode: this.state.mode,
       modePreference: this.state.modePreference,
       modesUsed: MODE_NAMES.filter(
@@ -2582,11 +3747,15 @@ class AdaptiveOrbMachine {
         rawFramesStored: false,
         rawAudioStored: false,
         rawTranscriptsStored: false,
-        applicationNetworkClientsUsed: false,
+        conversationTextMemoryOnly: true,
+        conversationTextExported: false,
+        applicationNetworkClientsUsed:
+          this.state.conversation.companionAttempted,
+        sameOriginCompanionOnly: true,
         persistentStorageUsed: false,
         browserSpeechVendorProcessingDisclosed: true,
       },
-      events: clone(this.state.events),
+      events: this.state.events.map(publicEvent),
     };
     record.deterministicFingerprint = fingerprint({
       complete: record.complete,
@@ -2736,6 +3905,133 @@ const DETERMINISTIC_SCRIPT = Object.freeze([
   { at: 8700, type: "CONFIRM", source: "gesture" },
 ]);
 
+function deterministicDemoResponse(scenario, userInput) {
+  return demoResponseFor(
+    {
+      user_input: userInput,
+      conversation_history: [],
+      session_id: "orb-conversation-simulation",
+    },
+    { scenarioHint: scenario },
+  );
+}
+
+const CONVERSATION_DETERMINISTIC_SCRIPT = Object.freeze([
+  { at: 0, type: "START", kind: "simulation", generation: 7 },
+  {
+    at: 100,
+    type: "CONVERSATION_INPUT",
+    source: "voice",
+    text: "Help me create a calm launch story for an accessibility tool.",
+    scenario: "create",
+  },
+  {
+    at: 200,
+    type: "AI_RESPONSE",
+    requestId: 1,
+    response: deterministicDemoResponse("create", "Create a calm launch story."),
+  },
+  { at: 300, type: "HIGHLIGHT", id: "ai-create-outline", source: "voice" },
+  { at: 325, type: "CONFIRM", source: "voice" },
+  {
+    at: 425,
+    type: "AI_RESPONSE",
+    requestId: 2,
+    response: deterministicDemoResponse("create", "Develop a concise outline."),
+  },
+  {
+    at: 525,
+    type: "CONVERSATION_INPUT",
+    source: "voice",
+    text: "Plan a focused afternoon with four priorities.",
+    scenario: "plan",
+  },
+  {
+    at: 625,
+    type: "AI_RESPONSE",
+    requestId: 3,
+    response: deterministicDemoResponse("plan", "Plan four priorities."),
+  },
+  {
+    at: 650,
+    type: "SENSOR_SAMPLE",
+    generation: 7,
+    frameAt: 650,
+    contentAt: 650,
+    processedAt: 650,
+  },
+  { at: 675, type: "HIGHLIGHT", id: "ai-plan-focus", source: "gaze" },
+  { at: 900, type: "DWELL", durationMs: 225 },
+  { at: 1125, type: "DWELL", durationMs: 225 },
+  { at: 1350, type: "DWELL", durationMs: 225 },
+  { at: 1575, type: "DWELL", durationMs: 225 },
+  { at: 1650, type: "CONFIRM", source: "gesture" },
+  {
+    at: 1750,
+    type: "AI_RESPONSE",
+    requestId: 4,
+    response: deterministicDemoResponse("plan", "Prioritize deep work."),
+  },
+  {
+    at: 1850,
+    type: "CONVERSATION_INPUT",
+    source: "voice",
+    text: "Explain how an offline-first application handles updates.",
+    scenario: "explain",
+  },
+  {
+    at: 1950,
+    type: "AI_RESPONSE",
+    requestId: 5,
+    response: deterministicDemoResponse("explain", "Explain offline updates."),
+  },
+  {
+    at: 1975,
+    type: "SENSOR_SAMPLE",
+    generation: 7,
+    frameAt: 1975,
+    contentAt: 1975,
+    processedAt: 1975,
+  },
+  { at: 2000, type: "HIGHLIGHT", id: "ai-explain-wrong", source: "gesture" },
+  { at: 2225, type: "DWELL", durationMs: 225 },
+  { at: 2450, type: "DWELL", durationMs: 225 },
+  { at: 2675, type: "DWELL", durationMs: 225 },
+  { at: 2900, type: "DWELL", durationMs: 225 },
+  { at: 2975, type: "CONFIRM", source: "gesture" },
+  {
+    at: 3050,
+    type: "AI_RESPONSE",
+    requestId: 6,
+    response: deterministicDemoResponse("explain", "Open the wrong analytics branch."),
+  },
+  { at: 3125, type: "UNDO", source: "voice" },
+  {
+    at: 3200,
+    type: "CONVERSATION_INPUT",
+    source: "voice",
+    text: "Navigate the cobalt beacon routing scenario.",
+    scenario: "navigate",
+  },
+  {
+    at: 3300,
+    type: "AI_RESPONSE",
+    requestId: 7,
+    response: deterministicDemoResponse("navigate", "Navigate the cobalt task."),
+  },
+  { at: 3350, type: "HIGHLIGHT", id: "ai-begin-cobalt-task", source: "voice" },
+  { at: 3375, type: "CONFIRM", source: "voice" },
+  ...DETERMINISTIC_SCRIPT.slice(1).map((action) => {
+    const shifted = { ...action, at: action.at + 4000 };
+    for (const signal of ["frameAt", "contentAt", "processedAt"]) {
+      if (Number.isFinite(action[signal])) {
+        shifted[signal] = action[signal] + 4000;
+      }
+    }
+    return shifted;
+  }),
+]);
+
 function dispatchDeterministicStep(machine, action) {
   const authorized = clone(action);
   authorized[REPLAY_AUTHORITY] = true;
@@ -2780,6 +4076,68 @@ function runDeterministicSimulation() {
   if (!verifyDeterministicRecord(record)) {
     throw new Error(
       `Deterministic replay verification failed: ${record.deterministicFingerprint}`,
+    );
+  }
+  return { machine, record };
+}
+
+function conversationFingerprintFor(record) {
+  return fingerprint({
+    schemaVersion: 1,
+    complete: record.complete,
+    exactTaskVerdict: record.exactTaskVerdict,
+    task: record.task,
+    conversation: record.conversation,
+    modesUsed: record.modesUsed,
+    modeTransitions: record.metrics.modeTransitions,
+    falseCommits: record.metrics.falseCommits,
+    gazeCommitAttempts: record.metrics.gazeCommitAttempts,
+    centerCancels: record.metrics.centerCancels,
+    sensorLosses: record.metrics.sensorLosses,
+    sensorRecoveries: record.metrics.sensorRecoveries,
+    intentionalWrongBranches: record.metrics.intentionalWrongBranches,
+    undos: record.metrics.undos,
+    eventTypes: record.events.map((event) => event.type),
+  });
+}
+
+function verifyConversationRecord(record) {
+  const scenarios = record.conversation?.scenariosUsed || [];
+  return (
+    record.conversationFingerprint === EXPECTED_CONVERSATION_FINGERPRINT &&
+    record.complete === true &&
+    record.exactTaskVerdict === true &&
+    taskMatchesExpected(record.task) &&
+    record.conversation?.memoryOnly === true &&
+    record.conversation?.textExported === false &&
+    ["create", "plan", "explain", "navigate"].every((scenario) =>
+      scenarios.includes(scenario),
+    ) &&
+    record.conversation?.turnCount >= 10 &&
+    record.modesUsed.includes("orbit") &&
+    record.modesUsed.includes("compass") &&
+    record.modesUsed.includes("tunnel") &&
+    record.metrics.falseCommits === 0 &&
+    record.metrics.gazeCommitAttempts === 1 &&
+    record.freezeCauses.length === 0
+  );
+}
+
+function runConversationSimulation({ verify = true } = {}) {
+  let now = 0;
+  const machine = new AdaptiveOrbMachine({
+    clock: () => now,
+    sessionId: "orb-conversation-simulation",
+  });
+  for (const action of CONVERSATION_DETERMINISTIC_SCRIPT) {
+    now = action.at;
+    dispatchDeterministicStep(machine, action);
+  }
+  const record = machine.exportRecord(now);
+  record.conversationFingerprint = conversationFingerprintFor(record);
+  if (verify && !verifyConversationRecord(record)) {
+    throw new Error(
+      `Conversation replay verification failed: ${record.conversationFingerprint}`,
     );
   }
   return { machine, record };
@@ -4285,11 +5643,18 @@ const elements = {
   startAccessible: byId("startAccessible"),
   startSimulation: byId("startSimulation"),
   modeStatus: byId("modeStatus"),
+  aiStatus: byId("aiStatus"),
+  pwaStatus: byId("pwaStatus"),
   sensorStatus: byId("sensorStatus"),
   safetyBanner: byId("safetyBanner"),
   safetyTitle: byId("safetyTitle"),
   safetyDetail: byId("safetyDetail"),
   taskValues: byId("taskValues"),
+  responseKicker: byId("responseKicker"),
+  responseTitle: byId("responseTitle"),
+  responseText: byId("responseText"),
+  conversationLandmarks: byId("conversationLandmarks"),
+  speakResponse: byId("speakResponse"),
   grammarTitle: byId("grammarTitle"),
   grammarDescription: byId("grammarDescription"),
   cameraState: byId("cameraState"),
@@ -4314,6 +5679,8 @@ const elements = {
   restChoice: byId("restChoice"),
   undoChoice: byId("undoChoice"),
   modeTransitions: byId("modeTransitions"),
+  conversationTurns: byId("conversationTurns"),
+  aiResponses: byId("aiResponses"),
   falseCommits: byId("falseCommits"),
   centerCancels: byId("centerCancels"),
   voiceRepairs: byId("voiceRepairs"),
@@ -4323,6 +5690,9 @@ const elements = {
   comparisonTable: byId("comparisonTable"),
   comparisonPanel: byId("comparisonPanel"),
   exportMetrics: byId("exportMetrics"),
+  companionMode: byId("companionMode"),
+  installApp: byId("installApp"),
+  applyUpdate: byId("applyUpdate"),
   useAccessible: byId("useAccessible"),
   stopSensors: byId("stopSensors"),
   resumeSession: byId("resumeSession"),
@@ -4343,12 +5713,12 @@ const grammarCopy = {
   tunnel: {
     title: "Gesture Tunnel",
     description:
-      "Nested route layers remain in one history. Coarse motion navigates; a nod or spoken confirmation chooses.",
+      "Nested explanations, revisions, tools, and route layers remain in one history. Coarse motion navigates; a nod or spoken confirmation chooses.",
   },
 };
 
 const stageCopy = {
-  intent: ["Broad intent · depth 0", "Speak the route intent"],
+  intent: ["Broad intent · depth 0", "Speak or choose an AI scenario"],
   destination: ["Stable choices · depth 1", "Select destination"],
   gate: ["Stable choices · depth 1", "Select gate"],
   review: ["Nested review · depth 3", "Traverse and review"],
@@ -4356,25 +5726,38 @@ const stageCopy = {
   complete: ["Exact task verdict", "Task complete"],
 };
 
+const startupQuery = new URLSearchParams(window.location.search);
+const ephemeralSessionId = createEphemeralSessionId();
+const aiAdapter = new AdaptiveAIAdapter();
 let logicalNow = null;
 let machine = createMachine();
 let sensorController = null;
 const aimCoordinator = new RadialAimCoordinator();
 let lastChoiceSignature = "";
 let lastTaskSignature = "";
+let lastConversationSignature = "";
 let lastEventSignature = "";
 let lastComparisonSignature = "";
 let lastModeStatsSignature = "";
 let simulationRunning = false;
-let replayLocked = false;
+let replayLocked = startupQuery.get("simulate") === "1";
 let sensorTransitioning = false;
+let preferCompanion = startupQuery.get("companion") === "1";
+let deferredInstallPrompt = null;
+let waitingServiceWorker = null;
+let reloadingForWorker = false;
+let applyingServiceWorkerUpdate = false;
+let activeAIAbort = null;
 
 function sessionNow() {
   return logicalNow === null ? performance.now() : logicalNow;
 }
 
 function createMachine() {
-  return new AdaptiveOrbMachine({ clock: () => sessionNow() });
+  return new AdaptiveOrbMachine({
+    clock: () => sessionNow(),
+    sessionId: ephemeralSessionId,
+  });
 }
 
 function showApplication() {
@@ -4409,7 +5792,7 @@ function createSensorController() {
         text,
         source: "voice",
       });
-      if (result.effect !== "access-request") {
+      if (!["access-request", "ai-request"].includes(result.effect)) {
         sensorController?.announce(machine.state.announcement);
       }
     },
@@ -4420,7 +5803,7 @@ function createSensorController() {
 }
 
 async function startLive() {
-  if (machine.state.status !== "idle") {
+  if (replayLocked || machine.state.status !== "idle") {
     return;
   }
   showApplication();
@@ -4435,14 +5818,14 @@ async function startLive() {
       "Sensors unavailable. Sensor-free controls are active with the same task.";
   } else {
     sensorController.announce(
-      "Adaptive Orb ready. Speak: route three cobalt beacons at fourteen thirty, fragile.",
+      "Adaptive Orb ready. Ask me to create, plan, explain, or navigate. Say a mode name at any time.",
     );
   }
   render();
 }
 
 function startAccessible() {
-  if (machine.state.status !== "idle") {
+  if (replayLocked || machine.state.status !== "idle") {
     return;
   }
   showApplication();
@@ -4457,7 +5840,11 @@ function sleep(milliseconds) {
 }
 
 async function startSimulation() {
-  if (simulationRunning || machine.state.status !== "idle") {
+  if (
+    simulationRunning ||
+    machine.state.status !== "idle" ||
+    (replayLocked && startupQuery.get("simulate") !== "1")
+  ) {
     return;
   }
   simulationRunning = true;
@@ -4465,12 +5852,12 @@ async function startSimulation() {
   showApplication();
   logicalNow = 0;
   elements.assertiveStatus.textContent =
-    "Deterministic simulation started. It will visibly use Orbit, Compass, and Tunnel.";
-  for (let index = 0; index < DETERMINISTIC_SCRIPT.length; index += 1) {
-    const scripted = DETERMINISTIC_SCRIPT[index];
+    "Deterministic multi-turn AI conversation started across Orbit, Compass, and Tunnel.";
+  for (let index = 0; index < CONVERSATION_DETERMINISTIC_SCRIPT.length; index += 1) {
+    const scripted = CONVERSATION_DETERMINISTIC_SCRIPT[index];
     logicalNow = scripted.at;
     dispatchDeterministicStep(machine, scripted);
-    if (index < DETERMINISTIC_SCRIPT.length - 1) {
+    if (index < CONVERSATION_DETERMINISTIC_SCRIPT.length - 1) {
       render();
     }
     const important =
@@ -4483,24 +5870,104 @@ async function startSimulation() {
   }
   simulationRunning = false;
   const record = machine.exportRecord(logicalNow);
+  record.conversationFingerprint = conversationFingerprintFor(record);
   const verified =
-    record.deterministicFingerprint === EXPECTED_DETERMINISTIC_FINGERPRINT &&
-    verifyDeterministicRecord(record);
+    record.conversationFingerprint === EXPECTED_CONVERSATION_FINGERPRINT &&
+    verifyConversationRecord(record);
   if (verified) {
     machine.state.announcement =
-      `Verified exact replay ${EXPECTED_DETERMINISTIC_FINGERPRINT}. All three modes passed.`;
+      `Verified AI conversation replay ${EXPECTED_CONVERSATION_FINGERPRINT}. All three modes and the exact cobalt task passed.`;
     elements.comparisonPanel.open = true;
     elements.assertiveStatus.textContent =
-      "Verified exact task complete using all three modes, one sensor loss recovery, one wrong branch, and undo.";
+      "Verified one multi-turn AI conversation across all scenarios and modes, plus the exact reversible cobalt task.";
     elements.app.dataset.simulationComplete = "true";
-    elements.app.dataset.replayFingerprint = record.deterministicFingerprint;
+    elements.app.dataset.replayFingerprint = record.conversationFingerprint;
   } else {
     machine.state.announcement =
-      `Replay verification failed. Expected ${EXPECTED_DETERMINISTIC_FINGERPRINT}; no success is claimed.`;
+      `Replay verification failed. Expected ${EXPECTED_CONVERSATION_FINGERPRINT}; no success is claimed.`;
     elements.assertiveStatus.textContent = machine.state.announcement;
     elements.app.dataset.simulationComplete = "false";
   }
   render();
+}
+
+function speakCurrentResponse() {
+  const text = machine.state.conversation.currentResponse;
+  if (!text || replayLocked) {
+    return false;
+  }
+  if (sensorController) {
+    sensorController.announce(text);
+    return true;
+  }
+  if (
+    typeof speechSynthesis === "undefined" ||
+    typeof SpeechSynthesisUtterance === "undefined"
+  ) {
+    elements.assertiveStatus.textContent =
+      "Speech synthesis is unavailable. The response remains visible.";
+    return false;
+  }
+  speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 0.96;
+  utterance.pitch = 1;
+  speechSynthesis.speak(utterance);
+  return true;
+}
+
+async function requestAIResponse(result) {
+  if (
+    replayLocked ||
+    result.effect !== "ai-request" ||
+    !result.request ||
+    !Number.isInteger(result.requestId)
+  ) {
+    return;
+  }
+  activeAIAbort?.abort();
+  const controller = new AbortController();
+  activeAIAbort = controller;
+  const companionRequested = preferCompanion;
+  if (companionRequested) {
+    machine.dispatch({
+      type: "AI_PROVIDER_ATTEMPT",
+      provider: "brainstem",
+      at: sessionNow(),
+    });
+  }
+  try {
+    const response = await aiAdapter.respond(result.request, {
+      preferCompanion: companionRequested,
+      scenarioHint: result.scenario,
+      signal: controller.signal,
+    });
+    if (controller.signal.aborted || replayLocked) {
+      return;
+    }
+    const accepted = machine.dispatch({
+      type: "AI_RESPONSE",
+      requestId: result.requestId,
+      response,
+      companionAttempted: companionRequested,
+      at: sessionNow(),
+    });
+    if (accepted.ok) {
+      render();
+      if (machine.state.sessionKind === "live") {
+        sensorController?.announce(machine.state.conversation.currentResponse);
+      }
+    }
+  } catch {
+    if (!controller.signal.aborted) {
+      elements.assertiveStatus.textContent =
+        "AI response could not be validated. Conversation state was preserved.";
+    }
+  } finally {
+    if (activeAIAbort === controller) {
+      activeAIAbort = null;
+    }
+  }
 }
 
 function handleSensorAim(sample) {
@@ -4535,7 +6002,10 @@ function handleSensorGesture(gesture) {
       at: gesture.at,
     });
   }
-  if (result?.ok && result.effect !== "access-request") {
+  if (
+    result?.ok &&
+    !["access-request", "ai-request"].includes(result.effect)
+  ) {
     sensorController?.announce(machine.state.announcement);
   }
 }
@@ -4547,6 +6017,10 @@ function dispatchAndRender(action) {
       effect: "replay-rejected",
       reason: "deterministic-replay-locked",
     };
+  }
+  if (["STOP", "CANCEL", "UNDO"].includes(action.type)) {
+    activeAIAbort?.abort();
+    activeAIAbort = null;
   }
   const result = machine.dispatch(action);
   if (result.effect === "access-request") {
@@ -4571,6 +6045,9 @@ function dispatchAndRender(action) {
     sensorController = null;
   }
   render();
+  if (result.effect === "ai-request") {
+    void requestAIResponse(result);
+  }
   return result;
 }
 
@@ -4599,20 +6076,82 @@ function displayValue(value) {
 }
 
 function renderTask() {
-  const signature = JSON.stringify(machine.state.task);
+  const conversation = machine.state.conversation;
+  const signature = JSON.stringify({
+    task: machine.state.task,
+    scenario: conversation.scenario,
+    turns: conversation.turns.length,
+    branch: conversation.branchPath,
+    provider: conversation.provider,
+  });
   if (signature === lastTaskSignature) {
     return;
   }
   lastTaskSignature = signature;
   elements.taskValues.replaceChildren();
-  for (const [key, value] of Object.entries(machine.state.task)) {
+  const values = [
+    ["Scenario", conversation.scenario || "choose"],
+    ["Turns", conversation.turns.length],
+    ["Branch", conversation.branchPath.at(-1) || "root"],
+    ["AI", conversation.provider],
+    ...Object.entries(machine.state.task)
+      .filter(([, value]) => value !== null && value !== false)
+      .map(([key, value]) => [fieldLabel(key), displayValue(value)]),
+  ];
+  for (const [key, value] of values) {
     const item = document.createElement("li");
     const label = document.createElement("span");
     const current = document.createElement("strong");
-    label.textContent = fieldLabel(key);
+    label.textContent = key;
     current.textContent = displayValue(value);
     item.append(label, current);
     elements.taskValues.append(item);
+  }
+}
+
+function renderConversation() {
+  const conversation = machine.state.conversation;
+  const recent = conversation.turns.slice(-6);
+  const signature = JSON.stringify({
+    pending: conversation.pending,
+    scenario: conversation.scenario,
+    response: conversation.currentResponse,
+    provider: conversation.provider,
+    degraded: conversation.degraded,
+    notice: conversation.notice,
+    recent: recent.map((turn) => [
+      turn.role,
+      turn.semantic,
+      turn.scenario,
+      turn.mode,
+    ]),
+  });
+  if (signature === lastConversationSignature) {
+    return;
+  }
+  lastConversationSignature = signature;
+  const scenario = conversation.scenario
+    ? AI_SCENARIOS[conversation.scenario]
+    : null;
+  elements.responseKicker.textContent =
+    `${conversation.provider === "brainstem" ? "RAPP Brainstem" : "Offline demo AI"} · memory-only`;
+  elements.responseTitle.textContent = conversation.pending
+    ? `Preparing ${scenario?.title || "AI"} response`
+    : scenario
+      ? `${scenario.title} · adaptive response`
+      : "Choose a scenario or speak broadly";
+  elements.responseText.textContent =
+    conversation.currentResponse ||
+    "Demo AI is ready offline. Voice Orbit will turn broad intent into predicted response and action petals.";
+  elements.conversationLandmarks.replaceChildren();
+  for (const [index, turn] of recent.entries()) {
+    const item = document.createElement("li");
+    const role = turn.role === "assistant" ? "AI" : "You";
+    item.textContent =
+      `${role} · ${turn.semantic} · ${turn.mode || "orbit"}`;
+    item.dataset.role = turn.role;
+    item.style.setProperty("--turn-index", String(index));
+    elements.conversationLandmarks.append(item);
   }
 }
 
@@ -4630,7 +6169,7 @@ function renderChoices() {
       button.type = "button";
       button.className = "choice";
       button.dataset.optionId = candidate.id;
-      button.disabled = replayLocked;
+      button.disabled = replayLocked || machine.state.conversation.pending;
       button.setAttribute(
         "aria-label",
         `${candidate.label}. ${candidate.detail}. Highlight only; separate confirmation required.`,
@@ -4652,7 +6191,7 @@ function renderChoices() {
 
   for (const button of elements.choiceLayer.querySelectorAll(".choice")) {
     const highlighted = button.dataset.optionId === machine.state.highlight;
-    button.disabled = replayLocked;
+    button.disabled = replayLocked || machine.state.conversation.pending;
     button.dataset.highlighted = String(highlighted);
     button.dataset.armed = String(highlighted && machine.state.armed);
     button.setAttribute("aria-pressed", String(highlighted));
@@ -4685,7 +6224,7 @@ function renderEvents() {
   }
   lastEventSignature = signature;
   elements.eventTrace.replaceChildren();
-  for (const event of recent.toReversed()) {
+  for (const event of [...recent].reverse()) {
     const item = document.createElement("li");
     item.textContent = `${String(event.atMs).padStart(4, "0")} ms · ${event.type}`;
     item.dataset.important = String(
@@ -4721,7 +6260,14 @@ function render() {
   const record = machine.exportRecord(sessionNow());
   const grammar = grammarCopy[state.mode];
   const stage =
-    state.stage === "intent" && state.entryStep
+    state.conversation.focused
+      ? [
+          `${state.conversation.scenario || "Scenario"} conversation · depth ${state.conversation.shape.depth}`,
+          state.conversation.pending
+            ? "AI response pending"
+            : `${AI_SCENARIOS[state.conversation.scenario]?.title || "Choose"} response petals`,
+        ]
+      : state.stage === "intent" && state.entryStep
       ? [
           `Semantic entry · ${state.entryStep}`,
           `Select ${state.entryStep}`,
@@ -4733,6 +6279,12 @@ function render() {
     state.modePreference === "auto" ? "auto" : "spoken/manual"
   }`;
   elements.modeStatus.dataset.active = "true";
+  elements.aiStatus.textContent = state.conversation.degraded
+    ? "Companion unavailable · demo AI"
+    : state.conversation.provider === "brainstem"
+      ? "RAPP Brainstem · same origin"
+      : "Demo AI · offline";
+  elements.aiStatus.dataset.active = String(state.conversation.provider === "brainstem");
   elements.sensorStatus.textContent =
     state.sessionKind === "accessible"
       ? "Sensor-free"
@@ -4778,13 +6330,21 @@ function render() {
   elements.dwellRing.style.setProperty("--dwell", `${percentage}%`);
 
   elements.modeTransitions.textContent = String(state.metrics.modeTransitions.length);
+  elements.conversationTurns.textContent = String(state.conversation.turns.length);
+  elements.aiResponses.textContent =
+    `${state.conversation.metrics.responses} / ${state.conversation.metrics.failovers}`;
   elements.falseCommits.textContent = String(state.metrics.falseCommits);
   elements.centerCancels.textContent = String(state.metrics.centerCancels);
   elements.voiceRepairs.textContent = String(state.metrics.voiceRepairs);
   elements.sensorRecovery.textContent = `${state.metrics.sensorLosses} / ${state.metrics.sensorRecoveries}`;
-  elements.confirmChoice.disabled = !state.highlight || !state.armed;
+  elements.confirmChoice.disabled =
+    state.conversation.pending || !state.highlight || !state.armed;
   elements.undoChoice.disabled = state.history.length === 0;
   elements.resumeSession.disabled = !state.freezeCauses.includes("user-stop");
+  elements.speakResponse.disabled = !state.conversation.currentResponse;
+  elements.companionMode.textContent = preferCompanion
+    ? "AI: prefer companion"
+    : "AI: offline demo";
   if (replayLocked) {
     for (const control of [
       elements.previousChoice,
@@ -4793,6 +6353,10 @@ function render() {
       elements.restChoice,
       elements.undoChoice,
       elements.centerOrb,
+      elements.speakResponse,
+      elements.companionMode,
+      elements.installApp,
+      elements.applyUpdate,
       elements.exportMetrics,
       elements.useAccessible,
       elements.stopSensors,
@@ -4803,6 +6367,7 @@ function render() {
   }
 
   renderTask();
+  renderConversation();
   renderChoices();
   renderEvents();
   renderModeStats(record);
@@ -4870,6 +6435,73 @@ function stopSession(source) {
   return dispatchAndRender({ type: "STOP", source });
 }
 
+function toggleCompanion() {
+  if (replayLocked) {
+    return;
+  }
+  preferCompanion = !preferCompanion;
+  machine.state.conversation.notice = preferCompanion
+    ? "Companion preferred. The next AI turn will use same-origin /api/chat and fail over safely."
+    : "Offline deterministic demo AI selected. No application AI request will be made.";
+  machine.state.announcement = machine.state.conversation.notice;
+  elements.assertiveStatus.textContent = machine.state.conversation.notice;
+  render();
+}
+
+async function promptInstall() {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    elements.installApp.disabled = true;
+    return;
+  }
+  byId("installHelp").open = true;
+  elements.assertiveStatus.textContent =
+    "On iPhone or iPad, use Safari Share, then Add to Home Screen.";
+}
+
+function offerServiceWorkerUpdate(worker) {
+  waitingServiceWorker = worker;
+  elements.applyUpdate.hidden = false;
+  elements.pwaStatus.textContent = "App update ready";
+}
+
+async function registerOfflineApp() {
+  if (!("serviceWorker" in navigator)) {
+    elements.pwaStatus.textContent = "Offline install unavailable";
+    return;
+  }
+  try {
+    const registration = await navigator.serviceWorker.register(
+      "./service-worker.js",
+      {
+        scope: "./",
+        updateViaCache: "none",
+      },
+    );
+    elements.pwaStatus.textContent = navigator.standalone
+      ? "Installed · offline shell"
+      : "Offline shell ready";
+    if (registration.waiting) {
+      offerServiceWorkerUpdate(registration.waiting);
+    }
+    registration.addEventListener("updatefound", () => {
+      const installing = registration.installing;
+      installing?.addEventListener("statechange", () => {
+        if (
+          installing.state === "installed" &&
+          navigator.serviceWorker.controller
+        ) {
+          offerServiceWorkerUpdate(installing);
+        }
+      });
+    });
+  } catch {
+    elements.pwaStatus.textContent = "Online only · install help available";
+  }
+}
+
 elements.startLive.addEventListener("click", startLive);
 elements.startAccessible.addEventListener("click", startAccessible);
 elements.startSimulation.addEventListener("click", startSimulation);
@@ -4892,6 +6524,13 @@ elements.undoChoice.addEventListener("click", () =>
   dispatchAndRender({ type: "UNDO", source: "touch" }),
 );
 elements.exportMetrics.addEventListener("click", exportMetrics);
+elements.speakResponse.addEventListener("click", speakCurrentResponse);
+elements.companionMode.addEventListener("click", toggleCompanion);
+elements.installApp.addEventListener("click", promptInstall);
+elements.applyUpdate.addEventListener("click", () => {
+  applyingServiceWorkerUpdate = true;
+  waitingServiceWorker?.postMessage({ type: "ACTIVATE_UPDATE" });
+});
 elements.useAccessible.addEventListener("click", () => transitionToSensorFree("touch"));
 elements.stopSensors.addEventListener("click", () => transitionToSensorFree("end-sensors"));
 elements.resumeSession.addEventListener("click", () => {
@@ -4942,6 +6581,23 @@ document.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("resize", layoutChoices);
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  elements.installApp.disabled = false;
+  elements.pwaStatus.textContent = "Install available";
+});
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  elements.installApp.disabled = true;
+  elements.pwaStatus.textContent = "Installed · offline shell";
+});
+navigator.serviceWorker?.addEventListener("controllerchange", () => {
+  if (applyingServiceWorkerUpdate && !reloadingForWorker) {
+    reloadingForWorker = true;
+    window.location.reload();
+  }
+});
 document.addEventListener("visibilitychange", () => {
   if (document.hidden && machine.state.status !== "idle") {
     machine.dispatch({ type: "CENTER", source: "visibility" });
@@ -4949,6 +6605,11 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 window.addEventListener("pagehide", () => {
+  activeAIAbort?.abort();
+  activeAIAbort = null;
+  if (typeof speechSynthesis !== "undefined") {
+    speechSynthesis.cancel();
+  }
   if (machine.state.status !== "idle") {
     machine.dispatch({ type: "PAGEHIDE", source: "pagehide" });
   }
@@ -4961,8 +6622,12 @@ window.addEventListener("pageshow", (event) => {
   }
 });
 
-const query = new URLSearchParams(window.location.search);
-if (query.get("simulate") === "1") {
+void registerOfflineApp();
+
+if (startupQuery.get("simulate") === "1") {
+  elements.startLive.disabled = true;
+  elements.startAccessible.disabled = true;
+  elements.startSimulation.disabled = true;
   requestAnimationFrame(startSimulation);
 }
     </script>

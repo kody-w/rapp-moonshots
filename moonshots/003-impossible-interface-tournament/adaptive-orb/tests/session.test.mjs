@@ -138,7 +138,7 @@ test("aim cache follows machine highlight and long gaps require reacquisition", 
   const north = { x: 0.5, y: 0.1, zone: "radial" };
 
   assert.equal(aim.handle(machine, { ...north, at: 100 }).effect, "highlight");
-  assert.equal(machine.state.highlight, "route-beacons");
+  assert.equal(machine.state.highlight, "scenario-create");
   aim.handle(machine, { ...north, at: 300 });
   assert.equal(machine.state.dwellMs, 200);
 
@@ -150,7 +150,7 @@ test("aim cache follows machine highlight and long gaps require reacquisition", 
   assert.equal(machine.state.events.at(-1).detail.reacquire, true);
 
   aim.handle(machine, { ...north, at: 900 });
-  assert.equal(machine.state.highlight, "route-beacons");
+  assert.equal(machine.state.highlight, "scenario-create");
   assert.equal(machine.state.dwellMs, 0);
   const eventCount = machine.state.events.length;
   const duplicate = aim.handle(machine, { ...north, at: 900 });

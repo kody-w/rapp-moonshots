@@ -5,8 +5,9 @@
   "type": "module",
   "description": "Unified multimodal Adaptive Orb tournament application",
   "scripts": {
-    "build": "node scripts/build.mjs",
-    "test": "npm run build && node --test tests/*.test.mjs && node scripts/validate.mjs",
+    "build": "node scripts/generate-icons.mjs && node scripts/build.mjs",
+    "test:python": "python3 -m unittest discover -s tests -p 'test_*.py'",
+    "test": "npm run build && node --test tests/*.test.mjs && npm run test:python && node scripts/validate.mjs",
     "validate": "node scripts/validate.mjs",
     "evidence": "node scripts/evidence.mjs",
     "verify": "npm test && npm run evidence && node scripts/validate.mjs --check-evidence"

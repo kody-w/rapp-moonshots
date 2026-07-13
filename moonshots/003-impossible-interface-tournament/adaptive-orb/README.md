@@ -1,21 +1,24 @@
 # Adaptive Orb
 
-Adaptive Orb is the unified Moonshot 003 product. It is one application with
-one persistent central safe-rest orb, one cobalt-beacon task, one history, one
-sensor/privacy lifecycle, and three interchangeable interaction grammars:
+Adaptive Orb is one AI conversation—not a chat box and not three separate
+pages. One memory-only conversation, task, undo history, safety state, sensor
+lifecycle, and metrics model moves between three contextual grammars:
 
-- **Voice Orbit** captures broad intent, time, and handling, then generates
-  predictive petals.
-- **Gaze Compass** stabilizes fine selection among four to eight radial choices.
-- **Gesture Tunnel** exposes nested review, repair, undo, and home layers.
+- **Voice Orbit** accepts broad spoken intent and offers predicted response or
+  action petals.
+- **Gaze Compass** stabilizes four to eight bounded follow-ups for fine
+  highlighting. Gaze never commits.
+- **Gesture Tunnel** keeps nested explanations, revisions, tools, and scenarios
+  navigable without losing the parent conversation.
 
-It is not three pages and contains no iframe. Mode changes never replace the
-task machine.
+Automatic selection uses the current response shape. Say `orbit`, `compass`,
+`tunnel`, or `auto mode` to override it without replacing state. Center relaxes
+and clears aim; explicit voice, gesture, keyboard, touch, or switch confirmation
+is always separate.
 
-## Run
+## Public PWA
 
-No install or dependency is required. Camera access needs localhost or another
-secure context.
+No install step or dependency is required:
 
 ```bash
 cd moonshots/003-impossible-interface-tournament/adaptive-orb
@@ -24,105 +27,121 @@ python3 -m http.server 8073
 
 Open:
 
-- live one-click path: <http://localhost:8073/>
-- deterministic all-mode replay: <http://localhost:8073/?simulate=1>
-- either theme: append `&scoutTheme=light` or `&scoutTheme=dark`
+- public/offline conversation: <http://localhost:8073/>
+- deterministic multi-turn replay: <http://localhost:8073/?simulate=1>
+- light/dark theme: append `&scoutTheme=light` or `&scoutTheme=dark`
 
-The launch screen also offers **Start sensor-free access**, which requests no
-camera or microphone and does not create Web Speech recognition.
+GitHub Pages works without credentials. The default deterministic demo AI makes
+no AI request and covers four scenario packs:
 
-Sensor-free task entry is fully semantic and UI-exposed: choose Route beacons,
-then quantity, color, time, handling, the predicted intent, destination, gate,
-review confirmation, and home. Keyboard, touch, and single-switch controls can
-complete this entire path without a synthetic voice event.
+| Pack | AI situation | Natural grammar |
+|---|---|---|
+| Create | broad creative direction and predicted actions | Orbit |
+| Plan | bounded priorities that can be compared | Compass |
+| Explain | nested concepts and revisions | Tunnel |
+| Navigate | stable routes that can open deeper tools/tasks | Compass → Tunnel |
 
-## Normal flow
+The exact cobalt-beacon task remains a reversible Navigate scenario.
 
-1. Select **Start voice + camera** once.
-2. Say “Route three cobalt beacons at 14:30, mark them fragile.”
-3. Say “confirm” to accept the predicted broad intent.
-4. Hold a coarse direction on ORION-7, then explicitly say “confirm” or nod.
-5. Select North Gate the same way.
-6. Navigate the review tunnel with coarse horizontal motion or option names.
-7. Explicitly confirm the route and Return home.
+## Optional RAPP Brainstem companion
 
-After launch, pointer and keyboard are not required in the intended live flow.
-Speech `orbit`, `compass`, and `tunnel` manually changes grammar; `auto mode`
-restores shape-based selection. `stop`, `cancel`, and `undo` preempt ordinary
-speech.
+`server.py` serves the same static PWA and owns the only network bridge:
 
-Automatic mode choice is deterministic:
+```bash
+RAPP_BRAINSTEM_URL=http://127.0.0.1:7071/chat \
+python3 server.py --bind 127.0.0.1 --port 8073
+```
 
-- broad or unstable intent → Orbit;
-- stable flat sets of 4–8 choices → Compass;
-- hierarchical or depth ≥ 2 → Tunnel.
+Optional server-only settings:
 
-## Safety contract
+- `RAPP_BRAINSTEM_SECRET` — sent upstream as a bearer secret;
+- `RAPP_BRAINSTEM_TIMEOUT` — 1–30 seconds, default 8;
+- `ADAPTIVE_ORB_BIND` / `ADAPTIVE_ORB_PORT` — CLI flags take precedence.
 
-- Center always relaxes aim and cancels dwell.
-- Gaze can highlight and arm, but has no execution path.
-- Voice, gesture, keyboard, touch, or switch confirmation is explicit.
-- Task confirmation is local and reversible; the app performs no dispatch or
-  irreversible external action.
-- Camera, microphone, raw frame, content, and processed-estimate status share
-  one controller but create independent safety causes.
-- A loss clears pending aim. Removing one cause never removes another.
-- Task values, history, freeze causes, sensor freshness, and metrics survive
-  grammar changes.
-- Sensor-free controls use the same task state and separate highlight/confirm
-  phases.
+The bind default and Brainstem URL default are loopback. The browser never
+receives, stores, or logs a key. Companion mode is opt-in in the footer (or
+`?companion=1`) and posts only this strict same-origin contract to `/api/chat`:
 
-## Honest sensing and privacy
+```json
+{
+  "user_input": "bounded text",
+  "conversation_history": [{"role": "user", "content": "bounded text"}],
+  "session_id": "ephemeral-session-id"
+}
+```
 
-The live path makes one combined `getUserMedia` request. `FaceDetector`, when
-available, contributes only a transient face-box/head-position proxy. Otherwise
-a 48×36 local frame-motion estimate is used. Both are visibly labeled coarse
-and **not eye tracking**.
+The stdlib proxy enforces an exact JSON shape, 64 KiB request cap, bounded
+history/text, upstream timeout and response cap, no CORS, no-store responses,
+safe logs, and normalized output. Unavailable or invalid Brainstem output
+visibly falls back to deterministic demo AI with the same conversation intact.
 
-Every new media frame is identity-gated. Uniform, dark, overexposed,
-low-detail, or nearly unchanged content cannot refresh the content gate.
-Raw `ImageData` bytes are zeroed and the analysis canvas is cleared every turn.
-One rolling derived grayscale comparison and at most one registered detector
-working copy may coexist. Every registered copy is zeroed on result, detector
-replacement, invalid content, or shutdown. Delayed detector results carry
-lifecycle, content, and detector-identity epochs.
+## PWA and iOS
 
-The app has no network client, recorder, persistence API, analytics, service
-worker, external asset, or raw transcript export. Browser Web Speech API
-implementations may send audio to a browser/OS vendor; this limitation is
-visible before permission and during use. Sensor-free access avoids it.
+- `manifest.webmanifest` uses standalone display and only local PNG icons,
+  including a 180 px Apple touch icon.
+- On iPhone/iPad Safari: **Share → Add to Home Screen**.
+- Camera and microphone require HTTPS or localhost.
+- `webkitSpeechRecognition` is used when available. Touch, keyboard, and
+  switch parity remain when iOS speech, `FaceDetector`, or camera sensing is
+  unavailable.
+- Portrait, landscape, dynamic viewport, large radial targets, and safe-area
+  insets are supported.
+- The versioned service worker caches only the static shell, manifest, and local
+  icons. It bypasses `/api/`, POST, cross-origin, media, conversation, AI
+  responses, calibration, metrics, and exports.
+- A waiting update is applied only through **Apply app update**, then reloads
+  under the new controller.
 
-## Deterministic acceptance fixture
+See [ROLLBACK.md](ROLLBACK.md) for unregister and cache cleanup.
 
-`?simulate=1` visibly executes one scripted task with logical time:
+## Permission and safety flow
 
-- Orbit captures broad intent/time/handling and confirms its prediction;
-- Compass blocks a gaze commit, performs center rest, injects content loss,
-  recovers, then selects ORION-7 and North Gate;
-- Tunnel intentionally enters the wrong Amend branch, undoes it, confirms the
-  route, and returns home.
+One **Start voice + camera** click requests one combined media stream. After
+that, the intended primary flow is hands-free: speak broad intent, hold a coarse
+direction to highlight, and nod or speak to confirm. **Start sensor-free
+access** creates no media or recognition and exposes the same semantic
+scenario/task path to touch, keyboard, and switch controls.
 
-Replay mode rejects pointer, voice, keyboard, switch, and programmatic state
-actions. It claims success only after exact state and fingerprint `c1b6e39f`
-both match.
+Sensing remains deliberately coarse. `FaceDetector`, when available, supplies
+only a transient face-box/head-position proxy. Otherwise a 48×36 local
+frame-motion estimate is used. Neither is eye tracking. Fresh frame, valid
+content, and accepted processing timestamps expire independently. Invalid
+content immediately revokes sensor aim/arm. Delayed detector and permission
+work is generation-, content-, identity-, and request-gated.
 
-Checked-in evidence reports exact completion in 8,700 ms scripted time, all
-three modes, zero false commits, one blocked gaze attempt, one center cancel,
-two voice repairs, one loss/recovery, and one intentional wrong branch/undo.
-This is logic evidence, not a measured human completion speed.
+`stop`, `cancel`, and `undo` preempt normal speech. Stop also aborts pending AI
+work and tears down camera, microphone, recognition, synthesis, derived frame
+buffers, and pending detector copies. Sensor-free transitions stop those
+resources before accessible status is committed or rendered.
 
-## Metrics export
+## Memory and export
 
-**Export local JSON metrics** downloads semantic state only:
+Conversation text exists only in the current page memory (or is sent to the
+companion when explicitly enabled). There is no transcript, media, AI response,
+calibration, or metrics persistence. Web Speech itself may use browser/OS
+vendor processing; that boundary is disclosed before permission.
 
-- mode transitions and exact-task verdict;
-- completion time, errors, false commits, blocked gaze attempts;
-- center cancels, voice repairs, commits, and undo;
-- loss/recovery counts and recovery duration;
-- per-mode active time, dwell, and confirmations;
-- task values and sensor status/freshness timestamps.
+**Export public-safe semantic JSON** is explicit. It contains scenario IDs,
+turn roles, fixed application-owned semantic labels, modes, task fields, safety
+metrics, and provider status—not conversation/model text, model-supplied option
+IDs, session ID, frames, audio, face boxes, or secrets.
 
-Frames, audio, raw transcripts, face boxes, and identifiers are excluded.
+## Deterministic evidence
+
+`?simulate=1` locks all external input and conducts one 12-turn semantic AI
+conversation through Create, Plan, Explain, and Navigate. It automatically uses
+all three grammars, enters and undoes an intentional wrong explanation branch,
+then completes the exact cobalt task with the prior gaze/freshness/undo safety
+drill.
+
+- conversation fingerprint: `071ba015`;
+- retained task-safety fingerprint: `c1b6e39f`;
+- exact task: true;
+- false commits: 0;
+- scripted completion: 12,700 ms (logic timing, not human speed).
+
+Success is announced only after exact semantic state and the conversation
+fingerprint match. Evidence exports contain no prompt or response text.
 
 ## Build and verify
 
@@ -133,20 +152,18 @@ npm run evidence
 npm run verify
 ```
 
-The build reads public-safe deterministic results from all three merged
-prototype tracks, then generates the dependency-free, self-contained
-`index.html`. Node’s built-in test runner and the static validator cover shared
-state, mode switching, no-gaze commit, exact all-mode replay, freshness,
-lifecycle races, privacy, Clawpilot theme, parity, and external-asset absence.
+The suite uses Node's test runner and Python's stdlib `unittest`; no packages are
+installed. It covers AI adapter failover, shared conversation/task/history,
+automatic/manual modes, replay locking, PWA assets/cache policy, iOS hooks,
+proxy validation and secret handling, sensor-free parity, detector races,
+privacy, Clawpilot theming, and checked-in evidence.
 
-## Files
+## Important files
 
-- `index.html` — generated self-contained demo
-- `src/core.mjs` — shared task, history, safety, modes, metrics, replay
-- `src/sensors.mjs` — one guarded media/speech/freshness lifecycle
-- `src/app.mjs` — rendering, live inputs, parity, export, page lifecycle
-- `src/comparison.mjs` — normalized tournament comparison
-- `src/index.template.html` / `src/styles.css` — Clawpilot application shell
-- `scripts/` — dependency-free build, evidence, and policy validation
-- `tests/` — Node behavior, lifecycle, privacy, and static tests
-- `evidence/` — deterministic semantic metrics and replay
+- `index.html` — generated self-contained application shell;
+- `src/ai.mjs` — scenario packs, deterministic responder, strict adapters;
+- `src/core.mjs` — shared conversation/task/history/safety machine;
+- `src/sensors.mjs` / `src/session.mjs` — guarded media and aim lifecycles;
+- `server.py` — optional same-origin Brainstem companion;
+- `manifest.webmanifest`, `service-worker.js`, `icons/` — local PWA;
+- `evidence/` — public-safe task and conversation replay records.
