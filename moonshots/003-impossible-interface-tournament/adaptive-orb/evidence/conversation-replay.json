@@ -1,0 +1,678 @@
+{
+  "schemaVersion": 1,
+  "conversationFingerprint": "071ba015",
+  "expectedFingerprint": "071ba015",
+  "exactStateVerified": true,
+  "externalInputLocked": true,
+  "semanticEventCount": 64,
+  "events": [
+    {
+      "seq": 1,
+      "atMs": 0,
+      "type": "session.started",
+      "detail": {
+        "kind": "simulation"
+      }
+    },
+    {
+      "seq": 2,
+      "atMs": 100,
+      "type": "conversation.user-intent",
+      "detail": {
+        "scenario": "create",
+        "source": "voice",
+        "requestId": 1,
+        "turn": 1
+      }
+    },
+    {
+      "seq": 3,
+      "atMs": 200,
+      "type": "conversation.assistant-response",
+      "detail": {
+        "scenario": "create",
+        "provider": "demo",
+        "degraded": false,
+        "suggestionCount": 5,
+        "turn": 2
+      }
+    },
+    {
+      "seq": 4,
+      "atMs": 300,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "ai-option",
+        "source": "voice",
+        "changed": true,
+        "mode": "orbit"
+      }
+    },
+    {
+      "seq": 5,
+      "atMs": 325,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "confirmed-ai-option",
+        "source": "voice",
+        "mode": "orbit",
+        "reversible": true
+      }
+    },
+    {
+      "seq": 6,
+      "atMs": 425,
+      "type": "conversation.assistant-response",
+      "detail": {
+        "scenario": "create",
+        "provider": "demo",
+        "degraded": false,
+        "suggestionCount": 5,
+        "turn": 4
+      }
+    },
+    {
+      "seq": 7,
+      "atMs": 525,
+      "type": "conversation.user-intent",
+      "detail": {
+        "scenario": "plan",
+        "source": "voice",
+        "requestId": 3,
+        "turn": 5
+      }
+    },
+    {
+      "seq": 8,
+      "atMs": 625,
+      "type": "mode.changed",
+      "detail": {
+        "from": "orbit",
+        "to": "compass",
+        "source": "auto:ai-response"
+      }
+    },
+    {
+      "seq": 9,
+      "atMs": 625,
+      "type": "conversation.assistant-response",
+      "detail": {
+        "scenario": "plan",
+        "provider": "demo",
+        "degraded": false,
+        "suggestionCount": 5,
+        "turn": 6
+      }
+    },
+    {
+      "seq": 10,
+      "atMs": 675,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "ai-option",
+        "source": "gaze",
+        "changed": true,
+        "mode": "compass"
+      }
+    },
+    {
+      "seq": 11,
+      "atMs": 1575,
+      "type": "choice.armed",
+      "detail": {
+        "id": "ai-option",
+        "mode": "compass",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 12,
+      "atMs": 1650,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "confirmed-ai-option",
+        "source": "gesture",
+        "mode": "compass",
+        "reversible": true
+      }
+    },
+    {
+      "seq": 13,
+      "atMs": 1750,
+      "type": "conversation.assistant-response",
+      "detail": {
+        "scenario": "plan",
+        "provider": "demo",
+        "degraded": false,
+        "suggestionCount": 5,
+        "turn": 8
+      }
+    },
+    {
+      "seq": 14,
+      "atMs": 1850,
+      "type": "mode.changed",
+      "detail": {
+        "from": "compass",
+        "to": "orbit",
+        "source": "auto:conversation-input"
+      }
+    },
+    {
+      "seq": 15,
+      "atMs": 1850,
+      "type": "conversation.user-intent",
+      "detail": {
+        "scenario": "explain",
+        "source": "voice",
+        "requestId": 5,
+        "turn": 9
+      }
+    },
+    {
+      "seq": 16,
+      "atMs": 1950,
+      "type": "mode.changed",
+      "detail": {
+        "from": "orbit",
+        "to": "tunnel",
+        "source": "auto:ai-response"
+      }
+    },
+    {
+      "seq": 17,
+      "atMs": 1950,
+      "type": "conversation.assistant-response",
+      "detail": {
+        "scenario": "explain",
+        "provider": "demo",
+        "degraded": false,
+        "suggestionCount": 5,
+        "turn": 10
+      }
+    },
+    {
+      "seq": 18,
+      "atMs": 2000,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "ai-option",
+        "source": "gesture",
+        "changed": true,
+        "mode": "tunnel"
+      }
+    },
+    {
+      "seq": 19,
+      "atMs": 2900,
+      "type": "choice.armed",
+      "detail": {
+        "id": "ai-option",
+        "mode": "tunnel",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 20,
+      "atMs": 2975,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "confirmed-ai-option",
+        "source": "gesture",
+        "mode": "tunnel",
+        "reversible": true
+      }
+    },
+    {
+      "seq": 21,
+      "atMs": 3050,
+      "type": "conversation.assistant-response",
+      "detail": {
+        "scenario": "explain",
+        "provider": "demo",
+        "degraded": false,
+        "suggestionCount": 5,
+        "turn": 12
+      }
+    },
+    {
+      "seq": 22,
+      "atMs": 3125,
+      "type": "history.undo",
+      "detail": {
+        "source": "voice",
+        "restored": "confirmed-ai-option"
+      }
+    },
+    {
+      "seq": 23,
+      "atMs": 3200,
+      "type": "mode.changed",
+      "detail": {
+        "from": "tunnel",
+        "to": "orbit",
+        "source": "auto:conversation-input"
+      }
+    },
+    {
+      "seq": 24,
+      "atMs": 3200,
+      "type": "conversation.user-intent",
+      "detail": {
+        "scenario": "navigate",
+        "source": "voice",
+        "requestId": 7,
+        "turn": 11
+      }
+    },
+    {
+      "seq": 25,
+      "atMs": 3300,
+      "type": "mode.changed",
+      "detail": {
+        "from": "orbit",
+        "to": "compass",
+        "source": "auto:ai-response"
+      }
+    },
+    {
+      "seq": 26,
+      "atMs": 3300,
+      "type": "conversation.assistant-response",
+      "detail": {
+        "scenario": "navigate",
+        "provider": "demo",
+        "degraded": false,
+        "suggestionCount": 5,
+        "turn": 12
+      }
+    },
+    {
+      "seq": 27,
+      "atMs": 3350,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "ai-option",
+        "source": "voice",
+        "changed": true,
+        "mode": "compass"
+      }
+    },
+    {
+      "seq": 28,
+      "atMs": 3375,
+      "type": "mode.changed",
+      "detail": {
+        "from": "compass",
+        "to": "orbit",
+        "source": "auto:task-focus"
+      }
+    },
+    {
+      "seq": 29,
+      "atMs": 3375,
+      "type": "conversation.task-focused",
+      "detail": {
+        "source": "conversation-choice"
+      }
+    },
+    {
+      "seq": 30,
+      "atMs": 3375,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "confirmed-ai-option",
+        "source": "voice",
+        "mode": "compass",
+        "reversible": true
+      }
+    },
+    {
+      "seq": 31,
+      "atMs": 4100,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "accept-intent",
+        "source": "prediction",
+        "changed": true,
+        "mode": "orbit"
+      }
+    },
+    {
+      "seq": 32,
+      "atMs": 4100,
+      "type": "voice.intent-captured",
+      "detail": {
+        "fields": [
+          "action",
+          "color",
+          "handling",
+          "quantity",
+          "time"
+        ]
+      }
+    },
+    {
+      "seq": 33,
+      "atMs": 4400,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "accept-intent",
+        "source": "voice",
+        "mode": "orbit",
+        "reversible": true
+      }
+    },
+    {
+      "seq": 34,
+      "atMs": 4400,
+      "type": "mode.changed",
+      "detail": {
+        "from": "orbit",
+        "to": "compass",
+        "source": "auto:task-advanced"
+      }
+    },
+    {
+      "seq": 35,
+      "atMs": 4550,
+      "type": "voice.repair",
+      "detail": {
+        "reason": "choice-unrecognized"
+      }
+    },
+    {
+      "seq": 36,
+      "atMs": 4600,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "destination-orion",
+        "source": "gaze",
+        "changed": true,
+        "mode": "compass"
+      }
+    },
+    {
+      "seq": 37,
+      "atMs": 5525,
+      "type": "choice.armed",
+      "detail": {
+        "id": "destination-orion",
+        "mode": "compass",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 38,
+      "atMs": 5600,
+      "type": "action.blocked",
+      "detail": {
+        "reason": "gaze-never-confirms",
+        "source": "gaze"
+      }
+    },
+    {
+      "seq": 39,
+      "atMs": 5700,
+      "type": "center.rest",
+      "detail": {
+        "source": "gaze-center",
+        "canceledPending": true
+      }
+    },
+    {
+      "seq": 40,
+      "atMs": 5825,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "destination-orion",
+        "source": "gaze",
+        "changed": true,
+        "mode": "compass"
+      }
+    },
+    {
+      "seq": 41,
+      "atMs": 6725,
+      "type": "choice.armed",
+      "detail": {
+        "id": "destination-orion",
+        "mode": "compass",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 42,
+      "atMs": 6800,
+      "type": "safety.freeze-added",
+      "detail": {
+        "cause": "content-stale",
+        "sensorCause": true
+      }
+    },
+    {
+      "seq": 43,
+      "atMs": 6800,
+      "type": "sensor.loss",
+      "detail": {
+        "cause": "content-stale",
+        "sensor": "estimator"
+      }
+    },
+    {
+      "seq": 44,
+      "atMs": 6850,
+      "type": "action.blocked",
+      "detail": {
+        "reason": "frozen",
+        "source": "voice"
+      }
+    },
+    {
+      "seq": 45,
+      "atMs": 7150,
+      "type": "safety.freeze-removed",
+      "detail": {
+        "cause": "content-stale",
+        "sensorCause": true
+      }
+    },
+    {
+      "seq": 46,
+      "atMs": 7150,
+      "type": "sensor.recovered",
+      "detail": {
+        "cause": "content-stale",
+        "removed": true
+      }
+    },
+    {
+      "seq": 47,
+      "atMs": 7150,
+      "type": "sensor.status",
+      "detail": {
+        "sensor": "estimator",
+        "status": "simulated"
+      }
+    },
+    {
+      "seq": 48,
+      "atMs": 7225,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "destination-orion",
+        "source": "gaze",
+        "changed": true,
+        "mode": "compass"
+      }
+    },
+    {
+      "seq": 49,
+      "atMs": 8125,
+      "type": "choice.armed",
+      "detail": {
+        "id": "destination-orion",
+        "mode": "compass",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 50,
+      "atMs": 8200,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "destination-orion",
+        "source": "voice",
+        "mode": "compass",
+        "reversible": true
+      }
+    },
+    {
+      "seq": 51,
+      "atMs": 8325,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "gate-north",
+        "source": "gaze",
+        "changed": true,
+        "mode": "compass"
+      }
+    },
+    {
+      "seq": 52,
+      "atMs": 9225,
+      "type": "choice.armed",
+      "detail": {
+        "id": "gate-north",
+        "mode": "compass",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 53,
+      "atMs": 9300,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "gate-north",
+        "source": "gesture",
+        "mode": "compass",
+        "reversible": true
+      }
+    },
+    {
+      "seq": 54,
+      "atMs": 9300,
+      "type": "mode.changed",
+      "detail": {
+        "from": "compass",
+        "to": "tunnel",
+        "source": "auto:task-advanced"
+      }
+    },
+    {
+      "seq": 55,
+      "atMs": 9425,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "amend-route",
+        "source": "gesture",
+        "changed": true,
+        "mode": "tunnel"
+      }
+    },
+    {
+      "seq": 56,
+      "atMs": 10325,
+      "type": "choice.armed",
+      "detail": {
+        "id": "amend-route",
+        "mode": "tunnel",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 57,
+      "atMs": 10400,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "amend-route",
+        "source": "gesture",
+        "mode": "tunnel",
+        "reversible": true
+      }
+    },
+    {
+      "seq": 58,
+      "atMs": 10500,
+      "type": "history.undo",
+      "detail": {
+        "source": "voice",
+        "restored": "confirm:amend-route"
+      }
+    },
+    {
+      "seq": 59,
+      "atMs": 10625,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "confirm-route",
+        "source": "gesture",
+        "changed": true,
+        "mode": "tunnel"
+      }
+    },
+    {
+      "seq": 60,
+      "atMs": 11525,
+      "type": "choice.armed",
+      "detail": {
+        "id": "confirm-route",
+        "mode": "tunnel",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 61,
+      "atMs": 11600,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "confirm-route",
+        "source": "voice",
+        "mode": "tunnel",
+        "reversible": true
+      }
+    },
+    {
+      "seq": 62,
+      "atMs": 11725,
+      "type": "choice.highlighted",
+      "detail": {
+        "id": "return-home",
+        "source": "gesture",
+        "changed": true,
+        "mode": "tunnel"
+      }
+    },
+    {
+      "seq": 63,
+      "atMs": 12625,
+      "type": "choice.armed",
+      "detail": {
+        "id": "return-home",
+        "mode": "tunnel",
+        "dwellMs": 900
+      }
+    },
+    {
+      "seq": 64,
+      "atMs": 12700,
+      "type": "choice.confirmed",
+      "detail": {
+        "id": "return-home",
+        "source": "gesture",
+        "mode": "tunnel",
+        "reversible": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "product": "Adaptive Orb",
+  "taskId": "cobalt-beacon-route",
+  "deterministicFingerprint": "c1b6e39f",
+  "verification": {
+    "expectedFingerprint": "c1b6e39f",
+    "exactStateVerified": true,
+    "externalInputLocked": true
+  },
+  "exactTaskVerdict": true,
+  "complete": true,
+  "noIrreversibleAction": true,
+  "task": {
+    "action": "route",
+    "quantity": 3,
+    "color": "cobalt",
+    "time": "14:30",
+    "handling": "fragile",
+    "destination": "ORION-7",
+    "gate": "North Gate",
+    "confirmed": true,
+    "returnedHome": true
+  },
+  "modesUsed": [
+    "orbit",
+    "compass",
+    "tunnel"
+  ],
+  "modeTransitions": [
+    {
+      "atMs": 400,
+      "from": "orbit",
+      "to": "compass",
+      "source": "auto:task-advanced"
+    },
+    {
+      "atMs": 5300,
+      "from": "compass",
+      "to": "tunnel",
+      "source": "auto:task-advanced"
+    }
+  ],
+  "completionTimeMs": 8700,
+  "errors": 2,
+  "falseCommits": 0,
+  "gazeCommitAttemptsBlocked": 1,
+  "centerCancels": 1,
+  "voiceRepairs": 2,
+  "sensorLosses": 1,
+  "sensorRecoveries": 1,
+  "sensorRecoveryMs": 350,
+  "intentionalWrongBranches": 1,
+  "undos": 1,
+  "perMode": {
+    "orbit": {
+      "activeMs": 400,
+      "dwellMs": 0,
+      "confirmations": 1,
+      "transitionsIn": 1
+    },
+    "compass": {
+      "activeMs": 4900,
+      "dwellMs": 3600,
+      "confirmations": 2,
+      "transitionsIn": 1
+    },
+    "tunnel": {
+      "activeMs": 3400,
+      "dwellMs": 2700,
+      "confirmations": 3,
+      "transitionsIn": 1
+    }
+  },
+  "confirmationSources": {
+    "voice": 3,
+    "gesture": 3,
+    "keyboard": 0,
+    "touch": 0,
+    "switch": 0,
+    "other": 0
+  },
+  "privacy": {
+    "rawFramesStored": false,
+    "rawAudioStored": false,
+    "rawTranscriptsStored": false,
+    "conversationTextMemoryOnly": true,
+    "conversationTextExported": false,
+    "applicationNetworkClientsUsed": false,
+    "sameOriginCompanionOnly": true,
+    "persistentStorageUsed": false,
+    "browserSpeechVendorProcessingDisclosed": true
+  }
+}

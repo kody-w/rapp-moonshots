@@ -1,0 +1,254 @@
+{
+  "schemaVersion": 1,
+  "product": "Adaptive Orb mobile-first contract",
+  "evidenceKind": "deterministic synthetic interaction timing",
+  "conversationFingerprint": "071ba015",
+  "exactTaskFingerprint": "c1b6e39f",
+  "layouts": {
+    "contract": {
+      "portrait": {
+        "width": 390,
+        "height": 844
+      },
+      "landscape": {
+        "width": 844,
+        "height": 390
+      },
+      "minimumTargetPx": 44,
+      "maximumPrimaryChoices": 4,
+      "centerOrbMinimumPx": 112,
+      "compactLandscapeMultiColumnMinWidth": 620
+    },
+    "portrait": {
+      "width": 390,
+      "height": 844,
+      "orientation": "portrait",
+      "usableWidth": 390,
+      "usableHeight": 763,
+      "availableContentWidth": 390,
+      "compactLandscape": false,
+      "usesMultiColumn": false,
+      "scrollSafeSingleColumn": false,
+      "orbDiameter": 356,
+      "minimumTargetPx": 44,
+      "maximumPrimaryChoices": 4,
+      "noHorizontalOverflow": true
+    },
+    "landscape": {
+      "width": 844,
+      "height": 390,
+      "orientation": "landscape",
+      "usableWidth": 750,
+      "usableHeight": 369,
+      "availableContentWidth": 730,
+      "compactLandscape": true,
+      "usesMultiColumn": true,
+      "scrollSafeSingleColumn": false,
+      "orbDiameter": 319.79999999999995,
+      "minimumTargetPx": 44,
+      "maximumPrimaryChoices": 4,
+      "noHorizontalOverflow": true
+    },
+    "zoomEquivalent": {
+      "width": 320,
+      "height": 256,
+      "orientation": "landscape",
+      "usableWidth": 320,
+      "usableHeight": 256,
+      "availableContentWidth": 300,
+      "compactLandscape": true,
+      "usesMultiColumn": false,
+      "scrollSafeSingleColumn": true,
+      "orbDiameter": 284,
+      "minimumTargetPx": 44,
+      "maximumPrimaryChoices": 4,
+      "noHorizontalOverflow": true
+    }
+  },
+  "radialSafety": {
+    "portrait": {
+      "radius": 124.6,
+      "minimumRadius": 113.00800001457706,
+      "maximumRadius": 126.392,
+      "feasible": true,
+      "overflow": false,
+      "centerOverlap": false,
+      "safe": true,
+      "positions": [
+        {
+          "x": 7.62954955868801e-15,
+          "y": -124.6,
+          "left": 128.392,
+          "right": 227.608,
+          "top": 17.360000000000007,
+          "bottom": 89.44,
+          "centerClearance": 26.160000000000004
+        },
+        {
+          "x": 124.6,
+          "y": 0,
+          "left": 252.99200000000002,
+          "right": 352.208,
+          "top": 141.96,
+          "bottom": 214.04,
+          "centerClearance": 12.591999999999992
+        },
+        {
+          "x": 7.62954955868801e-15,
+          "y": 124.6,
+          "left": 128.392,
+          "right": 227.608,
+          "top": 266.56,
+          "bottom": 338.64000000000004,
+          "centerClearance": 26.160000000000004
+        },
+        {
+          "x": -124.6,
+          "y": 1.525909911737602e-14,
+          "left": 3.7920000000000087,
+          "right": 103.00800000000001,
+          "top": 141.96000000000004,
+          "bottom": 214.04000000000002,
+          "centerClearance": 12.591999999999992
+        }
+      ]
+    },
+    "landscape": {
+      "radius": 110.2,
+      "minimumRadius": 100.70000000973234,
+      "maximumRadius": 110.2,
+      "feasible": true,
+      "overflow": false,
+      "centerOverlap": false,
+      "safe": true,
+      "positions": [
+        {
+          "x": 6.747803863301916e-15,
+          "y": -110.2,
+          "left": 112.2,
+          "right": 207.60000000000002,
+          "top": 20.020000000000003,
+          "bottom": 79.38,
+          "centerClearance": 28.52000000000001
+        },
+        {
+          "x": 110.2,
+          "y": 0,
+          "left": 222.40000000000003,
+          "right": 317.8,
+          "top": 130.22,
+          "bottom": 189.58,
+          "centerClearance": 10.5
+        },
+        {
+          "x": 6.747803863301916e-15,
+          "y": 110.2,
+          "left": 112.2,
+          "right": 207.60000000000002,
+          "top": 240.42000000000002,
+          "bottom": 299.78000000000003,
+          "centerClearance": 28.52000000000001
+        },
+        {
+          "x": -110.2,
+          "y": 1.3495607726603832e-14,
+          "left": 2,
+          "right": 97.4,
+          "top": 130.22,
+          "bottom": 189.58,
+          "centerClearance": 10.5
+        }
+      ]
+    },
+    "zoomEquivalent": {
+      "radius": 98.69999999999999,
+      "minimumRadius": 97.28000002112239,
+      "maximumRadius": 98.72,
+      "feasible": true,
+      "overflow": false,
+      "centerOverlap": false,
+      "safe": true,
+      "positions": [
+        {
+          "x": 6.043631953792187e-15,
+          "y": -98.69999999999999,
+          "left": 100.72,
+          "right": 181.28,
+          "top": 14.740000000000009,
+          "bottom": 69.86000000000001,
+          "centerClearance": 15.139999999999986
+        },
+        {
+          "x": 98.69999999999999,
+          "y": 0,
+          "left": 199.42,
+          "right": 279.98,
+          "top": 113.44,
+          "bottom": 168.56,
+          "centerClearance": 2.4199999999999875
+        },
+        {
+          "x": 6.043631953792187e-15,
+          "y": 98.69999999999999,
+          "left": 100.72,
+          "right": 181.28,
+          "top": 212.14,
+          "bottom": 267.26,
+          "centerClearance": 15.139999999999986
+        },
+        {
+          "x": -98.69999999999999,
+          "y": 1.2087263907584375e-14,
+          "left": 2.0200000000000102,
+          "right": 82.58000000000001,
+          "top": 113.44,
+          "bottom": 168.56,
+          "centerClearance": 2.4199999999999875
+        }
+      ]
+    }
+  },
+  "progressivePermissions": [
+    "sensor-free-value",
+    "optional-microphone",
+    "optional-front-camera"
+  ],
+  "maximumPrimaryChoices": 4,
+  "noHoverDependency": true,
+  "normalBrowserAudioRouting": true,
+  "interruptionResumeMode": "sensor-free",
+  "scenarios": [
+    "eyes-up-note",
+    "field-workshop-checklist",
+    "hands-busy-kitchen-guide",
+    "accessibility-switch-decision"
+  ],
+  "notFor": [
+    "driving",
+    "safety-critical control"
+  ],
+  "metrics": {
+    "viewportContract": "390x844 portrait · 844x390 landscape",
+    "glanceTimeProxyMs": 150,
+    "glanceSamples": 1,
+    "voiceRepairs": 2,
+    "falseCommits": 0,
+    "oneHandTouchFallbacks": 2,
+    "interruptions": 1,
+    "interruptionRecoveries": 1,
+    "interruptionRecoveryMs": 150,
+    "permissionToValueMs": 350,
+    "permissionRequests": {
+      "microphone": 1,
+      "camera": 1
+    },
+    "sensorOnMs": {
+      "microphone": 450,
+      "camera": 400,
+      "total": 850
+    },
+    "orientationChanges": 1,
+    "hapticSignals": 0
+  },
+  "privacy": "Aggregate semantic timings only; no transcript, media, calibration, device ID, API response, credential, or analytics."
+}
