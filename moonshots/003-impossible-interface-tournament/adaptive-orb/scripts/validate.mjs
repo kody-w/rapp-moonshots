@@ -356,7 +356,8 @@ check("foreground epochs gate delayed AI reveal and speech", () => {
   assert.match(app, /machine\.cancelPendingAI\("paused on background"\)/);
   assert.match(app, /foregroundDelivery\.canReveal\(deliveryToken\)/);
   assert.match(app, /speakCurrentResponse\(\{ explicit: true \}\)/);
-  assert.match(sensors, /document\.hidden \|\| document\.visibilityState !== "visible"/);
+  assert.match(sensors, /function documentIsForeground/);
+  assert.match(sensors, /!document\.hidden && document\.visibilityState === "visible"/);
 });
 
 check("recognition restarts distinguish clean ends and exhaust visibly", () => {
@@ -364,6 +365,9 @@ check("recognition restarts distinguish clean ends and exhaust visibly", () => {
   assert.match(sensors, /recognitionSessionStarted/);
   assert.match(sensors, /recognitionTransientFailures/);
   assert.match(sensors, /recognitionExpectedEnd/);
+  assert.match(sensors, /error === "aborted"/);
+  assert.match(sensors, /this\.recognitionExpectedEnd \|\| this\.speaking/);
+  assert.match(sensors, /reason: error === "aborted" \? "unexpected-aborted" : error/);
   assert.match(sensors, /kind: "ordinary-end"/);
   assert.match(sensors, /kind: "transient-failure"/);
   assert.match(sensors, /markRecognitionUnavailable/);
@@ -407,7 +411,7 @@ check("PWA manifest and service worker cache only local static allowlist", () =>
   assert.equal(manifest.scope, "./");
   assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512"));
-  assert.match(serviceWorker, /adaptive-orb-static-v5/);
+  assert.match(serviceWorker, /adaptive-orb-static-v6/);
   assert.match(serviceWorker, /STATIC_ASSETS/);
   assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.match(serviceWorker, /ACTIVATE_UPDATE/);

@@ -209,6 +209,13 @@ function streamHasLiveTrack(stream, kind) {
     );
 }
 
+function documentIsForeground() {
+  return (
+    typeof document === "undefined" ||
+    (!document.hidden && document.visibilityState === "visible")
+  );
+}
+
 function clamp(value, minimum = 0, maximum = 1) {
   return Math.min(maximum, Math.max(minimum, value));
 }
@@ -1544,16 +1551,23 @@ class AdaptiveSensorController {
         ) {
           return;
         }
+        const error = String(event.error || "recognition-error").toLowerCase();
+        if (
+          error === "aborted" &&
+          (this.recognitionExpectedEnd || this.speaking)
+        ) {
+          return;
+        }
         const terminal = [
           "not-allowed",
           "service-not-allowed",
           "audio-capture",
           "language-not-supported",
-        ].includes(event.error);
+        ].includes(error);
         if (terminal) {
           this.markRecognitionUnavailable(generation, {
             status: "denied",
-            reason: event.error,
+            reason: error,
             caption:
               "Speech service unavailable; microphone capture stopped. Use gesture or parity.",
           });
@@ -1561,7 +1575,7 @@ class AdaptiveSensorController {
           this.recognitionSessionFailed = true;
           this.scheduleRecognitionRestart(generation, {
             kind: "transient-failure",
-            reason: event.error || "recognition-error",
+            reason: error === "aborted" ? "unexpected-aborted" : error,
           });
         }
       };
@@ -1709,7 +1723,9 @@ class AdaptiveSensorController {
         this.active &&
         this.lifecycle.isCurrent(generation) &&
         !this.recognitionTerminal &&
-        !this.speaking
+        !this.speaking &&
+        documentIsForeground() &&
+        streamHasLiveTrack(this.microphoneStream, "audio")
       ) {
         this.detachRecognition();
         this.startRecognition(generation);
@@ -1722,8 +1738,7 @@ class AdaptiveSensorController {
     this.onCaption(text);
     if (
       !this.active ||
-      (typeof document !== "undefined" &&
-        (document.hidden || document.visibilityState !== "visible")) ||
+      !documentIsForeground() ||
       typeof speechSynthesis === "undefined" ||
       typeof SpeechSynthesisUtterance === "undefined"
     ) {
@@ -1748,7 +1763,12 @@ class AdaptiveSensorController {
       }
       this.speaking = false;
       this.recognitionExpectedEnd = false;
-      if (!this.recognitionTerminal) {
+      if (
+        this.active &&
+        !this.recognitionTerminal &&
+        documentIsForeground() &&
+        streamHasLiveTrack(this.microphoneStream, "audio")
+      ) {
         this.scheduleRecognitionRestart(generation, {
           kind: "expected-resume",
         });

@@ -687,6 +687,131 @@ test("six ordinary recognition onend cycles reset retry state", async () => {
   }
 });
 
+test("repeated announce aborts stay expected while unexpected abort remains transient", async () => {
+  const originalRecognition = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "SpeechRecognition",
+  );
+  const originalSynthesis = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "speechSynthesis",
+  );
+  const originalUtterance = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "SpeechSynthesisUtterance",
+  );
+  class AnnounceRecognition {
+    start() {
+      this.onstart?.();
+    }
+
+    abort() {
+      this.onerror?.({ error: "aborted" });
+      this.onend?.();
+    }
+  }
+  class TestUtterance {
+    constructor(text) {
+      this.text = text;
+    }
+  }
+  Object.defineProperty(globalThis, "SpeechRecognition", {
+    configurable: true,
+    value: AnnounceRecognition,
+  });
+  Object.defineProperty(globalThis, "SpeechSynthesisUtterance", {
+    configurable: true,
+    value: TestUtterance,
+  });
+  Object.defineProperty(globalThis, "speechSynthesis", {
+    configurable: true,
+    value: {
+      cancel() {},
+      speak(utterance) {
+        utterance.onend?.();
+      },
+    },
+  });
+  const actions = [];
+  const track = {
+    kind: "audio",
+    readyState: "live",
+    stopped: false,
+    stop() {
+      this.stopped = true;
+      this.readyState = "ended";
+    },
+  };
+  const stream = {
+    active: true,
+    getTracks: () => [track],
+  };
+  const controller = new AdaptiveSensorController({
+    video: null,
+    recognitionRetryBaseMs: 0,
+    onAction: (action) => {
+      actions.push(action);
+      return { ok: true };
+    },
+  });
+  const generation = controller.lifecycle.begin();
+  controller.lifecycleGeneration = generation;
+  controller.active = true;
+  controller.microphoneStream = stream;
+  controller.registerStream(stream);
+  try {
+    controller.startRecognition(generation);
+    for (let cycle = 0; cycle < 8; cycle += 1) {
+      const recognition = controller.recognition;
+      controller.announce(`summary ${cycle + 1}`);
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      assert.notEqual(controller.recognition, recognition);
+      assert.equal(controller.recognitionTerminal, false);
+      assert.equal(controller.recognitionRetries, 0);
+      assert.equal(controller.recognitionTransientFailures, 0);
+      assert.equal(controller.microphoneStream, stream);
+      assert.equal(track.stopped, false);
+    }
+    assert.equal(
+      actions.some(
+        (action) =>
+          action.sensor === "speech" && action.status === "unavailable",
+      ),
+      false,
+    );
+
+    const recognition = controller.recognition;
+    recognition.onerror({ error: "aborted" });
+    assert.equal(controller.recognitionTransientFailures, 1);
+    assert.ok(
+      actions.some(
+        (action) =>
+          action.sensor === "speech" &&
+          action.status === "recovering" &&
+          action.reason === "unexpected-aborted",
+      ),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    assert.notEqual(controller.recognition, recognition);
+    assert.equal(controller.recognitionTerminal, false);
+    assert.equal(controller.microphoneStream, stream);
+    assert.equal(track.stopped, false);
+  } finally {
+    controller.stop("announce-abort-test");
+    for (const [name, descriptor] of [
+      ["SpeechRecognition", originalRecognition],
+      ["speechSynthesis", originalSynthesis],
+      ["SpeechSynthesisUtterance", originalUtterance],
+    ]) {
+      if (descriptor) {
+        Object.defineProperty(globalThis, name, descriptor);
+      } else {
+        delete globalThis[name];
+      }
+    }
+  }
+});
+
 test("recognition exhaustion stops capture and explicit enable recovers", async () => {
   const originalRecognition = Object.getOwnPropertyDescriptor(
     globalThis,
