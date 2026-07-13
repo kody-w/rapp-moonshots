@@ -4,11 +4,15 @@
 
 html {
   min-width: 320px;
+  max-width: 100%;
   background: var(--cp-bg);
+  overflow-x: clip;
   scroll-behavior: smooth;
 }
 
 body {
+  width: 100%;
+  max-width: 100%;
   min-height: 100vh;
   min-height: 100dvh;
   margin: 0;
@@ -16,10 +20,13 @@ body {
   color: var(--cp-text);
   font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
   line-height: 1.5;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
 }
 
 button,
 summary {
+  min-height: 44px;
   font: inherit;
 }
 
@@ -35,6 +42,11 @@ button {
 }
 
 button:hover {
+  border-color: var(--cp-accent);
+  background: var(--cp-accent-soft);
+}
+
+button:active {
   border-color: var(--cp-accent);
   background: var(--cp-accent-soft);
 }
@@ -60,6 +72,11 @@ button:disabled {
 }
 
 .primary-action:hover {
+  background: var(--cp-accent-hover);
+  color: var(--cp-accent-fg);
+}
+
+.primary-action:active {
   background: var(--cp-accent-hover);
   color: var(--cp-accent-fg);
 }
@@ -187,9 +204,14 @@ button:disabled {
   color: var(--cp-accent-hover);
 }
 
+.capability-link:active {
+  background: var(--cp-accent-soft);
+  color: var(--cp-accent-hover);
+}
+
 .launch-actions {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
   margin-top: 20px;
 }
@@ -302,6 +324,57 @@ button:disabled {
 
 .runtime-capability > button {
   flex: 0 0 auto;
+}
+
+.permission-steps {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 14px 18px;
+  border: 1px solid var(--cp-border);
+  border-radius: 16px;
+  background: var(--cp-surface);
+  box-shadow: 0 0 2px var(--cp-border), 0 1px 2px var(--cp-border);
+}
+
+.permission-steps h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.permission-sequence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.permission-sequence li {
+  display: grid;
+  min-height: 44px;
+  padding: 6px 9px;
+  border: 1px solid var(--cp-border);
+  border-radius: 0.625rem;
+  background: var(--cp-surface-soft);
+  font-size: 0.72rem;
+}
+
+.permission-sequence li[data-complete="true"] {
+  border-color: var(--cp-success);
+}
+
+.permission-sequence span {
+  color: var(--cp-text-muted);
+}
+
+.permission-actions {
+  display: grid;
+  gap: 8px;
+  min-width: min(100%, 240px);
 }
 
 .task-ribbon {
@@ -433,6 +506,10 @@ button:disabled {
   background: var(--cp-surface-soft);
   object-fit: cover;
   opacity: 0.62;
+  transform: none;
+}
+
+#sensorPreview[data-mirrored="true"] {
   transform: scaleX(-1);
 }
 
@@ -647,6 +724,10 @@ button:disabled {
   background: var(--cp-accent-soft);
 }
 
+.center-orb:active {
+  background: var(--cp-accent-soft);
+}
+
 .center-orb strong,
 .center-orb small {
   position: relative;
@@ -654,13 +735,13 @@ button:disabled {
 }
 
 .center-orb strong {
-  font-size: 0.8rem;
+  font-size: clamp(0.9rem, 2.8vw, 1.2rem);
   letter-spacing: 0.14em;
 }
 
 .center-orb small {
   color: var(--cp-text-muted);
-  font-size: 0.58rem;
+  font-size: clamp(0.62rem, 1.8vw, 0.78rem);
 }
 
 .orb-core {
@@ -769,6 +850,31 @@ button:disabled {
   border-radius: 0.625rem;
   background: var(--cp-surface-soft);
   text-align: center;
+}
+
+.mobile-choice-page {
+  min-height: 44px;
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--cp-border);
+  border-radius: 0.625rem;
+  background: var(--cp-surface-soft);
+  color: var(--cp-text-muted);
+  font-size: 0.76rem;
+  text-align: center;
+}
+
+.mobile-global-controls {
+  display: none;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.mobile-global-controls button {
+  min-width: 0;
+  padding: 7px 5px;
+  font-size: 0.72rem;
 }
 
 .parity-controls {
@@ -983,6 +1089,256 @@ button:disabled {
 @media (max-width: 520px) {
   .app-shell {
     padding-inline: 8px;
+  }
+
+  /* Primary hardware contract: 390 × 844 portrait. */
+  @media (max-width: 600px) {
+    .launch-screen {
+      align-items: start;
+      padding:
+        max(12px, env(safe-area-inset-top))
+        max(10px, env(safe-area-inset-right))
+        max(12px, env(safe-area-inset-bottom))
+        max(10px, env(safe-area-inset-left));
+    }
+
+    .launch-card {
+      padding: 18px 14px;
+    }
+
+    .launch-lede {
+      margin: 14px 0;
+      font-size: 1rem;
+    }
+
+    .app-shell {
+      width: 100%;
+      padding:
+        max(10px, env(safe-area-inset-top))
+        max(8px, env(safe-area-inset-right))
+        max(40px, env(safe-area-inset-bottom))
+        max(8px, env(safe-area-inset-left));
+    }
+
+    .topbar {
+      gap: 10px;
+      padding-bottom: 10px;
+    }
+
+    .topbar h1 {
+      font-size: clamp(1.9rem, 12vw, 2.7rem);
+    }
+
+    .status-cluster {
+      gap: 4px;
+    }
+
+    .status-chip {
+      padding: 5px 7px;
+      font-size: 0.68rem;
+    }
+
+    .runtime-capability,
+    .permission-steps {
+      grid-template-columns: 1fr;
+      padding: 12px;
+    }
+
+    .permission-sequence {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .permission-sequence li {
+      align-items: center;
+      grid-template-columns: 1fr auto;
+    }
+
+    .permission-actions {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .task-ribbon {
+      gap: 8px;
+      padding: 12px;
+    }
+
+    .task-values {
+      gap: 5px;
+    }
+
+    .task-values div {
+      min-height: 44px;
+      padding: 6px 8px;
+    }
+
+    .experience-grid {
+      gap: 10px;
+    }
+
+    .orb-card {
+      padding: 10px 8px 12px;
+    }
+
+    .orb-stage {
+      width: min(100%, 374px);
+      min-height: min(96vw, 374px);
+    }
+
+    .center-orb {
+      width: clamp(112px, 32vw, 136px);
+    }
+
+    .center-orb strong {
+      font-size: 1rem;
+    }
+
+    .center-orb small {
+      font-size: 0.7rem;
+    }
+
+    .choice {
+      width: clamp(98px, 29vw, 116px);
+      min-height: 68px;
+      padding: 7px 5px;
+    }
+
+    .choice[data-phone-hidden="true"] {
+      display: none;
+    }
+
+    .mobile-choice-page:not([hidden]),
+    .mobile-global-controls {
+      display: grid;
+    }
+
+    .parity-controls {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .parity-controls button,
+    .mobile-global-controls button {
+      width: 100%;
+      min-height: 44px;
+    }
+
+    .response-focus {
+      padding: 12px;
+    }
+
+    .conversation-landmarks {
+      max-height: 152px;
+    }
+
+    .footer-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .footer-actions button {
+      width: 100%;
+      min-width: 0;
+    }
+  }
+
+  /* Primary compact landscape contract: 844 × 390. */
+  @media (orientation: landscape) and (max-height: 500px) {
+    .app-shell {
+      width: 100%;
+      padding:
+        max(6px, env(safe-area-inset-top))
+        max(10px, env(safe-area-inset-right))
+        max(24px, env(safe-area-inset-bottom))
+        max(10px, env(safe-area-inset-left));
+    }
+
+    .topbar {
+      align-items: center;
+      flex-direction: row;
+      padding: 2px 0 6px;
+    }
+
+    .topbar h1 {
+      font-size: 1.8rem;
+    }
+
+    .topbar .eyebrow,
+    .topbar > div > p:last-child,
+    .mode-meter {
+      display: none;
+    }
+
+    .runtime-capability,
+    .permission-steps {
+      grid-template-columns: minmax(0, 1fr) minmax(220px, 0.5fr);
+      gap: 8px;
+      padding: 8px 10px;
+    }
+
+    .permission-sequence {
+      flex-wrap: nowrap;
+    }
+
+    .permission-sequence li {
+      min-width: 0;
+    }
+
+    .task-ribbon {
+      grid-template-columns: minmax(180px, 0.65fr) minmax(0, 1.35fr);
+      padding: 8px 10px;
+    }
+
+    .experience-grid {
+      grid-template-columns: minmax(180px, 0.55fr) minmax(350px, 1fr);
+      gap: 8px;
+    }
+
+    .experience-grid > .context-card:last-child {
+      grid-column: 1 / -1;
+    }
+
+    .orb-card {
+      order: 0;
+      padding: 8px;
+    }
+
+    .orb-stage {
+      width: min(82vh, 350px);
+      min-height: min(82vh, 350px);
+    }
+
+    .center-orb {
+      width: 104px;
+    }
+
+    .choice {
+      width: 104px;
+      min-height: 56px;
+      padding: 4px;
+    }
+
+    .choice small {
+      display: none;
+    }
+
+    .choice[data-phone-hidden="true"] {
+      display: none;
+    }
+
+    .mobile-choice-page:not([hidden]),
+    .mobile-global-controls {
+      display: grid;
+    }
+
+    .context-card {
+      padding: 10px;
+    }
+
+    .conversation-landmarks {
+      max-height: 76px;
+      overflow: hidden;
+    }
   }
 
   .orb-card,

@@ -4,12 +4,17 @@ import { AdaptiveOrbMachine, CONVERSATION_DETERMINISTIC_SCRIPT, DWELL_TARGET_MS,
 import { AdaptiveSensorController } from "./sensors.mjs";
 import { RadialAimCoordinator, performSensorFreeTransition } from "./session.mjs";
 import { renderTournamentComparison } from "./comparison.mjs";
+import {
+  MobileFeedback,
+  MobileMetricsTracker,
+  phoneChoiceWindow,
+  shortSpokenSummary,
+} from "./mobile.mjs";
 
 const byId = (id) => document.getElementById(id);
 const elements = {
   launchScreen: byId("launchScreen"),
   app: byId("app"),
-  startLive: byId("startLive"),
   startAccessible: byId("startAccessible"),
   startSimulation: byId("startSimulation"),
   launchCapability: byId("launchCapability"),
@@ -29,6 +34,10 @@ const elements = {
   runtimeCapabilityDetail: byId("runtimeCapabilityDetail"),
   runtimeSafariAction: byId("runtimeSafariAction"),
   runtimeSafariLink: byId("runtimeSafariLink"),
+  permissionPanel: byId("permissionPanel"),
+  permissionStatus: byId("permissionStatus"),
+  permissionMic: byId("permissionMic"),
+  permissionCamera: byId("permissionCamera"),
   capabilitySensorFree: byId("capabilitySensorFree"),
   taskValues: byId("taskValues"),
   responseKicker: byId("responseKicker"),
@@ -54,6 +63,11 @@ const elements = {
   orbSubLabel: byId("orbSubLabel"),
   dwellRing: byId("dwellRing"),
   caption: byId("caption"),
+  mobileChoicePage: byId("mobileChoicePage"),
+  mobileRepeat: byId("mobileRepeat"),
+  mobileWhatChanged: byId("mobileWhatChanged"),
+  mobileUndo: byId("mobileUndo"),
+  mobileStop: byId("mobileStop"),
   previousChoice: byId("previousChoice"),
   nextChoice: byId("nextChoice"),
   confirmChoice: byId("confirmChoice"),
@@ -66,12 +80,18 @@ const elements = {
   centerCancels: byId("centerCancels"),
   voiceRepairs: byId("voiceRepairs"),
   sensorRecovery: byId("sensorRecovery"),
+  glanceProxy: byId("glanceProxy"),
+  touchFallback: byId("touchFallback"),
+  interruptionRecovery: byId("interruptionRecovery"),
+  permissionValue: byId("permissionValue"),
+  sensorOnTime: byId("sensorOnTime"),
   eventTrace: byId("eventTrace"),
   modeStats: byId("modeStats"),
   comparisonTable: byId("comparisonTable"),
   comparisonPanel: byId("comparisonPanel"),
   exportMetrics: byId("exportMetrics"),
   companionMode: byId("companionMode"),
+  hapticToggle: byId("hapticToggle"),
   installApp: byId("installApp"),
   applyUpdate: byId("applyUpdate"),
   useAccessible: byId("useAccessible"),
@@ -110,6 +130,12 @@ const stageCopy = {
 const startupQuery = new URLSearchParams(window.location.search);
 const ephemeralSessionId = createEphemeralSessionId();
 const aiAdapter = new AdaptiveAIAdapter();
+const mobileMetrics = new MobileMetricsTracker({
+  clock: () => performance.now(),
+});
+const mobileFeedback = new MobileFeedback({
+  onHaptic: () => mobileMetrics.noteHaptic(),
+});
 let logicalNow = null;
 let machine = createMachine();
 let sensorController = null;
@@ -133,6 +159,12 @@ let liveStartFailed = false;
 let runtimeSensorIssues = new Set();
 let runtimeCapabilities = detectRuntimeCapabilities();
 let capabilityPresentation = null;
+let microphonePermissionAttempted = !runtimeCapabilities.speechRecognitionApi;
+let sensorPermissionBusy = false;
+let visibleChoiceIds = [];
+let interruptionPending = false;
+let lastOrientation =
+  window.innerWidth > window.innerHeight ? "landscape" : "portrait";
 
 function sessionNow() {
   return logicalNow === null ? performance.now() : logicalNow;
@@ -181,17 +213,37 @@ function refreshCapabilityGuidance({ recheck = true } = {}) {
     }
   }
 
-  elements.startLive.disabled =
-    replayLocked || !capabilityPresentation.canStartLive;
-  elements.startLive.textContent = !capabilityPresentation.canStartLive
-    ? "Live sensors unavailable here"
-    : runtimeCapabilities.speechRecognitionApi
-      ? "Start voice + camera"
-      : "Start camera + mic · speech unavailable";
+  const sessionStarted = machine.state.status !== "idle";
+  const microphoneActive = machine.state.sensors.microphone === "active";
+  const cameraActive = machine.state.sensors.camera === "active";
+  elements.permissionMic.disabled =
+    replayLocked ||
+    sensorPermissionBusy ||
+    !sessionStarted ||
+    microphoneActive ||
+    !runtimeCapabilities.liveSensorPrerequisites ||
+    !runtimeCapabilities.speechRecognitionApi;
+  elements.permissionMic.textContent = microphoneActive
+    ? machine.state.sensors.speech === "active"
+      ? "Voice enabled"
+      : "Microphone enabled · voice starting"
+    : !runtimeCapabilities.speechRecognitionApi
+      ? "Voice unavailable · use controls"
+      : "Enable voice · microphone";
+  elements.permissionCamera.disabled =
+    replayLocked ||
+    sensorPermissionBusy ||
+    !sessionStarted ||
+    cameraActive ||
+    !runtimeCapabilities.liveSensorPrerequisites ||
+    !microphonePermissionAttempted;
+  elements.permissionCamera.textContent = cameraActive
+    ? "Front camera enabled"
+    : "Then enable front camera";
   elements.capabilitySensorFree.disabled =
-    replayLocked || machine.state.sessionKind === "accessible";
+    replayLocked || (!sensorController && machine.state.sessionKind === "accessible");
   elements.capabilitySensorFree.textContent =
-    machine.state.sessionKind === "accessible"
+    !sensorController && machine.state.sessionKind === "accessible"
       ? "Sensor-free mode active"
       : "Use sensor-free mode";
   return capabilityPresentation;
@@ -227,6 +279,7 @@ function createSensorController() {
   return new AdaptiveSensorController({
     video: elements.sensorPreview,
     clock: () => performance.now(),
+    generationSeed: Math.max(0, machine.state.sensors.generation - 1),
     onAction(action) {
       if (!machine || machine.state.sessionKind === "simulation") {
         return { ok: false, effect: "ignored" };
@@ -234,6 +287,20 @@ function createSensorController() {
       const result = machine.dispatch(action);
       if (result.ok) {
         trackRuntimeSensorCapability(action);
+      }
+      if (
+        action.type === "SENSOR_STATUS" &&
+        ["microphone", "camera"].includes(action.sensor)
+      ) {
+        mobileMetrics.noteSensorStatus(action.sensor, action.status);
+      }
+      if (
+        action.type === "SENSOR_LOSS" ||
+        (action.type === "SENSOR_STATUS" &&
+          ["denied", "lost", "muted", "failed"].includes(action.status))
+      ) {
+        elements.permissionStatus.textContent =
+          "A live sensor was interrupted or revoked. Sensor-derived aim and confirmation are frozen; choose sensor-free mode or retry the optional permission.";
       }
       aimCoordinator.synchronize(machine.state);
       if (!sensorTransitioning) {
@@ -253,43 +320,15 @@ function createSensorController() {
         source: "voice",
       });
       if (!["access-request", "ai-request"].includes(result.effect)) {
-        sensorController?.announce(machine.state.announcement);
+        sensorController?.announce(
+          shortSpokenSummary(machine.state.announcement),
+        );
       }
     },
     onCaption(text) {
       elements.caption.textContent = text;
     },
   });
-}
-
-async function startLive() {
-  if (replayLocked || machine.state.status !== "idle") {
-    return;
-  }
-  const preflight = refreshCapabilityGuidance();
-  if (!preflight.canStartLive) {
-    elements.launchCapability.focus();
-    return;
-  }
-  showApplication();
-  logicalNow = null;
-  machine.dispatch({ type: "START", kind: "live", generation: 1 });
-  sensorController = createSensorController();
-  render();
-  const started = await sensorController.start();
-  if (!started) {
-    liveStartFailed = true;
-    transitionToSensorFree("startup-fallback");
-    elements.assertiveStatus.textContent =
-      "Sensors unavailable. Sensor-free controls are active with the same task.";
-  } else {
-    liveStartFailed = false;
-    refreshCapabilityGuidance({ recheck: false });
-    sensorController.announce(
-      "Adaptive Orb ready. Ask me to create, plan, explain, or navigate. Say a mode name at any time.",
-    );
-  }
-  render();
 }
 
 function startAccessible() {
@@ -299,9 +338,114 @@ function startAccessible() {
   showApplication();
   logicalNow = null;
   machine.dispatch({ type: "START", kind: "accessible", generation: 1 });
+  mobileMetrics.start();
+  mobileFeedback.unlock();
+  if (typeof navigator.vibrate === "function") {
+    elements.hapticToggle.hidden = false;
+  }
   render();
   refreshCapabilityGuidance({ recheck: false });
   elements.orbStage.focus();
+}
+
+async function enableMicrophone() {
+  if (
+    replayLocked ||
+    sensorPermissionBusy ||
+    machine.state.status === "idle"
+  ) {
+    return false;
+  }
+  sensorPermissionBusy = true;
+  microphonePermissionAttempted = true;
+  mobileMetrics.notePermissionRequest("microphone");
+  elements.permissionStatus.textContent =
+    "Requesting microphone for voice commands. Camera remains off.";
+  refreshCapabilityGuidance();
+  sensorController ||= createSensorController();
+  const started = await sensorController.enableMicrophone();
+  mobileMetrics.noteSensorStatus(
+    "microphone",
+    started ? "active" : "failed",
+  );
+  if (started) {
+    elements.permissionStatus.textContent =
+      "Voice commands enabled. Audio follows the browser/OS input route; no device ID is selected or stored.";
+    elements.assertiveStatus.textContent =
+      "Voice enabled. Say create, plan, explain, navigate, repeat, stop, undo, or a mode name.";
+    mobileFeedback.signal("ready");
+    elements.caption.textContent = "Ready tone · voice enabled.";
+  } else {
+    elements.permissionStatus.textContent =
+      "Microphone or speech recognition unavailable. Full touch, keyboard, and switch controls remain; camera is still optional.";
+    machine.dispatch({
+      type: "SENSOR_STATUS",
+      sensor: "microphone",
+      status: "not-requested",
+      at: sessionNow(),
+    });
+    if (!sensorController?.cameraStream) {
+      sensorController?.stop("microphone unavailable");
+      sensorController = null;
+    }
+  }
+  sensorPermissionBusy = false;
+  liveStartFailed = !started;
+  refreshCapabilityGuidance({ recheck: false });
+  render();
+  return started;
+}
+
+async function enableCamera() {
+  if (
+    replayLocked ||
+    sensorPermissionBusy ||
+    machine.state.status === "idle" ||
+    !microphonePermissionAttempted
+  ) {
+    return false;
+  }
+  sensorPermissionBusy = true;
+  mobileMetrics.notePermissionRequest("camera");
+  elements.permissionStatus.textContent =
+    "Requesting the front camera for coarse, movement-tolerant aim and gestures.";
+  refreshCapabilityGuidance();
+  sensorController ||= createSensorController();
+  const started = await sensorController.enableCamera();
+  mobileMetrics.noteSensorStatus("camera", started ? "active" : "failed");
+  if (started) {
+    elements.permissionStatus.textContent =
+      "Front camera enabled. Frames remain ephemeral; front-camera coordinates are mirrored only when the browser reports user-facing capture.";
+    elements.assertiveStatus.textContent =
+      "Camera gesture input enabled. Gaze-like motion highlights only; voice, gesture, or a fallback control confirms.";
+    mobileFeedback.signal("ready");
+    elements.caption.textContent = "Ready tone · front camera enabled.";
+  } else {
+    elements.permissionStatus.textContent =
+      "Camera unavailable or denied. Voice and sensor-free controls remain available with the same conversation.";
+    machine.dispatch({
+      type: "SENSOR_STATUS",
+      sensor: "camera",
+      status: "not-requested",
+      at: sessionNow(),
+    });
+    if (!sensorController?.microphoneStream) {
+      sensorController?.stop("camera unavailable");
+      sensorController = null;
+    }
+    machine.dispatch({
+      type: "SENSOR_STATUS",
+      sensor: "estimator",
+      status: "not-requested",
+      label: "camera unavailable; fallback controls active",
+      at: sessionNow(),
+    });
+  }
+  sensorPermissionBusy = false;
+  liveStartFailed = !started;
+  refreshCapabilityGuidance({ recheck: false });
+  render();
+  return started;
 }
 
 function sleep(milliseconds) {
@@ -361,12 +505,19 @@ async function startSimulation() {
 }
 
 function speakCurrentResponse() {
-  const text = machine.state.conversation.currentResponse;
+  const text =
+    machine.state.conversation.responseSummary ||
+    machine.state.conversation.currentResponse;
+  return speakText(text);
+}
+
+function speakText(text) {
   if (!text || replayLocked) {
     return false;
   }
+  const concise = shortSpokenSummary(text);
   if (sensorController) {
-    sensorController.announce(text);
+    sensorController.announce(concise);
     return true;
   }
   if (
@@ -378,8 +529,8 @@ function speakCurrentResponse() {
     return false;
   }
   speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 0.96;
+  const utterance = new SpeechSynthesisUtterance(concise);
+  utterance.rate = 1;
   utterance.pitch = 1;
   speechSynthesis.speak(utterance);
   return true;
@@ -422,10 +573,9 @@ async function requestAIResponse(result) {
       at: sessionNow(),
     });
     if (accepted.ok) {
+      mobileMetrics.noteValue();
       render();
-      if (machine.state.sessionKind === "live") {
-        sensorController?.announce(machine.state.conversation.currentResponse);
-      }
+      speakCurrentResponse();
     }
   } catch {
     if (!controller.signal.aborted) {
@@ -443,7 +593,10 @@ function handleSensorAim(sample) {
   if (!machine || replayLocked) {
     return;
   }
-  const result = aimCoordinator.handle(machine, sample);
+  const result = aimCoordinator.handle(machine, {
+    ...sample,
+    optionIds: [...visibleChoiceIds],
+  });
   if (result.changed) {
     render();
   }
@@ -475,7 +628,7 @@ function handleSensorGesture(gesture) {
     result?.ok &&
     !["access-request", "ai-request"].includes(result.effect)
   ) {
-    sensorController?.announce(machine.state.announcement);
+    sensorController?.announce(shortSpokenSummary(machine.state.announcement));
   }
 }
 
@@ -492,6 +645,7 @@ function dispatchAndRender(action) {
     activeAIAbort = null;
   }
   const result = machine.dispatch(action);
+  mobileMetrics.noteAction(action, result);
   if (result.effect === "access-request") {
     transitionToSensorFree(action.source || "access-option");
     return result;
@@ -512,8 +666,35 @@ function dispatchAndRender(action) {
   if (result.effect === "stop") {
     sensorController?.stop("safety stop");
     sensorController = null;
+    mobileMetrics.noteSensorStatus("microphone", "off");
+    mobileMetrics.noteSensorStatus("camera", "off");
   }
   render();
+  if (action.type === "CONFIRM" && result.ok) {
+    mobileFeedback.signal("confirm");
+    elements.caption.textContent = "Confirm tone · selection accepted.";
+  } else if (["CENTER", "CANCEL"].includes(action.type) && result.ok) {
+    mobileFeedback.signal("ready");
+    elements.caption.textContent = "Rest tone · center canceled the active choice.";
+  } else if (action.type === "UNDO" && result.ok) {
+    mobileFeedback.signal("undo");
+    elements.caption.textContent = "Undo tone · prior reversible state restored.";
+  } else if (action.type === "STOP" && result.ok) {
+    mobileFeedback.signal("stop");
+    elements.caption.textContent = "Stop tone · sensors and speech stopped.";
+  } else if (
+    ["SWITCH_MODE", "AUTO_MODE"].includes(action.type) &&
+    result.ok
+  ) {
+    mobileFeedback.signal("ready");
+    elements.caption.textContent = `Mode tone · ${machine.state.mode} active.`;
+  }
+  if (
+    ["repeat", "what-changed"].includes(result.effect) &&
+    action.source !== "voice"
+  ) {
+    speakText(result.text || machine.state.announcement);
+  }
   if (result.effect === "ai-request") {
     void requestAIResponse(result);
   }
@@ -625,11 +806,39 @@ function renderConversation() {
 }
 
 function renderChoices() {
-  const signature = `${machine.state.mode}:${machine.state.options
+  const optionIds = machine.state.options.map((candidate) => candidate.id);
+  const compactViewport =
+    window.innerWidth <= 600 ||
+    (window.innerWidth > window.innerHeight && window.innerHeight <= 500);
+  const scope = `${machine.state.mode}:${optionIds.join("|")}`;
+  let visibleOptions = machine.state.options;
+  let choiceWindow = null;
+  if (compactViewport && machine.state.options.length > 4) {
+    choiceWindow = phoneChoiceWindow(
+      machine.state.options,
+      machine.state.highlight,
+    );
+    const visibleSet = new Set(choiceWindow.ids);
+    visibleOptions = machine.state.options.filter((option) =>
+      visibleSet.has(option.id),
+    );
+    elements.mobileChoicePage.hidden = false;
+    elements.mobileChoicePage.textContent =
+      `Choices ${choiceWindow.start + 1}–${choiceWindow.end} of ${
+        choiceWindow.total
+      } · page ${choiceWindow.page + 1} of ${
+        choiceWindow.pageCount
+      }. Say “next” or use Cycle choice to refine.`;
+  } else {
+    elements.mobileChoicePage.hidden = true;
+  }
+  visibleChoiceIds = visibleOptions.map((option) => option.id);
+  const visibleSet = new Set(visibleChoiceIds);
+  const signature = `${scope}:${compactViewport}:${choiceWindow?.page || 0}`;
+  const optionSignature = `${machine.state.mode}:${machine.state.options
     .map((candidate) => candidate.id)
     .join("|")}`;
-  if (signature !== lastChoiceSignature) {
-    lastChoiceSignature = signature;
+  if (!lastChoiceSignature.startsWith(optionSignature)) {
     elements.choiceLayer.replaceChildren();
     for (const candidate of machine.state.options) {
       const button = document.createElement("button");
@@ -655,23 +864,29 @@ function renderChoices() {
       });
       elements.choiceLayer.append(button);
     }
-    requestAnimationFrame(layoutChoices);
   }
+  lastChoiceSignature = `${optionSignature}:${signature}`;
 
   for (const button of elements.choiceLayer.querySelectorAll(".choice")) {
     const highlighted = button.dataset.optionId === machine.state.highlight;
+    button.dataset.phoneHidden = String(!visibleSet.has(button.dataset.optionId));
     button.disabled = replayLocked || machine.state.conversation.pending;
     button.dataset.highlighted = String(highlighted);
     button.dataset.armed = String(highlighted && machine.state.armed);
     button.setAttribute("aria-pressed", String(highlighted));
   }
+  requestAnimationFrame(layoutChoices);
 }
 
 function layoutChoices() {
   if (elements.app.hidden) {
     return;
   }
-  const buttons = [...elements.choiceLayer.querySelectorAll(".choice")];
+  const buttons = [
+    ...elements.choiceLayer.querySelectorAll(
+      '.choice:not([data-phone-hidden="true"])',
+    ),
+  ];
   const width = elements.orbStage.getBoundingClientRect().width;
   if (!width || !buttons.length) {
     return;
@@ -755,11 +970,13 @@ function render() {
       : "Demo AI · offline";
   elements.aiStatus.dataset.active = String(state.conversation.provider === "brainstem");
   elements.sensorStatus.textContent =
-    state.sessionKind === "accessible"
-      ? "Sensor-free"
-      : state.freezeCauses.length
+    state.sensors.camera === "active"
+      ? state.freezeCauses.length
         ? "Sensor safety freeze"
-        : `${state.sensors.camera} camera`;
+        : "Voice + front camera"
+      : state.sensors.microphone === "active"
+        ? "Voice on · camera off"
+        : "Sensor-free";
   elements.grammarTitle.textContent = grammar.title;
   elements.grammarDescription.textContent = grammar.description;
   elements.cameraState.textContent = state.sensors.camera;
@@ -772,8 +989,8 @@ function render() {
     state.sensors[signal] === null ? "—" : `${Math.max(0, Math.round(now - state.sensors[signal]))}`,
   );
   elements.freshnessState.textContent =
-    state.sessionKind === "accessible"
-      ? "Freshness: not required in sensor-free access"
+    state.sensors.camera !== "active"
+      ? "Camera freshness: not required while camera is off"
       : `Freshness ms · frame ${ages[0]} · content ${ages[1]} · estimate ${ages[2]}`;
 
   elements.safetyBanner.dataset.frozen = String(state.freezeCauses.length > 0);
@@ -806,11 +1023,42 @@ function render() {
   elements.centerCancels.textContent = String(state.metrics.centerCancels);
   elements.voiceRepairs.textContent = String(state.metrics.voiceRepairs);
   elements.sensorRecovery.textContent = `${state.metrics.sensorLosses} / ${state.metrics.sensorRecoveries}`;
+  const mobileRecord = mobileMetrics.snapshot(performance.now(), {
+    voiceRepairs: state.metrics.voiceRepairs,
+    falseCommits: state.metrics.falseCommits,
+  });
+  elements.glanceProxy.textContent = `${mobileRecord.glanceTimeProxyMs} ms`;
+  elements.touchFallback.textContent = String(
+    mobileRecord.oneHandTouchFallbacks,
+  );
+  elements.interruptionRecovery.textContent =
+    `${mobileRecord.interruptionRecoveries} / ${mobileRecord.interruptionRecoveryMs} ms`;
+  elements.permissionValue.textContent =
+    mobileRecord.permissionToValueMs === null
+      ? "waiting"
+      : `${mobileRecord.permissionToValueMs} ms`;
+  elements.sensorOnTime.textContent = `${Math.round(
+    mobileRecord.sensorOnMs.total,
+  )} ms`;
+  for (const step of elements.permissionPanel.querySelectorAll(
+    "[data-permission-step]",
+  )) {
+    const sensor = step.dataset.permissionStep;
+    step.dataset.complete = String(
+      sensor === "sensor-free" || state.sensors[sensor] === "active",
+    );
+  }
   elements.confirmChoice.disabled =
     state.conversation.pending || !state.highlight || !state.armed;
   elements.undoChoice.disabled = state.history.length === 0;
   elements.resumeSession.disabled = !state.freezeCauses.includes("user-stop");
   elements.speakResponse.disabled = !state.conversation.currentResponse;
+  elements.mobileUndo.disabled = state.history.length === 0;
+  elements.mobileStop.disabled =
+    state.status === "idle" || state.status === "stopped";
+  elements.hapticToggle.textContent = mobileFeedback.hapticsEnabled
+    ? "Haptics: on"
+    : "Haptics: off";
   elements.companionMode.textContent = preferCompanion
     ? "AI: prefer companion"
     : "AI: offline demo";
@@ -831,6 +1079,13 @@ function render() {
       elements.useAccessible,
       elements.stopSensors,
       elements.resumeSession,
+      elements.permissionMic,
+      elements.permissionCamera,
+      elements.mobileRepeat,
+      elements.mobileWhatChanged,
+      elements.mobileUndo,
+      elements.mobileStop,
+      elements.hapticToggle,
     ]) {
       control.disabled = true;
     }
@@ -858,6 +1113,7 @@ function render() {
     lastComparisonSignature = comparisonSignature;
     renderTournamentComparison(elements.comparisonTable, record);
   }
+  refreshCapabilityGuidance({ recheck: false });
 }
 
 function exportMetrics() {
@@ -865,6 +1121,12 @@ function exportMetrics() {
     return false;
   }
   const record = machine.exportRecord(sessionNow());
+  record.mobile = mobileMetrics.snapshot(performance.now(), {
+    voiceRepairs: record.metrics.voiceRepairs,
+    falseCommits: record.metrics.falseCommits,
+  });
+  record.mobile.publicSafe =
+    "Aggregate interaction timings and counts only; no transcript, raw media, calibration, device ID, or credential.";
   const blob = new Blob([`${JSON.stringify(record, null, 2)}\n`], {
     type: "application/json",
   });
@@ -886,6 +1148,8 @@ function transitionToSensorFree(source, { resume = false } = {}) {
     };
   }
   sensorTransitioning = true;
+  mobileMetrics.noteSensorStatus("microphone", "off");
+  mobileMetrics.noteSensorStatus("camera", "off");
   const transition = performSensorFreeTransition({
     machine,
     controller: sensorController,
@@ -895,6 +1159,8 @@ function transitionToSensorFree(source, { resume = false } = {}) {
   });
   sensorController = transition.controller;
   sensorTransitioning = false;
+  elements.permissionStatus.textContent =
+    "Sensor-free AI active. Camera, microphone, and recognition stopped before this status rendered.";
   aimCoordinator.reset();
   render();
   refreshCapabilityGuidance({ recheck: false });
@@ -930,6 +1196,9 @@ function toggleCompanion() {
 }
 
 async function promptInstall() {
+  if (replayLocked) {
+    return;
+  }
   if (deferredInstallPrompt) {
     deferredInstallPrompt.prompt();
     await deferredInstallPrompt.userChoice;
@@ -943,6 +1212,11 @@ async function promptInstall() {
 }
 
 function offerServiceWorkerUpdate(worker) {
+  if (replayLocked) {
+    elements.applyUpdate.hidden = true;
+    elements.applyUpdate.disabled = true;
+    return;
+  }
   waitingServiceWorker = worker;
   elements.applyUpdate.hidden = false;
   elements.pwaStatus.textContent = "App update ready";
@@ -984,9 +1258,10 @@ async function registerOfflineApp() {
   }
 }
 
-elements.startLive.addEventListener("click", startLive);
 elements.startAccessible.addEventListener("click", startAccessible);
 elements.startSimulation.addEventListener("click", startSimulation);
+elements.permissionMic.addEventListener("click", enableMicrophone);
+elements.permissionCamera.addEventListener("click", enableCamera);
 elements.launchSafariLink.addEventListener(
   "click",
   prepareBrowserSensorRecovery,
@@ -1016,6 +1291,28 @@ elements.undoChoice.addEventListener("click", () =>
 elements.exportMetrics.addEventListener("click", exportMetrics);
 elements.speakResponse.addEventListener("click", speakCurrentResponse);
 elements.companionMode.addEventListener("click", toggleCompanion);
+elements.mobileRepeat.addEventListener("click", () =>
+  dispatchAndRender({ type: "REPEAT", source: "touch" }),
+);
+elements.mobileWhatChanged.addEventListener("click", () =>
+  dispatchAndRender({ type: "WHAT_CHANGED", source: "touch" }),
+);
+elements.mobileUndo.addEventListener("click", () =>
+  dispatchAndRender({ type: "UNDO", source: "touch" }),
+);
+elements.mobileStop.addEventListener("click", () => stopSession("touch"));
+elements.hapticToggle.addEventListener("click", () => {
+  if (replayLocked) {
+    return;
+  }
+  const enabled = mobileFeedback.setHaptics(
+    !mobileFeedback.hapticsEnabled,
+  );
+  elements.hapticToggle.textContent = enabled ? "Haptics: on" : "Haptics: off";
+  elements.assertiveStatus.textContent = enabled
+    ? "Optional haptics enabled on this supported device."
+    : "Optional haptics disabled.";
+});
 elements.installApp.addEventListener("click", promptInstall);
 elements.applyUpdate.addEventListener("click", () => {
   applyingServiceWorkerUpdate = true;
@@ -1073,9 +1370,44 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-window.addEventListener("resize", layoutChoices);
+function handleViewportChange(source) {
+  layoutChoices();
+  const orientation =
+    window.innerWidth > window.innerHeight ? "landscape" : "portrait";
+  if (replayLocked) {
+    return;
+  }
+  if (elements.app.hidden || machine.state.status === "idle") {
+    lastOrientation = orientation;
+    return;
+  }
+  if (orientation === lastOrientation) {
+    return;
+  }
+  lastOrientation = orientation;
+  mobileMetrics.noteOrientationChange();
+  aimCoordinator.reset();
+  sensorController?.handleOrientationChange();
+  machine.dispatch({
+    type: "ORIENTATION_CHANGE",
+    source,
+    orientation,
+    at: sessionNow(),
+  });
+  render();
+}
+
+window.addEventListener("resize", () => handleViewportChange("resize"));
+window.addEventListener("orientationchange", () =>
+  handleViewportChange("orientationchange"),
+);
 window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
+  if (replayLocked) {
+    deferredInstallPrompt = null;
+    elements.installApp.disabled = true;
+    return;
+  }
   deferredInstallPrompt = event;
   elements.installApp.disabled = false;
   elements.pwaStatus.textContent = "Install available";
@@ -1094,8 +1426,38 @@ navigator.serviceWorker?.addEventListener("controllerchange", () => {
   }
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && machine.state.status !== "idle") {
-    machine.dispatch({ type: "CENTER", source: "visibility" });
+  if (
+    replayLocked ||
+    machine.state.status === "idle" ||
+    machine.state.status === "stopped"
+  ) {
+    return;
+  }
+  if (document.hidden) {
+    interruptionPending = true;
+    mobileMetrics.beginInterruption();
+    if (typeof speechSynthesis !== "undefined") {
+      speechSynthesis.cancel();
+    }
+    if (sensorController) {
+      transitionToSensorFree("background-interruption");
+    } else {
+      machine.dispatch({ type: "CENTER", source: "visibility" });
+      aimCoordinator.reset();
+      render();
+    }
+  } else if (interruptionPending) {
+    interruptionPending = false;
+    mobileMetrics.recoverInterruption();
+    machine.dispatch({
+      type: "INTERRUPTION_RESUME",
+      source: "visibility",
+      at: sessionNow(),
+    });
+    mobileFeedback.signal("recover");
+    elements.permissionStatus.textContent =
+      "Interruption recovered sensor-free with conversation and task state preserved. Re-enable optional sensors when ready.";
+    elements.assertiveStatus.textContent = machine.state.announcement;
     render();
   }
 });
@@ -1110,6 +1472,9 @@ window.addEventListener("pagehide", () => {
   }
   sensorController?.stop("pagehide");
   sensorController = null;
+  mobileMetrics.noteSensorStatus("microphone", "off");
+  mobileMetrics.noteSensorStatus("camera", "off");
+  mobileFeedback.close();
 });
 window.addEventListener("pageshow", (event) => {
   if (event.persisted) {
@@ -1121,7 +1486,6 @@ refreshCapabilityGuidance();
 void registerOfflineApp();
 
 if (startupQuery.get("simulate") === "1") {
-  elements.startLive.disabled = true;
   elements.startAccessible.disabled = true;
   elements.startSimulation.disabled = true;
   requestAnimationFrame(startSimulation);

@@ -361,6 +361,14 @@ test("deterministic replay rejects every external action without state drift", (
     { type: "ACCESSIBLE", source: "external" },
     { type: "STOP", source: "external" },
     { type: "PAGEHIDE", source: "external" },
+    { type: "REPEAT", source: "touch" },
+    { type: "WHAT_CHANGED", source: "touch" },
+    {
+      type: "ORIENTATION_CHANGE",
+      orientation: "landscape",
+      source: "external",
+    },
+    { type: "INTERRUPTION_RESUME", source: "external" },
     {
       type: "CONVERSATION_INPUT",
       text: "external prompt",
@@ -550,6 +558,61 @@ test("an AI detour returns to the exact in-progress task checkpoint", () => {
   assert.ok(
     machine.state.options.some((candidate) => candidate.id === "destination-orion"),
   );
+});
+
+test("orientation, interruption, and no-look commands preserve shared state", () => {
+  const { machine } = begin("accessible");
+  const request = choose(machine, "scenario-plan", "touch", 100);
+  machine.dispatch({
+    type: "AI_RESPONSE",
+    requestId: request.requestId,
+    response: demoResponseFor(request.request, { scenarioHint: "plan" }),
+    at: 200,
+  });
+  machine.dispatch({
+    type: "HIGHLIGHT",
+    id: "ai-plan-focus",
+    source: "touch",
+    at: 250,
+  });
+  const before = {
+    task: structuredClone(machine.state.task),
+    turns: structuredClone(machine.state.conversation.turns),
+    history: structuredClone(machine.state.history),
+    mode: machine.state.mode,
+    scenario: machine.state.conversation.scenario,
+  };
+
+  const orientation = machine.dispatch({
+    type: "ORIENTATION_CHANGE",
+    orientation: "landscape",
+    source: "test",
+    at: 300,
+  });
+  assert.equal(orientation.effect, "orientation");
+  assert.equal(machine.state.highlight, null);
+  assert.equal(machine.state.armed, false);
+  const resumed = machine.dispatch({
+    type: "INTERRUPTION_RESUME",
+    source: "visibility",
+    at: 400,
+  });
+  assert.equal(resumed.effect, "interruption-resume");
+  assert.equal(machine.dispatch({ type: "REPEAT", source: "switch", at: 500 }).effect, "repeat");
+  assert.equal(
+    machine.dispatch({
+      type: "WHAT_CHANGED",
+      source: "switch",
+      at: 600,
+    }).effect,
+    "what-changed",
+  );
+
+  assert.deepEqual(machine.state.task, before.task);
+  assert.deepEqual(machine.state.conversation.turns, before.turns);
+  assert.deepEqual(machine.state.history, before.history);
+  assert.equal(machine.state.mode, before.mode);
+  assert.equal(machine.state.conversation.scenario, before.scenario);
 });
 
 test("multi-turn simulation spans scenarios and modes while retaining exact task", () => {

@@ -1,30 +1,33 @@
 const AI_SCENARIOS = Object.freeze({
   create: Object.freeze({
     id: "create",
-    title: "Create",
-    detail: "Shape a draft from broad intent",
-    prompt: "Help me create a calm launch story for a small accessibility tool.",
+    title: "Eyes-up note",
+    detail: "Capture a walking note or quick decision",
+    prompt:
+      "Help me create a short eyes-up note while walking in a pedestrian-safe place.",
     mode: "orbit",
   }),
   plan: Object.freeze({
     id: "plan",
-    title: "Plan",
-    detail: "Compare stable priorities and next steps",
-    prompt: "Plan a focused afternoon with four concrete priorities.",
+    title: "Field checklist",
+    detail: "Run a workshop or field-work checklist",
+    prompt: "Plan a four-step workshop checklist with a final safety pause.",
     mode: "compass",
   }),
   explain: Object.freeze({
     id: "explain",
-    title: "Explain",
-    detail: "Travel through a layered explanation",
-    prompt: "Explain how an offline-first application handles updates.",
+    title: "Kitchen guide",
+    detail: "Follow a hands-busy cooking or task guide",
+    prompt:
+      "Explain a short hands-busy cooking sequence with pause and repeat options.",
     mode: "tunnel",
   }),
   navigate: Object.freeze({
     id: "navigate",
-    title: "Navigate",
-    detail: "Choose a route, tool, or scenario",
-    prompt: "Navigate the cobalt beacon routing scenario.",
+    title: "Access & decide",
+    detail: "Use switch parity or compare a bounded decision",
+    prompt:
+      "Navigate an accessibility-first decision using switch-friendly choices.",
     mode: "compass",
   }),
 });
@@ -53,42 +56,42 @@ const RESPONSE_SHAPES = Object.freeze({
 const DEMO_RESPONSES = Object.freeze({
   create: Object.freeze({
     message:
-      "I framed the creative intent around calm confidence, local control, and one clear invitation. Choose the direction you want me to develop.",
-    summary: "Creative direction framed around calm, local control",
+      "Note ready: capture one thought, one decision, and one next step. Pause whenever your surroundings need attention.",
+    summary: "Note ready: thought, decision, next step",
     suggestions: Object.freeze([
       Object.freeze({
         id: "create-outline",
-        label: "Outline",
-        detail: "Build a concise story arc",
-        prompt: "Develop a concise three-part outline.",
+        label: "Capture note",
+        detail: "Save a three-part spoken outline",
+        prompt: "Develop a concise three-part outline for this walking note.",
         branch: "outline",
       }),
       Object.freeze({
         id: "create-variations",
-        label: "Variations",
-        detail: "Explore several directions",
-        prompt: "Generate three distinct creative directions.",
+        label: "Two options",
+        detail: "Compare two quick decisions",
+        prompt: "Generate two short decision options.",
         branch: "variations",
       }),
       Object.freeze({
         id: "create-tone",
-        label: "Tune the tone",
-        detail: "Calm, direct, or playful",
-        prompt: "Refine the voice to feel calm and direct.",
+        label: "Shorten",
+        detail: "Make it easy to hear once",
+        prompt: "Refine the note to feel calm and direct.",
         branch: "tone",
       }),
       Object.freeze({
         id: "create-audience",
-        label: "Audience",
-        detail: "Focus the message",
-        prompt: "Adapt the concept for first-time users.",
+        label: "Next step",
+        detail: "Extract one action",
+        prompt: "Adapt the note into one next action.",
         branch: "audience",
       }),
       Object.freeze({
         id: "create-review",
-        label: "Review",
-        detail: "Inspect assumptions",
-        prompt: "Review the concept for unclear assumptions.",
+        label: "What changed",
+        detail: "Hear the latest revision",
+        prompt: "Review the note for what changed.",
         branch: "review",
       }),
     ]),
@@ -96,42 +99,42 @@ const DEMO_RESPONSES = Object.freeze({
   }),
   plan: Object.freeze({
     message:
-      "I organized the plan into four stable priorities with recovery space. The compass is best here because the alternatives are bounded and comparable.",
-    summary: "Four bounded priorities prepared for comparison",
+      "Checklist ready: inspect, prepare, perform, then verify. Stop if the work area becomes unsafe.",
+    summary: "Checklist: inspect, prepare, perform, verify",
     suggestions: Object.freeze([
       Object.freeze({
         id: "plan-focus",
-        label: "Deep work",
-        detail: "Protect the first focus block",
-        prompt: "Prioritize the deep-work block.",
+        label: "Inspect",
+        detail: "Check the field or bench first",
+        prompt: "Prioritize the workshop inspection step.",
         branch: "focus",
       }),
       Object.freeze({
         id: "plan-people",
-        label: "People",
-        detail: "Group communication work",
-        prompt: "Prioritize communication and collaboration.",
+        label: "Prepare",
+        detail: "Gather tools and protective gear",
+        prompt: "Prepare the required tools and protective gear.",
         branch: "people",
       }),
       Object.freeze({
         id: "plan-admin",
-        label: "Admin",
-        detail: "Clear bounded maintenance",
-        prompt: "Prioritize the bounded administrative tasks.",
+        label: "Perform",
+        detail: "Run the bounded task",
+        prompt: "Run the bounded workshop task.",
         branch: "admin",
       }),
       Object.freeze({
         id: "plan-buffer",
-        label: "Recovery",
-        detail: "Reserve transition time",
-        prompt: "Protect recovery and transition time.",
+        label: "Verify",
+        detail: "Confirm completion and cleanup",
+        prompt: "Verify the work and cleanup.",
         branch: "buffer",
       }),
       Object.freeze({
         id: "plan-risks",
-        label: "Risks",
-        detail: "Inspect schedule pressure",
-        prompt: "Show the plan's main scheduling risks.",
+        label: "Pause",
+        detail: "Stop and reassess conditions",
+        prompt: "Show the checklist's stop and reassess points.",
         branch: "risks",
       }),
     ]),
@@ -139,41 +142,41 @@ const DEMO_RESPONSES = Object.freeze({
   }),
   explain: Object.freeze({
     message:
-      "An offline-first update has nested layers: the page, the cache version, activation, and rollback. Enter a layer without losing the explanation above it.",
-    summary: "Offline update explanation divided into nested layers",
+      "Cooking guide ready: prep, heat, check, and finish. Say repeat at any step; stop before handling hazards.",
+    summary: "Cooking guide: prep, heat, check, finish",
     suggestions: Object.freeze([
       Object.freeze({
         id: "explain-cache",
-        label: "Static cache",
-        detail: "What is allowed offline",
-        prompt: "Go deeper into the static cache allowlist.",
+        label: "Prep",
+        detail: "Ingredients and tools",
+        prompt: "Go deeper into cooking preparation.",
         branch: "cache",
       }),
       Object.freeze({
         id: "explain-update",
-        label: "Update",
-        detail: "Waiting worker and activation",
-        prompt: "Go deeper into service worker update activation.",
+        label: "Heat",
+        detail: "Timed hands-busy step",
+        prompt: "Go deeper into the timed heating step.",
         branch: "update",
       }),
       Object.freeze({
         id: "explain-rollback",
-        label: "Rollback",
-        detail: "Remove a bad worker safely",
-        prompt: "Go deeper into unregister and rollback.",
+        label: "Check",
+        detail: "Confirm before continuing",
+        prompt: "Go deeper into checking doneness safely.",
         branch: "rollback",
       }),
       Object.freeze({
         id: "explain-privacy",
-        label: "Privacy",
-        detail: "What must never enter cache",
-        prompt: "Go deeper into privacy exclusions.",
+        label: "Finish",
+        detail: "Complete and clean up",
+        prompt: "Go deeper into finishing and cleanup.",
         branch: "privacy",
       }),
       Object.freeze({
         id: "explain-wrong",
         label: "Wrong branch",
-        detail: "Intentional revision drill",
+        detail: "Intentional undo drill",
         prompt: "Open an intentionally irrelevant analytics branch.",
         branch: "wrong-analytics",
         intentionalWrong: true,
@@ -183,8 +186,8 @@ const DEMO_RESPONSES = Object.freeze({
   }),
   navigate: Object.freeze({
     message:
-      "I found a reversible local routing scenario. Choose the cobalt task for the full all-mode safety drill, or inspect another destination first.",
-    summary: "Reversible navigation choices prepared",
+      "Accessible choices ready. Use one switch to cycle and another confirmation, or open the reversible cobalt safety drill.",
+    summary: "Switch-ready accessible choices prepared",
     suggestions: Object.freeze([
       Object.freeze({
         id: "begin-cobalt-task",
@@ -196,29 +199,29 @@ const DEMO_RESPONSES = Object.freeze({
       }),
       Object.freeze({
         id: "navigate-orion",
-        label: "ORION-7",
-        detail: "Inspect destination context",
-        prompt: "Inspect ORION-7.",
+        label: "Switch scan",
+        detail: "Cycle choices one at a time",
+        prompt: "Explain the switch scanning controls.",
         branch: "orion",
       }),
       Object.freeze({
         id: "navigate-gates",
-        label: "Gate map",
-        detail: "Compare four stable gates",
-        prompt: "Show the gate map.",
+        label: "Read choices",
+        detail: "Hear the bounded options",
+        prompt: "Read the current choices concisely.",
         branch: "gates",
       }),
       Object.freeze({
         id: "navigate-tools",
-        label: "Tools",
-        detail: "Open the nested tool tunnel",
-        prompt: "Open the navigation tools.",
+        label: "Decision help",
+        detail: "Compare a reversible choice",
+        prompt: "Open accessible decision support.",
         branch: "tools",
       }),
       Object.freeze({
         id: "navigate-home",
-        label: "Home",
-        detail: "Return to scenario petals",
+        label: "Return",
+        detail: "Go back to scenario petals",
         prompt: "Return to the scenario petals.",
         branch: "home",
       }),
@@ -234,19 +237,31 @@ const MAX_RESPONSE_TEXT = 12000;
 function inferScenario(text, fallback = "create") {
   const normalized = String(text || "").toLowerCase();
   if (
-    /\b(plan|schedule|priority|priorities|prioritize|prioritized|agenda)\b/.test(
+    /\b(plan|schedule|priority|priorities|prioritize|prioritized|agenda|workshop|checklist|field)\b/.test(
       normalized,
     )
   ) {
     return "plan";
   }
-  if (/\b(explain|understand|why|how does|how an|teach)\b/.test(normalized)) {
+  if (
+    /\b(explain|understand|why|how does|how an|teach|cook|cooking|kitchen|recipe)\b/.test(
+      normalized,
+    )
+  ) {
     return "explain";
   }
-  if (/\b(navigate|route|destination|gate|cobalt|beacon)\b/.test(normalized)) {
+  if (
+    /\b(navigate|route|destination|gate|cobalt|beacon|switch)\b/.test(
+      normalized,
+    )
+  ) {
     return "navigate";
   }
-  if (/\b(create|write|design|draft|story|brainstorm)\b/.test(normalized)) {
+  if (
+    /\b(create|write|design|draft|story|brainstorm|note|capture|walking|decision)\b/.test(
+      normalized,
+    )
+  ) {
     return "create";
   }
   return Object.hasOwn(AI_SCENARIOS, fallback) ? fallback : "create";
@@ -429,19 +444,19 @@ function demoResponseFor(request, { scenarioHint } = {}) {
   const input = normalized.user_input.toLowerCase();
   if (scenario === "create" && /\boutline\b/.test(input)) {
     message =
-      "I developed a three-part arc: name the human friction, show the calm adaptive moment, then close with local control. You can now revise tone, audience, or assumptions.";
-    summary = "Three-part creative outline drafted";
+      "Captured three parts: the observation, your decision, and one next step. Pause and look around before continuing.";
+    summary = "Three-part eyes-up note captured";
   } else if (
     scenario === "plan" &&
     /\b(?:deep work|focus block)\b/.test(input)
   ) {
     message =
-      "Deep work is now first, followed by communication, bounded admin, and a protected recovery buffer. The remaining compass petals let you inspect tradeoffs without losing the plan.";
-    summary = "Deep work prioritized with recovery preserved";
+      "Inspection comes first, then preparation, the bounded task, and verification. Stop and reassess if conditions change.";
+    summary = "Workshop checklist reordered with inspection first";
   } else if (scenario === "explain" && /\banalytics\b/.test(input)) {
     message =
-      "That analytics branch is intentionally outside this offline update explanation. It is marked as a wrong turn so undo can demonstrate return to the exact parent context.";
-    summary = "Intentional wrong explanation branch identified";
+      "Analytics is intentionally outside this cooking guide. Undo returns to the exact prior step without losing the sequence.";
+    summary = "Intentional wrong cooking branch identified";
   }
   return normalizeAIResponse(
     {

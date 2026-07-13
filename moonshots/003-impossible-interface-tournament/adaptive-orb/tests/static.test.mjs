@@ -60,3 +60,67 @@ test("Clawpilot theme tokens are exact and component styles use variables", asyn
   assert.doesNotMatch(styles, /\brgba?\(/i);
   assert.doesNotMatch(styles, /\bhsla?\(/i);
 });
+
+test("mobile-first UI has progressive permissions, exact layouts, and no hover-only action", async () => {
+  const [template, styles, app, sensors, mobile, generated] = await Promise.all([
+    readFile(new URL("src/index.template.html", root), "utf8"),
+    readFile(new URL("src/styles.css", root), "utf8"),
+    readFile(new URL("src/app.mjs", root), "utf8"),
+    readFile(new URL("src/sensors.mjs", root), "utf8"),
+    readFile(new URL("src/mobile.mjs", root), "utf8"),
+    readFile(new URL("index.html", root), "utf8"),
+  ]);
+
+  assert.ok(
+    template.indexOf("Start sensor-free AI") <
+      template.indexOf('id="permissionMic"'),
+  );
+  assert.ok(
+    template.indexOf('id="permissionMic"') <
+      template.indexOf('id="permissionCamera"'),
+  );
+  for (const id of [
+    "mobileRepeat",
+    "mobileWhatChanged",
+    "mobileUndo",
+    "mobileStop",
+    "hapticToggle",
+    "glanceProxy",
+    "permissionValue",
+    "sensorOnTime",
+  ]) {
+    assert.match(template, new RegExp(`id="${id}"`));
+  }
+  assert.match(template, /Not for driving/);
+  assert.match(template, /Headset and Bluetooth microphones/);
+  assert.match(styles, /390 × 844 portrait/);
+  assert.match(styles, /844 × 390/);
+  assert.match(styles, /max-width: 600px/);
+  assert.match(styles, /max-height: 500px/);
+  assert.match(styles, /env\(safe-area-inset-left\)/);
+  assert.match(styles, /env\(safe-area-inset-right\)/);
+  assert.match(styles, /min-height: 44px/);
+  assert.match(styles, /overflow-x: clip/);
+  assert.match(styles, /\.choice\[data-phone-hidden="true"\]/);
+  assert.equal((styles.match(/:hover/g) || []).length, 4);
+  assert.equal((styles.match(/:active/g) || []).length >= 4, true);
+
+  assert.match(mobile, /maximumPrimaryChoices: 4/);
+  assert.match(mobile, /centerOrbMinimumPx: 112/);
+  assert.match(app, /shortSpokenSummary/);
+  assert.match(app, /visibleChoiceIds/);
+  assert.match(app, /optionIds: \[\.\.\.visibleChoiceIds\]/);
+  assert.match(app, /ORIENTATION_CHANGE/);
+  assert.match(app, /background-interruption/);
+  assert.match(app, /record\.mobile = mobileMetrics\.snapshot/);
+  assert.doesNotMatch(app, /sensorController\.start\(\)/);
+
+  assert.match(sensors, /facingMode: \{ ideal: "user" \}/);
+  assert.match(sensors, /noiseSuppression: true/);
+  assert.match(sensors, /autoGainControl: true/);
+  assert.match(sensors, /dataset\.mirrored/);
+  assert.match(sensors, /smoothedAim/);
+  assert.doesNotMatch(sensors, /deviceId/);
+  assert.match(generated, /Start sensor-free AI/);
+  assert.match(generated, /maximumPrimaryChoices: 4/);
+});

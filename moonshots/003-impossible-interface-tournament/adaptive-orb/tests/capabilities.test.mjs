@@ -53,7 +53,7 @@ test("installed shell detection never equates installability with live permissio
   assert.match(presentation.title, /live access is not guaranteed/i);
   assert.match(
     presentation.detail,
-    /hardware and permission are checked only after Start/i,
+    /checked only when each optional microphone or camera step is chosen/i,
   );
   assert.match(
     presentation.detail,

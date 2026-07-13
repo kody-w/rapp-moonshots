@@ -71,7 +71,12 @@ class RadialAimCoordinator {
       return { ok: true, effect: "center", changed };
     }
 
-    const options = machine.state.options;
+    const requestedIds = Array.isArray(sample.optionIds)
+      ? new Set(sample.optionIds)
+      : null;
+    const options = requestedIds
+      ? machine.state.options.filter((option) => requestedIds.has(option.id))
+      : machine.state.options;
     if (!options.length) {
       this.reset();
       return { ok: false, effect: "ignored", changed: false };

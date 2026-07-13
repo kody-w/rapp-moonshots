@@ -9,6 +9,11 @@ import {
   verifyDeterministicRecord,
   verifyConversationRecord,
 } from "../src/core.mjs";
+import {
+  MOBILE_LAYOUT_CONTRACT,
+  MobileMetricsTracker,
+  mobileLayoutForViewport,
+} from "../src/mobile.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const evidenceDirectory = resolve(root, "evidence");
@@ -96,6 +101,75 @@ const conversationReplay = {
   events: conversationRecord.events,
 };
 
+let mobileNow = 0;
+const mobileTracker = new MobileMetricsTracker({ clock: () => mobileNow });
+mobileTracker.start();
+mobileTracker.notePermissionRequest("microphone");
+mobileNow = 100;
+mobileTracker.noteSensorStatus("microphone", "active");
+mobileNow = 200;
+mobileTracker.noteAction(
+  { type: "HIGHLIGHT", source: "touch" },
+  { ok: true },
+);
+mobileNow = 350;
+mobileTracker.noteAction(
+  { type: "CONFIRM", source: "touch" },
+  { ok: true },
+);
+mobileTracker.noteValue();
+mobileNow = 400;
+mobileTracker.beginInterruption();
+mobileNow = 550;
+mobileTracker.recoverInterruption();
+mobileTracker.noteSensorStatus("microphone", "off");
+mobileTracker.noteOrientationChange();
+mobileNow = 600;
+mobileTracker.notePermissionRequest("camera");
+mobileTracker.noteSensorStatus("camera", "active");
+mobileNow = 1000;
+const mobileEvidence = {
+  schemaVersion: 1,
+  product: "Adaptive Orb mobile-first contract",
+  evidenceKind: "deterministic synthetic interaction timing",
+  conversationFingerprint: conversationRecord.conversationFingerprint,
+  exactTaskFingerprint: record.deterministicFingerprint,
+  layouts: {
+    contract: MOBILE_LAYOUT_CONTRACT,
+    portrait: mobileLayoutForViewport(390, 844, {
+      top: 47,
+      bottom: 34,
+    }),
+    landscape: mobileLayoutForViewport(844, 390, {
+      left: 47,
+      right: 47,
+      bottom: 21,
+    }),
+  },
+  progressivePermissions: [
+    "sensor-free-value",
+    "optional-microphone",
+    "optional-front-camera",
+  ],
+  maximumPrimaryChoices: 4,
+  noHoverDependency: true,
+  normalBrowserAudioRouting: true,
+  interruptionResumeMode: "sensor-free",
+  scenarios: [
+    "eyes-up-note",
+    "field-workshop-checklist",
+    "hands-busy-kitchen-guide",
+    "accessibility-switch-decision",
+  ],
+  notFor: ["driving", "safety-critical control"],
+  metrics: mobileTracker.snapshot(mobileNow, {
+    voiceRepairs: conversationRecord.metrics.voiceRepairs,
+    falseCommits: conversationRecord.metrics.falseCommits,
+  }),
+  privacy:
+    "Aggregate semantic timings only; no transcript, media, calibration, device ID, API response, credential, or analytics.",
+};
+
 await mkdir(evidenceDirectory, { recursive: true });
 await Promise.all([
   writeFile(
@@ -114,8 +188,12 @@ await Promise.all([
     resolve(evidenceDirectory, "conversation-replay.json"),
     `${JSON.stringify(conversationReplay, null, 2)}\n`,
   ),
+  writeFile(
+    resolve(evidenceDirectory, "mobile-evidence.json"),
+    `${JSON.stringify(mobileEvidence, null, 2)}\n`,
+  ),
 ]);
 
 process.stdout.write(
-  `Wrote task evidence ${record.deterministicFingerprint} and conversation evidence ${conversationRecord.conversationFingerprint}: exact=${conversationRecord.exactTaskVerdict}, modes=${conversationRecord.modesUsed.join(",")}.\n`,
+  `Wrote task ${record.deterministicFingerprint}, conversation ${conversationRecord.conversationFingerprint}, and mobile 390x844 / 844x390 evidence: exact=${conversationRecord.exactTaskVerdict}, modes=${conversationRecord.modesUsed.join(",")}.\n`,
 );

@@ -675,6 +675,18 @@ class AdaptiveOrbMachine {
         return this.stop(action.source || "other", now);
       case "RESUME":
         return this.resume(action.source || "other", now);
+      case "REPEAT":
+        return this.repeat(action.source || "other", now);
+      case "WHAT_CHANGED":
+        return this.whatChanged(action.source || "other", now);
+      case "ORIENTATION_CHANGE":
+        return this.orientationChanged(
+          action.source || "viewport",
+          action.orientation || "unknown",
+          now,
+        );
+      case "INTERRUPTION_RESUME":
+        return this.interruptionResume(action.source || "visibility", now);
       case "SWITCH_MODE":
         return this.switchMode(action.mode, action.source || "manual", now, true);
       case "AUTO_MODE":
@@ -801,6 +813,18 @@ class AdaptiveOrbMachine {
     if (hasWord(text, "undo")) {
       return this.undo(source, now);
     }
+    if (text === "repeat" || text === "say that again") {
+      return this.repeat(source, now);
+    }
+    if (text === "what changed" || text === "what has changed") {
+      return this.whatChanged(source, now);
+    }
+    if (text === "next" || text === "next choice") {
+      return this.cycle(1, source, now);
+    }
+    if (text === "previous" || text === "previous choice") {
+      return this.cycle(-1, source, now);
+    }
 
     const requestedMode = MODE_NAMES.find(
       (mode) => text === mode || text === `switch to ${mode}` || text === `${mode} mode`,
@@ -901,7 +925,7 @@ class AdaptiveOrbMachine {
     }
 
     if (
-      /\b(?:create|write|design|draft|brainstorm|plan|schedule|explain|why|how|navigate|help me)\b/.test(
+      /\b(?:create|write|design|draft|brainstorm|note|capture|walking|decision|plan|schedule|workshop|checklist|field|explain|why|how|cook|kitchen|navigate|accessibility|switch|help me)\b/.test(
         text,
       )
     ) {
@@ -1460,6 +1484,46 @@ class AdaptiveOrbMachine {
     return { ok: this.state.freezeCauses.length === 0, effect: "resume" };
   }
 
+  repeat(source, now) {
+    const summary =
+      this.state.conversation.responseSummary ||
+      "No AI response is ready yet. Choose a scenario.";
+    this.state.lastAction = "repeat";
+    this.state.announcement = `Repeat: ${summary}`;
+    this.record("conversation.repeat-requested", { source }, now);
+    return { ok: true, effect: "repeat", text: summary };
+  }
+
+  whatChanged(source, now) {
+    const previous = this.state.history.at(-1)?.reason;
+    const change = previous
+      ? previous.replaceAll("-", " ")
+      : this.state.lastAction.replaceAll("-", " ");
+    this.state.lastAction = "what-changed";
+    this.state.announcement =
+      `What changed: ${change}. Confirmed task values and conversation history remain reversible.`;
+    this.record("conversation.what-changed", { source, change }, now);
+    return { ok: true, effect: "what-changed", text: this.state.announcement };
+  }
+
+  orientationChanged(source, orientation, now) {
+    this.clearAim();
+    this.state.lastAction = "orientation-change";
+    this.state.announcement =
+      `${orientation} layout active. Conversation, task, history, and safety state were preserved.`;
+    this.record("lifecycle.orientation", { source, orientation }, now);
+    return { ok: true, effect: "orientation" };
+  }
+
+  interruptionResume(source, now) {
+    this.clearAim();
+    this.state.lastAction = "interruption-resume";
+    this.state.announcement =
+      "Session restored sensor-free after interruption. Re-enable optional sensors when ready.";
+    this.record("lifecycle.interruption-resumed", { source }, now);
+    return { ok: true, effect: "interruption-resume" };
+  }
+
   switchMode(mode, source, now, manual = false) {
     if (!MODE_NAMES.includes(mode)) {
       return this.block("unknown-mode", source, now, false);
@@ -1509,6 +1573,13 @@ class AdaptiveOrbMachine {
       return this.block("unknown-sensor", "sensor", now, false);
     }
     this.state.sensors[sensor] = status;
+    if (
+      sensor === "camera" &&
+      status === "active" &&
+      this.state.sessionKind === "accessible"
+    ) {
+      this.state.sessionKind = "live";
+    }
     if (sensor === "estimator" && action.label) {
       this.state.sensors.estimatorLabel = action.label;
     }

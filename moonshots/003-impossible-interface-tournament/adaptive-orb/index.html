@@ -84,11 +84,15 @@
 
 html {
   min-width: 320px;
+  max-width: 100%;
   background: var(--cp-bg);
+  overflow-x: clip;
   scroll-behavior: smooth;
 }
 
 body {
+  width: 100%;
+  max-width: 100%;
   min-height: 100vh;
   min-height: 100dvh;
   margin: 0;
@@ -96,10 +100,13 @@ body {
   color: var(--cp-text);
   font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
   line-height: 1.5;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
 }
 
 button,
 summary {
+  min-height: 44px;
   font: inherit;
 }
 
@@ -115,6 +122,11 @@ button {
 }
 
 button:hover {
+  border-color: var(--cp-accent);
+  background: var(--cp-accent-soft);
+}
+
+button:active {
   border-color: var(--cp-accent);
   background: var(--cp-accent-soft);
 }
@@ -140,6 +152,11 @@ button:disabled {
 }
 
 .primary-action:hover {
+  background: var(--cp-accent-hover);
+  color: var(--cp-accent-fg);
+}
+
+.primary-action:active {
   background: var(--cp-accent-hover);
   color: var(--cp-accent-fg);
 }
@@ -267,9 +284,14 @@ button:disabled {
   color: var(--cp-accent-hover);
 }
 
+.capability-link:active {
+  background: var(--cp-accent-soft);
+  color: var(--cp-accent-hover);
+}
+
 .launch-actions {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
   margin-top: 20px;
 }
@@ -382,6 +404,57 @@ button:disabled {
 
 .runtime-capability > button {
   flex: 0 0 auto;
+}
+
+.permission-steps {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 14px 18px;
+  border: 1px solid var(--cp-border);
+  border-radius: 16px;
+  background: var(--cp-surface);
+  box-shadow: 0 0 2px var(--cp-border), 0 1px 2px var(--cp-border);
+}
+
+.permission-steps h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.permission-sequence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.permission-sequence li {
+  display: grid;
+  min-height: 44px;
+  padding: 6px 9px;
+  border: 1px solid var(--cp-border);
+  border-radius: 0.625rem;
+  background: var(--cp-surface-soft);
+  font-size: 0.72rem;
+}
+
+.permission-sequence li[data-complete="true"] {
+  border-color: var(--cp-success);
+}
+
+.permission-sequence span {
+  color: var(--cp-text-muted);
+}
+
+.permission-actions {
+  display: grid;
+  gap: 8px;
+  min-width: min(100%, 240px);
 }
 
 .task-ribbon {
@@ -513,6 +586,10 @@ button:disabled {
   background: var(--cp-surface-soft);
   object-fit: cover;
   opacity: 0.62;
+  transform: none;
+}
+
+#sensorPreview[data-mirrored="true"] {
   transform: scaleX(-1);
 }
 
@@ -727,6 +804,10 @@ button:disabled {
   background: var(--cp-accent-soft);
 }
 
+.center-orb:active {
+  background: var(--cp-accent-soft);
+}
+
 .center-orb strong,
 .center-orb small {
   position: relative;
@@ -734,13 +815,13 @@ button:disabled {
 }
 
 .center-orb strong {
-  font-size: 0.8rem;
+  font-size: clamp(0.9rem, 2.8vw, 1.2rem);
   letter-spacing: 0.14em;
 }
 
 .center-orb small {
   color: var(--cp-text-muted);
-  font-size: 0.58rem;
+  font-size: clamp(0.62rem, 1.8vw, 0.78rem);
 }
 
 .orb-core {
@@ -849,6 +930,31 @@ button:disabled {
   border-radius: 0.625rem;
   background: var(--cp-surface-soft);
   text-align: center;
+}
+
+.mobile-choice-page {
+  min-height: 44px;
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--cp-border);
+  border-radius: 0.625rem;
+  background: var(--cp-surface-soft);
+  color: var(--cp-text-muted);
+  font-size: 0.76rem;
+  text-align: center;
+}
+
+.mobile-global-controls {
+  display: none;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.mobile-global-controls button {
+  min-width: 0;
+  padding: 7px 5px;
+  font-size: 0.72rem;
 }
 
 .parity-controls {
@@ -1065,6 +1171,256 @@ button:disabled {
     padding-inline: 8px;
   }
 
+  /* Primary hardware contract: 390 × 844 portrait. */
+  @media (max-width: 600px) {
+    .launch-screen {
+      align-items: start;
+      padding:
+        max(12px, env(safe-area-inset-top))
+        max(10px, env(safe-area-inset-right))
+        max(12px, env(safe-area-inset-bottom))
+        max(10px, env(safe-area-inset-left));
+    }
+
+    .launch-card {
+      padding: 18px 14px;
+    }
+
+    .launch-lede {
+      margin: 14px 0;
+      font-size: 1rem;
+    }
+
+    .app-shell {
+      width: 100%;
+      padding:
+        max(10px, env(safe-area-inset-top))
+        max(8px, env(safe-area-inset-right))
+        max(40px, env(safe-area-inset-bottom))
+        max(8px, env(safe-area-inset-left));
+    }
+
+    .topbar {
+      gap: 10px;
+      padding-bottom: 10px;
+    }
+
+    .topbar h1 {
+      font-size: clamp(1.9rem, 12vw, 2.7rem);
+    }
+
+    .status-cluster {
+      gap: 4px;
+    }
+
+    .status-chip {
+      padding: 5px 7px;
+      font-size: 0.68rem;
+    }
+
+    .runtime-capability,
+    .permission-steps {
+      grid-template-columns: 1fr;
+      padding: 12px;
+    }
+
+    .permission-sequence {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .permission-sequence li {
+      align-items: center;
+      grid-template-columns: 1fr auto;
+    }
+
+    .permission-actions {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .task-ribbon {
+      gap: 8px;
+      padding: 12px;
+    }
+
+    .task-values {
+      gap: 5px;
+    }
+
+    .task-values div {
+      min-height: 44px;
+      padding: 6px 8px;
+    }
+
+    .experience-grid {
+      gap: 10px;
+    }
+
+    .orb-card {
+      padding: 10px 8px 12px;
+    }
+
+    .orb-stage {
+      width: min(100%, 374px);
+      min-height: min(96vw, 374px);
+    }
+
+    .center-orb {
+      width: clamp(112px, 32vw, 136px);
+    }
+
+    .center-orb strong {
+      font-size: 1rem;
+    }
+
+    .center-orb small {
+      font-size: 0.7rem;
+    }
+
+    .choice {
+      width: clamp(98px, 29vw, 116px);
+      min-height: 68px;
+      padding: 7px 5px;
+    }
+
+    .choice[data-phone-hidden="true"] {
+      display: none;
+    }
+
+    .mobile-choice-page:not([hidden]),
+    .mobile-global-controls {
+      display: grid;
+    }
+
+    .parity-controls {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .parity-controls button,
+    .mobile-global-controls button {
+      width: 100%;
+      min-height: 44px;
+    }
+
+    .response-focus {
+      padding: 12px;
+    }
+
+    .conversation-landmarks {
+      max-height: 152px;
+    }
+
+    .footer-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .footer-actions button {
+      width: 100%;
+      min-width: 0;
+    }
+  }
+
+  /* Primary compact landscape contract: 844 × 390. */
+  @media (orientation: landscape) and (max-height: 500px) {
+    .app-shell {
+      width: 100%;
+      padding:
+        max(6px, env(safe-area-inset-top))
+        max(10px, env(safe-area-inset-right))
+        max(24px, env(safe-area-inset-bottom))
+        max(10px, env(safe-area-inset-left));
+    }
+
+    .topbar {
+      align-items: center;
+      flex-direction: row;
+      padding: 2px 0 6px;
+    }
+
+    .topbar h1 {
+      font-size: 1.8rem;
+    }
+
+    .topbar .eyebrow,
+    .topbar > div > p:last-child,
+    .mode-meter {
+      display: none;
+    }
+
+    .runtime-capability,
+    .permission-steps {
+      grid-template-columns: minmax(0, 1fr) minmax(220px, 0.5fr);
+      gap: 8px;
+      padding: 8px 10px;
+    }
+
+    .permission-sequence {
+      flex-wrap: nowrap;
+    }
+
+    .permission-sequence li {
+      min-width: 0;
+    }
+
+    .task-ribbon {
+      grid-template-columns: minmax(180px, 0.65fr) minmax(0, 1.35fr);
+      padding: 8px 10px;
+    }
+
+    .experience-grid {
+      grid-template-columns: minmax(180px, 0.55fr) minmax(350px, 1fr);
+      gap: 8px;
+    }
+
+    .experience-grid > .context-card:last-child {
+      grid-column: 1 / -1;
+    }
+
+    .orb-card {
+      order: 0;
+      padding: 8px;
+    }
+
+    .orb-stage {
+      width: min(82vh, 350px);
+      min-height: min(82vh, 350px);
+    }
+
+    .center-orb {
+      width: 104px;
+    }
+
+    .choice {
+      width: 104px;
+      min-height: 56px;
+      padding: 4px;
+    }
+
+    .choice small {
+      display: none;
+    }
+
+    .choice[data-phone-hidden="true"] {
+      display: none;
+    }
+
+    .mobile-choice-page:not([hidden]),
+    .mobile-global-controls {
+      display: grid;
+    }
+
+    .context-card {
+      padding: 10px;
+    }
+
+    .conversation-landmarks {
+      max-height: 76px;
+      overflow: hidden;
+    }
+  }
+
   .orb-card,
   .context-card {
     padding: 12px;
@@ -1147,19 +1503,20 @@ button:disabled {
 
     <section class="launch-screen" id="launchScreen" aria-labelledby="launchTitle">
       <div class="launch-card">
-        <p class="eyebrow">One AI conversation · three adaptive grammars</p>
+        <p class="eyebrow">Mobile-first · eyes up · hands busy</p>
         <h1 id="launchTitle">Adaptive Orb</h1>
         <p class="launch-lede">
-          Speak a broad request, select stable follow-ups, and travel through
-          deeper revisions without opening a chat box. One memory-only
-          conversation moves between Voice Orbit, Gaze Compass, and Gesture Tunnel.
+          An eyes-up operating layer for AI when hands and attention are
+          occupied. Start without sensors, then optionally add voice and
+          front-camera gestures one permission at a time.
         </p>
         <div class="disclosure" role="note" aria-label="Sensor and speech disclosure">
           <strong>Before permission:</strong> camera frames are analyzed only in
           ephemeral local memory and are never recorded. The Web Speech API is a
           browser service and may send audio to a browser or OS vendor for
           processing. This app cannot audit or control that vendor processing.
-          Choose sensor-free access to request neither camera nor microphone.
+          The useful default requests neither camera nor microphone.
+          Microphone and camera are separate later choices, never prerequisites.
           Installation and offline readiness do not prove that live sensor or
           speech APIs are available in the installed runtime.
         </div>
@@ -1190,27 +1547,27 @@ button:disabled {
           </div>
         </section>
         <div class="launch-actions">
-          <button class="primary-action" id="startLive" type="button">
-            Start voice + camera
+          <button class="primary-action" id="startAccessible" type="button">
+            Start sensor-free AI
           </button>
-          <button id="startAccessible" type="button">Start sensor-free access</button>
           <button id="startSimulation" type="button">
             Run multi-turn AI simulation
           </button>
         </div>
         <p class="small-note">
-          GitHub Pages uses deterministic demo AI with no credentials or network.
-          The optional companion sends conversation text only to a same-origin
-          operator-configured RAPP Brainstem proxy.
+          Try eyes-up note capture, a workshop checklist, hands-busy cooking
+          guidance, or switch-friendly decisions. Not for driving,
+          safety-critical control, or replacing attention to your surroundings.
         </p>
         <details class="launch-help">
           <summary>Install on iPhone or iPad</summary>
           <p>
             In Safari, choose Share → Add to Home Screen. Camera and microphone
-            require HTTPS or localhost. An installed icon guarantees neither
-            camera/microphone access nor SpeechRecognition. This app checks the
-            current runtime every launch. If standalone access is restricted,
-            use sensor-free controls or Open in Safari for live sensors.
+            require HTTPS or localhost. Installation works for offline,
+            sensor-free AI even when live APIs do not. After launch, optional
+            permission steps request microphone first and front camera second.
+            If standalone access is restricted, stay sensor-free or use Open
+            in Safari for live sensors.
           </p>
         </details>
       </div>
@@ -1267,12 +1624,48 @@ button:disabled {
         </button>
       </section>
 
+      <section
+        class="permission-steps"
+        id="permissionPanel"
+        aria-labelledby="permissionTitle"
+      >
+        <div>
+          <p class="eyebrow">Progressive permissions</p>
+          <h2 id="permissionTitle">Useful first. Sensors optional.</h2>
+          <ol class="permission-sequence">
+            <li data-permission-step="sensor-free" data-complete="true">
+              <strong>1 · Sensor-free AI</strong>
+              <span>active now</span>
+            </li>
+            <li data-permission-step="microphone">
+              <strong>2 · Microphone</strong>
+              <span>optional voice</span>
+            </li>
+            <li data-permission-step="camera">
+              <strong>3 · Front camera</strong>
+              <span>optional coarse gesture</span>
+            </li>
+          </ol>
+          <p class="small-note" id="permissionStatus">
+            No sensor permission requested. Headset and Bluetooth microphones
+            follow normal browser and OS input routing; this app does not choose
+            or persist a device.
+          </p>
+        </div>
+        <div class="permission-actions">
+          <button id="permissionMic" type="button">Enable voice · microphone</button>
+          <button id="permissionCamera" type="button" disabled>
+            Then enable front camera
+          </button>
+        </div>
+      </section>
+
       <section class="task-ribbon" aria-labelledby="taskTitle">
         <div>
           <p class="eyebrow" id="taskTitle">Shared conversation and task memory</p>
           <p id="taskPrompt">
-            Speak a create, plan, explain, or navigate intent. The exact cobalt
-            task remains available as a reversible navigation scenario.
+            Choose an eyes-up note, field checklist, kitchen guide, or
+            switch-friendly decision. The cobalt task remains reversible.
           </p>
         </div>
         <ol class="task-values" id="taskValues" aria-label="Current route values"></ol>
@@ -1326,7 +1719,7 @@ button:disabled {
                 <p class="eyebrow" id="responseKicker">Memory-only AI response</p>
                 <h2 id="responseTitle">Choose a scenario or speak broadly</h2>
               </div>
-              <button id="speakResponse" type="button">Speak response</button>
+              <button id="speakResponse" type="button">Repeat short summary</button>
             </div>
             <p id="responseText">
               Demo AI is ready offline. Voice Orbit will turn broad intent into
@@ -1365,8 +1758,17 @@ button:disabled {
           </div>
 
           <p class="caption" id="caption" aria-live="polite">
-            Start at center. Speak the full broad intent.
+            Sensor-free AI ready. Center rests; captions mirror every earcon.
           </p>
+          <p class="mobile-choice-page" id="mobileChoicePage" hidden>
+            Four primary choices shown. Say “next,” or use Cycle choice to refine.
+          </p>
+          <nav class="mobile-global-controls" aria-label="No-look global controls">
+            <button id="mobileRepeat" type="button">Repeat</button>
+            <button id="mobileWhatChanged" type="button">What changed</button>
+            <button id="mobileUndo" type="button">Undo</button>
+            <button id="mobileStop" type="button">Stop</button>
+          </nav>
           <div class="parity-controls" aria-label="Keyboard, touch, and switch parity">
             <button id="previousChoice" type="button">Previous</button>
             <button id="nextChoice" type="button">Cycle choice</button>
@@ -1393,6 +1795,11 @@ button:disabled {
             <div><dt>Center cancels</dt><dd id="centerCancels">0</dd></div>
             <div><dt>Voice repairs</dt><dd id="voiceRepairs">0</dd></div>
             <div><dt>Sensor loss / recovery</dt><dd id="sensorRecovery">0 / 0</dd></div>
+            <div><dt>Glance proxy</dt><dd id="glanceProxy">0 ms</dd></div>
+            <div><dt>One-hand fallback</dt><dd id="touchFallback">0</dd></div>
+            <div><dt>Interruption recovery</dt><dd id="interruptionRecovery">0 / 0 ms</dd></div>
+            <div><dt>Permission → value</dt><dd id="permissionValue">waiting</dd></div>
+            <div><dt>Sensor-on time</dt><dd id="sensorOnTime">0 ms</dd></div>
           </dl>
           <ol class="event-trace" id="eventTrace" aria-label="Recent semantic events"></ol>
         </aside>
@@ -1454,6 +1861,12 @@ button:disabled {
             Sensor-free parity always remains available.
           </p>
           <p>
+            <strong>Install tutorial:</strong> (1) open this HTTPS page in Safari,
+            (2) tap Share, (3) choose Add to Home Screen, and (4) open Adaptive
+            Orb from the new icon. Start sensor-free; add microphone and camera
+            only if that standalone runtime offers them.
+          </p>
+          <p>
             <strong>Standalone degradation:</strong> if an installed runtime
             lacks an API or permission, choose sensor-free mode. On iOS, use
             <strong>Open in Safari for live sensors</strong> where the same HTTPS
@@ -1471,6 +1884,7 @@ button:disabled {
       <footer class="footer-actions">
         <button id="exportMetrics" type="button">Export public-safe semantic JSON</button>
         <button id="companionMode" type="button">AI: offline demo</button>
+        <button id="hapticToggle" type="button" hidden>Haptics: off</button>
         <button id="installApp" type="button">Install app</button>
         <button id="applyUpdate" type="button" hidden>Apply app update</button>
         <button id="useAccessible" type="button">Continue sensor-free</button>
@@ -1488,30 +1902,33 @@ button:disabled {
 const AI_SCENARIOS = Object.freeze({
   create: Object.freeze({
     id: "create",
-    title: "Create",
-    detail: "Shape a draft from broad intent",
-    prompt: "Help me create a calm launch story for a small accessibility tool.",
+    title: "Eyes-up note",
+    detail: "Capture a walking note or quick decision",
+    prompt:
+      "Help me create a short eyes-up note while walking in a pedestrian-safe place.",
     mode: "orbit",
   }),
   plan: Object.freeze({
     id: "plan",
-    title: "Plan",
-    detail: "Compare stable priorities and next steps",
-    prompt: "Plan a focused afternoon with four concrete priorities.",
+    title: "Field checklist",
+    detail: "Run a workshop or field-work checklist",
+    prompt: "Plan a four-step workshop checklist with a final safety pause.",
     mode: "compass",
   }),
   explain: Object.freeze({
     id: "explain",
-    title: "Explain",
-    detail: "Travel through a layered explanation",
-    prompt: "Explain how an offline-first application handles updates.",
+    title: "Kitchen guide",
+    detail: "Follow a hands-busy cooking or task guide",
+    prompt:
+      "Explain a short hands-busy cooking sequence with pause and repeat options.",
     mode: "tunnel",
   }),
   navigate: Object.freeze({
     id: "navigate",
-    title: "Navigate",
-    detail: "Choose a route, tool, or scenario",
-    prompt: "Navigate the cobalt beacon routing scenario.",
+    title: "Access & decide",
+    detail: "Use switch parity or compare a bounded decision",
+    prompt:
+      "Navigate an accessibility-first decision using switch-friendly choices.",
     mode: "compass",
   }),
 });
@@ -1540,42 +1957,42 @@ const RESPONSE_SHAPES = Object.freeze({
 const DEMO_RESPONSES = Object.freeze({
   create: Object.freeze({
     message:
-      "I framed the creative intent around calm confidence, local control, and one clear invitation. Choose the direction you want me to develop.",
-    summary: "Creative direction framed around calm, local control",
+      "Note ready: capture one thought, one decision, and one next step. Pause whenever your surroundings need attention.",
+    summary: "Note ready: thought, decision, next step",
     suggestions: Object.freeze([
       Object.freeze({
         id: "create-outline",
-        label: "Outline",
-        detail: "Build a concise story arc",
-        prompt: "Develop a concise three-part outline.",
+        label: "Capture note",
+        detail: "Save a three-part spoken outline",
+        prompt: "Develop a concise three-part outline for this walking note.",
         branch: "outline",
       }),
       Object.freeze({
         id: "create-variations",
-        label: "Variations",
-        detail: "Explore several directions",
-        prompt: "Generate three distinct creative directions.",
+        label: "Two options",
+        detail: "Compare two quick decisions",
+        prompt: "Generate two short decision options.",
         branch: "variations",
       }),
       Object.freeze({
         id: "create-tone",
-        label: "Tune the tone",
-        detail: "Calm, direct, or playful",
-        prompt: "Refine the voice to feel calm and direct.",
+        label: "Shorten",
+        detail: "Make it easy to hear once",
+        prompt: "Refine the note to feel calm and direct.",
         branch: "tone",
       }),
       Object.freeze({
         id: "create-audience",
-        label: "Audience",
-        detail: "Focus the message",
-        prompt: "Adapt the concept for first-time users.",
+        label: "Next step",
+        detail: "Extract one action",
+        prompt: "Adapt the note into one next action.",
         branch: "audience",
       }),
       Object.freeze({
         id: "create-review",
-        label: "Review",
-        detail: "Inspect assumptions",
-        prompt: "Review the concept for unclear assumptions.",
+        label: "What changed",
+        detail: "Hear the latest revision",
+        prompt: "Review the note for what changed.",
         branch: "review",
       }),
     ]),
@@ -1583,42 +2000,42 @@ const DEMO_RESPONSES = Object.freeze({
   }),
   plan: Object.freeze({
     message:
-      "I organized the plan into four stable priorities with recovery space. The compass is best here because the alternatives are bounded and comparable.",
-    summary: "Four bounded priorities prepared for comparison",
+      "Checklist ready: inspect, prepare, perform, then verify. Stop if the work area becomes unsafe.",
+    summary: "Checklist: inspect, prepare, perform, verify",
     suggestions: Object.freeze([
       Object.freeze({
         id: "plan-focus",
-        label: "Deep work",
-        detail: "Protect the first focus block",
-        prompt: "Prioritize the deep-work block.",
+        label: "Inspect",
+        detail: "Check the field or bench first",
+        prompt: "Prioritize the workshop inspection step.",
         branch: "focus",
       }),
       Object.freeze({
         id: "plan-people",
-        label: "People",
-        detail: "Group communication work",
-        prompt: "Prioritize communication and collaboration.",
+        label: "Prepare",
+        detail: "Gather tools and protective gear",
+        prompt: "Prepare the required tools and protective gear.",
         branch: "people",
       }),
       Object.freeze({
         id: "plan-admin",
-        label: "Admin",
-        detail: "Clear bounded maintenance",
-        prompt: "Prioritize the bounded administrative tasks.",
+        label: "Perform",
+        detail: "Run the bounded task",
+        prompt: "Run the bounded workshop task.",
         branch: "admin",
       }),
       Object.freeze({
         id: "plan-buffer",
-        label: "Recovery",
-        detail: "Reserve transition time",
-        prompt: "Protect recovery and transition time.",
+        label: "Verify",
+        detail: "Confirm completion and cleanup",
+        prompt: "Verify the work and cleanup.",
         branch: "buffer",
       }),
       Object.freeze({
         id: "plan-risks",
-        label: "Risks",
-        detail: "Inspect schedule pressure",
-        prompt: "Show the plan's main scheduling risks.",
+        label: "Pause",
+        detail: "Stop and reassess conditions",
+        prompt: "Show the checklist's stop and reassess points.",
         branch: "risks",
       }),
     ]),
@@ -1626,41 +2043,41 @@ const DEMO_RESPONSES = Object.freeze({
   }),
   explain: Object.freeze({
     message:
-      "An offline-first update has nested layers: the page, the cache version, activation, and rollback. Enter a layer without losing the explanation above it.",
-    summary: "Offline update explanation divided into nested layers",
+      "Cooking guide ready: prep, heat, check, and finish. Say repeat at any step; stop before handling hazards.",
+    summary: "Cooking guide: prep, heat, check, finish",
     suggestions: Object.freeze([
       Object.freeze({
         id: "explain-cache",
-        label: "Static cache",
-        detail: "What is allowed offline",
-        prompt: "Go deeper into the static cache allowlist.",
+        label: "Prep",
+        detail: "Ingredients and tools",
+        prompt: "Go deeper into cooking preparation.",
         branch: "cache",
       }),
       Object.freeze({
         id: "explain-update",
-        label: "Update",
-        detail: "Waiting worker and activation",
-        prompt: "Go deeper into service worker update activation.",
+        label: "Heat",
+        detail: "Timed hands-busy step",
+        prompt: "Go deeper into the timed heating step.",
         branch: "update",
       }),
       Object.freeze({
         id: "explain-rollback",
-        label: "Rollback",
-        detail: "Remove a bad worker safely",
-        prompt: "Go deeper into unregister and rollback.",
+        label: "Check",
+        detail: "Confirm before continuing",
+        prompt: "Go deeper into checking doneness safely.",
         branch: "rollback",
       }),
       Object.freeze({
         id: "explain-privacy",
-        label: "Privacy",
-        detail: "What must never enter cache",
-        prompt: "Go deeper into privacy exclusions.",
+        label: "Finish",
+        detail: "Complete and clean up",
+        prompt: "Go deeper into finishing and cleanup.",
         branch: "privacy",
       }),
       Object.freeze({
         id: "explain-wrong",
         label: "Wrong branch",
-        detail: "Intentional revision drill",
+        detail: "Intentional undo drill",
         prompt: "Open an intentionally irrelevant analytics branch.",
         branch: "wrong-analytics",
         intentionalWrong: true,
@@ -1670,8 +2087,8 @@ const DEMO_RESPONSES = Object.freeze({
   }),
   navigate: Object.freeze({
     message:
-      "I found a reversible local routing scenario. Choose the cobalt task for the full all-mode safety drill, or inspect another destination first.",
-    summary: "Reversible navigation choices prepared",
+      "Accessible choices ready. Use one switch to cycle and another confirmation, or open the reversible cobalt safety drill.",
+    summary: "Switch-ready accessible choices prepared",
     suggestions: Object.freeze([
       Object.freeze({
         id: "begin-cobalt-task",
@@ -1683,29 +2100,29 @@ const DEMO_RESPONSES = Object.freeze({
       }),
       Object.freeze({
         id: "navigate-orion",
-        label: "ORION-7",
-        detail: "Inspect destination context",
-        prompt: "Inspect ORION-7.",
+        label: "Switch scan",
+        detail: "Cycle choices one at a time",
+        prompt: "Explain the switch scanning controls.",
         branch: "orion",
       }),
       Object.freeze({
         id: "navigate-gates",
-        label: "Gate map",
-        detail: "Compare four stable gates",
-        prompt: "Show the gate map.",
+        label: "Read choices",
+        detail: "Hear the bounded options",
+        prompt: "Read the current choices concisely.",
         branch: "gates",
       }),
       Object.freeze({
         id: "navigate-tools",
-        label: "Tools",
-        detail: "Open the nested tool tunnel",
-        prompt: "Open the navigation tools.",
+        label: "Decision help",
+        detail: "Compare a reversible choice",
+        prompt: "Open accessible decision support.",
         branch: "tools",
       }),
       Object.freeze({
         id: "navigate-home",
-        label: "Home",
-        detail: "Return to scenario petals",
+        label: "Return",
+        detail: "Go back to scenario petals",
         prompt: "Return to the scenario petals.",
         branch: "home",
       }),
@@ -1721,19 +2138,31 @@ const MAX_RESPONSE_TEXT = 12000;
 function inferScenario(text, fallback = "create") {
   const normalized = String(text || "").toLowerCase();
   if (
-    /\b(plan|schedule|priority|priorities|prioritize|prioritized|agenda)\b/.test(
+    /\b(plan|schedule|priority|priorities|prioritize|prioritized|agenda|workshop|checklist|field)\b/.test(
       normalized,
     )
   ) {
     return "plan";
   }
-  if (/\b(explain|understand|why|how does|how an|teach)\b/.test(normalized)) {
+  if (
+    /\b(explain|understand|why|how does|how an|teach|cook|cooking|kitchen|recipe)\b/.test(
+      normalized,
+    )
+  ) {
     return "explain";
   }
-  if (/\b(navigate|route|destination|gate|cobalt|beacon)\b/.test(normalized)) {
+  if (
+    /\b(navigate|route|destination|gate|cobalt|beacon|switch)\b/.test(
+      normalized,
+    )
+  ) {
     return "navigate";
   }
-  if (/\b(create|write|design|draft|story|brainstorm)\b/.test(normalized)) {
+  if (
+    /\b(create|write|design|draft|story|brainstorm|note|capture|walking|decision)\b/.test(
+      normalized,
+    )
+  ) {
     return "create";
   }
   return Object.hasOwn(AI_SCENARIOS, fallback) ? fallback : "create";
@@ -1916,19 +2345,19 @@ function demoResponseFor(request, { scenarioHint } = {}) {
   const input = normalized.user_input.toLowerCase();
   if (scenario === "create" && /\boutline\b/.test(input)) {
     message =
-      "I developed a three-part arc: name the human friction, show the calm adaptive moment, then close with local control. You can now revise tone, audience, or assumptions.";
-    summary = "Three-part creative outline drafted";
+      "Captured three parts: the observation, your decision, and one next step. Pause and look around before continuing.";
+    summary = "Three-part eyes-up note captured";
   } else if (
     scenario === "plan" &&
     /\b(?:deep work|focus block)\b/.test(input)
   ) {
     message =
-      "Deep work is now first, followed by communication, bounded admin, and a protected recovery buffer. The remaining compass petals let you inspect tradeoffs without losing the plan.";
-    summary = "Deep work prioritized with recovery preserved";
+      "Inspection comes first, then preparation, the bounded task, and verification. Stop and reassess if conditions change.";
+    summary = "Workshop checklist reordered with inspection first";
   } else if (scenario === "explain" && /\banalytics\b/.test(input)) {
     message =
-      "That analytics branch is intentionally outside this offline update explanation. It is marked as a wrong turn so undo can demonstrate return to the exact parent context.";
-    summary = "Intentional wrong explanation branch identified";
+      "Analytics is intentionally outside this cooking guide. Undo returns to the exact prior step without losing the sequence.";
+    summary = "Intentional wrong cooking branch identified";
   }
   return normalizeAIResponse(
     {
@@ -2235,7 +2664,7 @@ function describeRuntimeCapabilities(
       ? "Installed offline shell; live access is not guaranteed"
       : "Live-sensor prerequisites detected; permission is not confirmed";
     explanation =
-      "This runtime exposes the required APIs, but hardware and permission are checked only after Start.";
+      "This runtime exposes the APIs, but hardware and permission are checked only when each optional microphone or camera step is chosen.";
   }
 
   return Object.freeze({
@@ -2251,6 +2680,313 @@ function describeRuntimeCapabilities(
     title,
     detail: `${explanation} ${CAPABILITY_BOUNDARY}`,
   });
+}
+
+const MOBILE_LAYOUT_CONTRACT = Object.freeze({
+  portrait: Object.freeze({ width: 390, height: 844 }),
+  landscape: Object.freeze({ width: 844, height: 390 }),
+  minimumTargetPx: 44,
+  maximumPrimaryChoices: 4,
+  centerOrbMinimumPx: 112,
+});
+
+function mobileLayoutForViewport(
+  width,
+  height,
+  {
+    top = 0,
+    right = 0,
+    bottom = 0,
+    left = 0,
+  } = {},
+) {
+  const viewportWidth = Math.max(320, Number(width) || 0);
+  const viewportHeight = Math.max(320, Number(height) || 0);
+  const orientation =
+    viewportWidth > viewportHeight ? "landscape" : "portrait";
+  const usableWidth = Math.max(0, viewportWidth - left - right);
+  const usableHeight = Math.max(0, viewportHeight - top - bottom);
+  const orbDiameter =
+    orientation === "portrait"
+      ? Math.min(390, Math.max(280, usableWidth - 16))
+      : Math.min(360, Math.max(248, usableHeight - 104));
+  return Object.freeze({
+    width: viewportWidth,
+    height: viewportHeight,
+    orientation,
+    usableWidth,
+    usableHeight,
+    orbDiameter,
+    minimumTargetPx: MOBILE_LAYOUT_CONTRACT.minimumTargetPx,
+    maximumPrimaryChoices: MOBILE_LAYOUT_CONTRACT.maximumPrimaryChoices,
+    noHorizontalOverflow: orbDiameter <= usableWidth,
+  });
+}
+
+function phoneChoiceWindow(options, highlightedId, limit = 4) {
+  const normalized = Array.isArray(options) ? options : [];
+  const pageSize = Math.max(1, Math.min(4, Number(limit) || 4));
+  const highlightedIndex = normalized.findIndex(
+    (option) => option.id === highlightedId,
+  );
+  const page = highlightedIndex < 0 ? 0 : Math.floor(highlightedIndex / pageSize);
+  const start = page * pageSize;
+  const visible = normalized.slice(start, start + pageSize);
+  return Object.freeze({
+    ids: Object.freeze(visible.map((option) => option.id)),
+    page,
+    pageCount: Math.max(1, Math.ceil(normalized.length / pageSize)),
+    start,
+    end: start + visible.length,
+    total: normalized.length,
+    refined: normalized.length > pageSize,
+  });
+}
+
+function shortSpokenSummary(text, maximumWords = 16) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+  const firstSentence = normalized.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim();
+  const candidate = firstSentence || normalized;
+  const words = candidate.split(" ");
+  if (words.length <= maximumWords) {
+    return candidate;
+  }
+  return `${words.slice(0, maximumWords).join(" ")}…`;
+}
+
+class MobileMetricsTracker {
+  constructor({ clock = () => performance.now() } = {}) {
+    this.clock = clock;
+    this.startedAt = null;
+    this.firstValueAt = null;
+    this.glanceStartedAt = null;
+    this.glanceTimeProxyMs = 0;
+    this.glanceSamples = 0;
+    this.oneHandTouchFallbacks = 0;
+    this.interruptionStartedAt = null;
+    this.interruptions = 0;
+    this.interruptionRecoveries = 0;
+    this.interruptionRecoveryMs = 0;
+    this.permissionRequests = { microphone: 0, camera: 0 };
+    this.sensorStartedAt = { microphone: null, camera: null };
+    this.sensorOnMs = { microphone: 0, camera: 0 };
+    this.orientationChanges = 0;
+    this.hapticSignals = 0;
+  }
+
+  start(at = this.clock()) {
+    if (this.startedAt === null) {
+      this.startedAt = at;
+    }
+  }
+
+  noteAction(action, result, at = this.clock()) {
+    const source = action?.source;
+    if (["touch", "switch"].includes(source)) {
+      this.oneHandTouchFallbacks += 1;
+    }
+    if (action?.type === "HIGHLIGHT" && source === "touch") {
+      this.glanceStartedAt = at;
+    }
+    if (
+      action?.type === "CONFIRM" &&
+      result?.ok &&
+      ["touch", "switch"].includes(source) &&
+      Number.isFinite(this.glanceStartedAt)
+    ) {
+      this.glanceTimeProxyMs += Math.max(
+        0,
+        Math.min(10000, at - this.glanceStartedAt),
+      );
+      this.glanceSamples += 1;
+      this.glanceStartedAt = null;
+    }
+  }
+
+  noteValue(at = this.clock()) {
+    if (this.firstValueAt === null) {
+      this.firstValueAt = at;
+    }
+  }
+
+  notePermissionRequest(sensor) {
+    if (Object.hasOwn(this.permissionRequests, sensor)) {
+      this.permissionRequests[sensor] += 1;
+    }
+  }
+
+  noteSensorStatus(sensor, status, at = this.clock()) {
+    if (!Object.hasOwn(this.sensorStartedAt, sensor)) {
+      return;
+    }
+    if (status === "active" && this.sensorStartedAt[sensor] === null) {
+      this.sensorStartedAt[sensor] = at;
+      return;
+    }
+    if (
+      ["off", "denied", "failed", "lost", "not-requested"].includes(status) &&
+      Number.isFinite(this.sensorStartedAt[sensor])
+    ) {
+      this.sensorOnMs[sensor] += Math.max(0, at - this.sensorStartedAt[sensor]);
+      this.sensorStartedAt[sensor] = null;
+    }
+  }
+
+  beginInterruption(at = this.clock()) {
+    if (this.interruptionStartedAt === null) {
+      this.interruptionStartedAt = at;
+      this.interruptions += 1;
+    }
+  }
+
+  recoverInterruption(at = this.clock()) {
+    if (this.interruptionStartedAt === null) {
+      return false;
+    }
+    this.interruptionRecoveryMs += Math.max(0, at - this.interruptionStartedAt);
+    this.interruptionStartedAt = null;
+    this.interruptionRecoveries += 1;
+    return true;
+  }
+
+  noteOrientationChange() {
+    this.orientationChanges += 1;
+    this.glanceStartedAt = null;
+  }
+
+  noteHaptic() {
+    this.hapticSignals += 1;
+  }
+
+  snapshot(
+    at = this.clock(),
+    {
+      voiceRepairs = 0,
+      falseCommits = 0,
+    } = {},
+  ) {
+    const sensorOnMs = { ...this.sensorOnMs };
+    for (const sensor of Object.keys(this.sensorStartedAt)) {
+      if (Number.isFinite(this.sensorStartedAt[sensor])) {
+        sensorOnMs[sensor] += Math.max(0, at - this.sensorStartedAt[sensor]);
+      }
+    }
+    return {
+      viewportContract: "390x844 portrait · 844x390 landscape",
+      glanceTimeProxyMs: this.glanceTimeProxyMs,
+      glanceSamples: this.glanceSamples,
+      voiceRepairs,
+      falseCommits,
+      oneHandTouchFallbacks: this.oneHandTouchFallbacks,
+      interruptions: this.interruptions,
+      interruptionRecoveries: this.interruptionRecoveries,
+      interruptionRecoveryMs: this.interruptionRecoveryMs,
+      permissionToValueMs:
+        this.startedAt === null || this.firstValueAt === null
+          ? null
+          : Math.max(0, this.firstValueAt - this.startedAt),
+      permissionRequests: { ...this.permissionRequests },
+      sensorOnMs: {
+        ...sensorOnMs,
+        total: sensorOnMs.microphone + sensorOnMs.camera,
+      },
+      orientationChanges: this.orientationChanges,
+      hapticSignals: this.hapticSignals,
+    };
+  }
+}
+
+class MobileFeedback {
+  constructor({
+    globalObject = globalThis,
+    navigatorObject = globalThis.navigator,
+    onHaptic = () => {},
+  } = {}) {
+    this.globalObject = globalObject;
+    this.navigatorObject = navigatorObject;
+    this.onHaptic = onHaptic;
+    this.audioContext = null;
+    this.hapticsEnabled = false;
+  }
+
+  get hapticsSupported() {
+    return typeof this.navigatorObject?.vibrate === "function";
+  }
+
+  setHaptics(enabled) {
+    this.hapticsEnabled = this.hapticsSupported && enabled === true;
+    return this.hapticsEnabled;
+  }
+
+  async unlock() {
+    const AudioContext =
+      this.globalObject?.AudioContext || this.globalObject?.webkitAudioContext;
+    if (!this.audioContext && typeof AudioContext === "function") {
+      try {
+        this.audioContext = new AudioContext();
+      } catch {
+        this.audioContext = null;
+      }
+    }
+    try {
+      await this.audioContext?.resume?.();
+    } catch {
+      // Captions remain the authoritative feedback path.
+    }
+  }
+
+  signal(kind = "ready") {
+    const frequencies = {
+      ready: 520,
+      confirm: 660,
+      undo: 420,
+      stop: 240,
+      recover: 580,
+      error: 180,
+    };
+    const frequency = frequencies[kind] || frequencies.ready;
+    const context = this.audioContext;
+    if (context?.createOscillator && context?.createGain) {
+      try {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const now = context.currentTime;
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.035, now + 0.008);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(now);
+        oscillator.stop(now + 0.075);
+      } catch {
+        // Captions remain the authoritative feedback path.
+      }
+    }
+    if (this.hapticsEnabled) {
+      const pattern = kind === "error" || kind === "stop" ? [20, 35, 20] : 18;
+      try {
+        if (this.navigatorObject.vibrate(pattern)) {
+          this.onHaptic();
+        }
+      } catch {
+        // Haptics are optional and never gate interaction.
+      }
+    }
+  }
+
+  close() {
+    try {
+      this.navigatorObject?.vibrate?.(0);
+      this.audioContext?.close?.();
+    } catch {
+      // The browser may already have suspended output.
+    }
+    this.audioContext = null;
+  }
 }
 
 const MODE_NAMES = Object.freeze(["orbit", "compass", "tunnel"]);
@@ -2920,6 +3656,18 @@ class AdaptiveOrbMachine {
         return this.stop(action.source || "other", now);
       case "RESUME":
         return this.resume(action.source || "other", now);
+      case "REPEAT":
+        return this.repeat(action.source || "other", now);
+      case "WHAT_CHANGED":
+        return this.whatChanged(action.source || "other", now);
+      case "ORIENTATION_CHANGE":
+        return this.orientationChanged(
+          action.source || "viewport",
+          action.orientation || "unknown",
+          now,
+        );
+      case "INTERRUPTION_RESUME":
+        return this.interruptionResume(action.source || "visibility", now);
       case "SWITCH_MODE":
         return this.switchMode(action.mode, action.source || "manual", now, true);
       case "AUTO_MODE":
@@ -3046,6 +3794,18 @@ class AdaptiveOrbMachine {
     if (hasWord(text, "undo")) {
       return this.undo(source, now);
     }
+    if (text === "repeat" || text === "say that again") {
+      return this.repeat(source, now);
+    }
+    if (text === "what changed" || text === "what has changed") {
+      return this.whatChanged(source, now);
+    }
+    if (text === "next" || text === "next choice") {
+      return this.cycle(1, source, now);
+    }
+    if (text === "previous" || text === "previous choice") {
+      return this.cycle(-1, source, now);
+    }
 
     const requestedMode = MODE_NAMES.find(
       (mode) => text === mode || text === `switch to ${mode}` || text === `${mode} mode`,
@@ -3146,7 +3906,7 @@ class AdaptiveOrbMachine {
     }
 
     if (
-      /\b(?:create|write|design|draft|brainstorm|plan|schedule|explain|why|how|navigate|help me)\b/.test(
+      /\b(?:create|write|design|draft|brainstorm|note|capture|walking|decision|plan|schedule|workshop|checklist|field|explain|why|how|cook|kitchen|navigate|accessibility|switch|help me)\b/.test(
         text,
       )
     ) {
@@ -3705,6 +4465,46 @@ class AdaptiveOrbMachine {
     return { ok: this.state.freezeCauses.length === 0, effect: "resume" };
   }
 
+  repeat(source, now) {
+    const summary =
+      this.state.conversation.responseSummary ||
+      "No AI response is ready yet. Choose a scenario.";
+    this.state.lastAction = "repeat";
+    this.state.announcement = `Repeat: ${summary}`;
+    this.record("conversation.repeat-requested", { source }, now);
+    return { ok: true, effect: "repeat", text: summary };
+  }
+
+  whatChanged(source, now) {
+    const previous = this.state.history.at(-1)?.reason;
+    const change = previous
+      ? previous.replaceAll("-", " ")
+      : this.state.lastAction.replaceAll("-", " ");
+    this.state.lastAction = "what-changed";
+    this.state.announcement =
+      `What changed: ${change}. Confirmed task values and conversation history remain reversible.`;
+    this.record("conversation.what-changed", { source, change }, now);
+    return { ok: true, effect: "what-changed", text: this.state.announcement };
+  }
+
+  orientationChanged(source, orientation, now) {
+    this.clearAim();
+    this.state.lastAction = "orientation-change";
+    this.state.announcement =
+      `${orientation} layout active. Conversation, task, history, and safety state were preserved.`;
+    this.record("lifecycle.orientation", { source, orientation }, now);
+    return { ok: true, effect: "orientation" };
+  }
+
+  interruptionResume(source, now) {
+    this.clearAim();
+    this.state.lastAction = "interruption-resume";
+    this.state.announcement =
+      "Session restored sensor-free after interruption. Re-enable optional sensors when ready.";
+    this.record("lifecycle.interruption-resumed", { source }, now);
+    return { ok: true, effect: "interruption-resume" };
+  }
+
   switchMode(mode, source, now, manual = false) {
     if (!MODE_NAMES.includes(mode)) {
       return this.block("unknown-mode", source, now, false);
@@ -3754,6 +4554,13 @@ class AdaptiveOrbMachine {
       return this.block("unknown-sensor", "sensor", now, false);
     }
     this.state.sensors[sensor] = status;
+    if (
+      sensor === "camera" &&
+      status === "active" &&
+      this.state.sessionKind === "accessible"
+    ) {
+      this.state.sessionKind = "live";
+    }
     if (sensor === "estimator" && action.label) {
       this.state.sensors.estimatorLabel = action.label;
     }
@@ -4438,8 +5245,8 @@ function runConversationSimulation({ verify = true } = {}) {
 }
 
 class EpochGuard {
-  constructor() {
-    this.generation = 0;
+  constructor(initialGeneration = 0) {
+    this.generation = Math.max(0, Number(initialGeneration) || 0);
   }
 
   begin() {
@@ -4642,6 +5449,7 @@ class AdaptiveSensorController {
     onSpeech = () => {},
     onCaption = () => {},
     clock = () => performance.now(),
+    generationSeed = 0,
   } = {}) {
     this.video = video;
     this.onAction = onAction;
@@ -4650,11 +5458,16 @@ class AdaptiveSensorController {
     this.onSpeech = onSpeech;
     this.onCaption = onCaption;
     this.clock = clock;
-    this.lifecycle = new EpochGuard();
+    this.lifecycle = new EpochGuard(generationSeed);
     this.detectorGuard = new DetectorEpochGuard();
     this.freshness = new FreshnessGate();
     this.gestureGate = new CoarseGestureGate();
     this.stream = null;
+    this.streams = new Set();
+    this.microphoneStream = null;
+    this.cameraStream = null;
+    this.lifecycleGeneration = 0;
+    this.frontCameraMirrored = true;
     this.active = false;
     this.frameHandle = null;
     this.frameHandleKind = null;
@@ -4676,6 +5489,7 @@ class AdaptiveSensorController {
     this.previousGray = null;
     this.faceBaseline = null;
     this.motionPoint = { x: 0.5, y: 0.5 };
+    this.smoothedAim = null;
     this.neutralSince = null;
     this.lastMotionGestureAt = -Infinity;
     this.armed = false;
@@ -4693,8 +5507,251 @@ class AdaptiveSensorController {
     });
   }
 
+  ensureProgressiveLifecycle() {
+    if (
+      this.active &&
+      this.lifecycle.isCurrent(this.lifecycleGeneration)
+    ) {
+      return this.lifecycleGeneration;
+    }
+    const generation = this.lifecycle.begin();
+    this.lifecycleGeneration = generation;
+    this.active = true;
+    this.freshness.reset(generation);
+    this.recognitionTerminal = false;
+    this.recognitionRetries = 0;
+    return generation;
+  }
+
+  recalibrateOrientation() {
+    this.smoothedAim = null;
+    this.faceBaseline = null;
+    this.motionPoint = { x: 0.5, y: 0.5 };
+    if (this.previousGray) {
+      this.previousGray.fill(0);
+      this.previousGray = null;
+    }
+    this.gestureGate.reset();
+    if (
+      this.cameraStream &&
+      this.active &&
+      this.lifecycle.isCurrent(this.lifecycleGeneration)
+    ) {
+      this.invalidateContent(this.lifecycleGeneration, this.clock());
+    }
+  }
+
+  registerStream(stream) {
+    this.streams.add(stream);
+    if (!this.stream) {
+      this.stream = stream;
+    }
+  }
+
+  releaseStream(stream) {
+    if (!stream) {
+      return;
+    }
+    stopStream(stream);
+    this.streams.delete(stream);
+    if (this.microphoneStream === stream) {
+      this.microphoneStream = null;
+    }
+    if (this.cameraStream === stream) {
+      this.cameraStream = null;
+    }
+    if (this.stream === stream) {
+      this.stream = this.streams.values().next().value || null;
+    }
+  }
+
+  releaseMicrophoneCapture(status = "denied") {
+    const stream = this.microphoneStream;
+    if (!stream) {
+      return;
+    }
+    if (stream === this.cameraStream) {
+      for (const track of stream.getTracks?.() || []) {
+        if (track.kind === "audio") {
+          try {
+            track.stop();
+          } catch {
+            // Track may already be stopped.
+          }
+        }
+      }
+      this.microphoneStream = null;
+    } else {
+      this.releaseStream(stream);
+    }
+    this.onAction({
+      type: "SENSOR_STATUS",
+      sensor: "microphone",
+      status,
+      at: this.clock(),
+    });
+  }
+
+  async enableMicrophone() {
+    if (this.microphoneStream) {
+      return true;
+    }
+    const generation = this.ensureProgressiveLifecycle();
+    this.onAction({
+      type: "SENSOR_STATUS",
+      sensor: "microphone",
+      status: "starting",
+      at: this.clock(),
+    });
+    let acquired = null;
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("media-unsupported");
+      }
+      acquired = await navigator.mediaDevices.getUserMedia({
+        video: false,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      if (!this.active || !this.lifecycle.isCurrent(generation)) {
+        stopStream(acquired);
+        return false;
+      }
+      this.microphoneStream = acquired;
+      this.registerStream(acquired);
+      this.attachTrackSafety(acquired, generation);
+      this.onAction({
+        type: "SENSOR_STATUS",
+        sensor: "microphone",
+        status: "active",
+        at: this.clock(),
+      });
+      this.startWatchdog(generation);
+      this.startRecognition(generation);
+      if (this.recognitionTerminal || !this.recognition) {
+        this.releaseMicrophoneCapture(
+          this.recognitionTerminal ? "denied" : "not-requested",
+        );
+        return false;
+      }
+      return true;
+    } catch (error) {
+      this.releaseStream(acquired);
+      if (this.active && this.lifecycle.isCurrent(generation)) {
+        const reason = error?.name || error?.message || "microphone-failed";
+        this.onAction({
+          type: "SENSOR_STATUS",
+          sensor: "microphone",
+          status: "denied",
+          reason,
+          at: this.clock(),
+        });
+        this.onCaption(
+          "Microphone unavailable. Sensor-free AI and camera permission remain separate.",
+        );
+      }
+      return false;
+    }
+  }
+
+  async enableCamera() {
+    if (this.cameraStream) {
+      return true;
+    }
+    const generation = this.ensureProgressiveLifecycle();
+    this.onAction({
+      type: "SENSOR_STATUS",
+      sensor: "camera",
+      status: "starting",
+      at: this.clock(),
+    });
+    let acquired = null;
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("media-unsupported");
+      }
+      acquired = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "user" },
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 24, max: 30 },
+        },
+        audio: false,
+      });
+      if (!this.active || !this.lifecycle.isCurrent(generation)) {
+        stopStream(acquired);
+        return false;
+      }
+      const videoTrack = acquired.getVideoTracks?.()[0];
+      const facingMode = videoTrack?.getSettings?.().facingMode;
+      this.frontCameraMirrored = facingMode !== "environment";
+      this.cameraStream = acquired;
+      this.registerStream(acquired);
+      this.attachTrackSafety(acquired, generation);
+      if (this.video) {
+        this.video.srcObject = acquired;
+        this.video.muted = true;
+        this.video.playsInline = true;
+        if (this.video.dataset) {
+          this.video.dataset.mirrored = String(this.frontCameraMirrored);
+          this.video.dataset.facingMode =
+            this.frontCameraMirrored ? "user" : "environment";
+        }
+        await this.video.play();
+      }
+      if (!this.active || !this.lifecycle.isCurrent(generation)) {
+        this.releaseStream(acquired);
+        if (this.video) {
+          this.video.srcObject = null;
+        }
+        return false;
+      }
+      this.onAction({
+        type: "SENSOR_STATUS",
+        sensor: "camera",
+        status: "active",
+        at: this.clock(),
+      });
+      this.configureEstimator();
+      this.startFrameLoop(generation);
+      this.startWatchdog(generation);
+      return true;
+    } catch (error) {
+      this.releaseStream(acquired);
+      if (this.video) {
+        this.video.srcObject = null;
+      }
+      if (this.active && this.lifecycle.isCurrent(generation)) {
+        const reason = error?.name || error?.message || "camera-failed";
+        this.onAction({
+          type: "SENSOR_STATUS",
+          sensor: "camera",
+          status: "denied",
+          reason,
+          at: this.clock(),
+        });
+        this.onAction({
+          type: "SENSOR_STATUS",
+          sensor: "estimator",
+          status: "not-requested",
+          label: "camera unavailable · sensor-free parity active",
+          at: this.clock(),
+        });
+        this.onCaption(
+          "Camera unavailable. Microphone and sensor-free AI remain usable.",
+        );
+      }
+      return false;
+    }
+  }
+
   async start() {
     const generation = this.lifecycle.begin();
+    this.lifecycleGeneration = generation;
     this.active = true;
     this.freshness.reset(generation);
     this.onAction({
@@ -4717,7 +5774,7 @@ class AdaptiveSensorController {
       }
       acquired = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: "user",
+          facingMode: { ideal: "user" },
           width: { ideal: 640 },
           height: { ideal: 480 },
           frameRate: { ideal: 30, max: 30 },
@@ -4725,6 +5782,7 @@ class AdaptiveSensorController {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
+          autoGainControl: true,
         },
       });
       if (!this.active || !this.lifecycle.isCurrent(generation)) {
@@ -4733,11 +5791,22 @@ class AdaptiveSensorController {
       }
 
       this.stream = acquired;
+      this.streams.add(acquired);
+      this.microphoneStream = acquired;
+      this.cameraStream = acquired;
+      const videoTrack = acquired.getVideoTracks?.()[0];
+      const facingMode = videoTrack?.getSettings?.().facingMode;
+      this.frontCameraMirrored = facingMode !== "environment";
       this.attachTrackSafety(acquired, generation);
       if (this.video) {
         this.video.srcObject = acquired;
         this.video.muted = true;
         this.video.playsInline = true;
+        if (this.video.dataset) {
+          this.video.dataset.mirrored = String(this.frontCameraMirrored);
+          this.video.dataset.facingMode =
+            this.frontCameraMirrored ? "user" : "environment";
+        }
         await this.video.play();
       }
       if (!this.active || !this.lifecycle.isCurrent(generation)) {
@@ -4869,9 +5938,9 @@ class AdaptiveSensorController {
           this.processFrame(at, metadata, generation);
           schedule();
         });
-      } else {
+      } else if (typeof globalThis.requestAnimationFrame === "function") {
         this.frameHandleKind = "animation";
-        this.frameHandle = requestAnimationFrame((at) => {
+        this.frameHandle = globalThis.requestAnimationFrame((at) => {
           this.processFrame(
             at,
             {
@@ -4882,6 +5951,20 @@ class AdaptiveSensorController {
           );
           schedule();
         });
+      } else {
+        this.frameHandleKind = "timer";
+        this.frameHandle = setTimeout(() => {
+          const at = this.clock();
+          this.processFrame(
+            at,
+            {
+              mediaTime: this.video?.currentTime,
+              presentedFrames: this.video?.webkitDecodedFrameCount,
+            },
+            generation,
+          );
+          schedule();
+        }, 34);
       }
     };
     schedule();
@@ -4939,6 +6022,7 @@ class AdaptiveSensorController {
     this.releasePendingDetectorBuffers();
     this.faceBaseline = null;
     this.motionPoint = { x: 0.5, y: 0.5 };
+    this.smoothedAim = null;
     this.revokeSensorArm();
     this.contentBlocked = true;
     if (this.active && this.lifecycle.isCurrent(generation)) {
@@ -5189,15 +6273,19 @@ class AdaptiveSensorController {
           });
           return;
         }
-        const x = (box.x + box.width / 2) / this.video.videoWidth;
+        const rawX = (box.x + box.width / 2) / this.video.videoWidth;
+        const x = this.frontCameraMirrored ? 1 - rawX : rawX;
         const y = (box.y + box.height / 2) / this.video.videoHeight;
         if (!this.faceBaseline) {
           this.faceBaseline = { x, y };
         }
-        const point = {
+        const target = {
           x: clamp(0.5 + (x - this.faceBaseline.x) * 3.2),
           y: clamp(0.5 + (y - this.faceBaseline.y) * 3.2),
         };
+        this.motionPoint.x += (target.x - this.motionPoint.x) * 0.34;
+        this.motionPoint.y += (target.y - this.motionPoint.y) * 0.34;
+        const point = { ...this.motionPoint };
         const processedSample = { generation, processedAt: at };
         const freshnessAccepted = this.emitFreshness(processedSample);
         if (
@@ -5247,11 +6335,12 @@ class AdaptiveSensorController {
     const contentEpoch = this.contentEpoch;
     let rotationDelta = null;
     if (motion.activeTotal > 0 && motion.difference > 0.35) {
+      const rawCentroidX =
+        motion.centroidX /
+        motion.activeTotal /
+        Math.max(1, this.analysisCanvas.width - 1);
       const centroid = {
-        x:
-          motion.centroidX /
-          motion.activeTotal /
-          Math.max(1, this.analysisCanvas.width - 1),
+        x: this.frontCameraMirrored ? 1 - rawCentroidX : rawCentroidX,
         y:
           motion.centroidY /
           motion.activeTotal /
@@ -5368,15 +6457,23 @@ class AdaptiveSensorController {
   }
 
   emitAim(point, confidence, estimator, at) {
-    const dx = point.x - 0.5;
-    const dy = point.y - 0.5;
+    const alpha = confidence >= 0.7 ? 0.38 : 0.24;
+    const smoothed = this.smoothedAim
+      ? {
+          x: this.smoothedAim.x + (point.x - this.smoothedAim.x) * alpha,
+          y: this.smoothedAim.y + (point.y - this.smoothedAim.y) * alpha,
+        }
+      : { x: point.x, y: point.y };
+    this.smoothedAim = smoothed;
+    const dx = smoothed.x - 0.5;
+    const dy = smoothed.y - 0.5;
     const radius = Math.hypot(dx, dy);
     const zone = radius < 0.13 ? "center" : "radial";
-    this.onAim({ ...point, confidence, estimator, zone, at });
+    this.onAim({ ...smoothed, confidence, estimator, zone, at });
 
     const gesture = this.gestureGate.sample({
       zone,
-      y: point.y,
+      y: smoothed.y,
       at,
       armed: this.armed,
       epoch: this.armedEpoch,
@@ -5407,7 +6504,25 @@ class AdaptiveSensorController {
     this.armedChoiceId = normalizedChoice;
   }
 
+  handleOrientationChange() {
+    if (
+      !this.active ||
+      !this.cameraStream ||
+      !this.lifecycle.isCurrent(this.lifecycleGeneration)
+    ) {
+      return false;
+    }
+    this.recalibrateOrientation();
+    this.onCaption(
+      "Orientation changed. Camera aim is recalibrating from fresh frames.",
+    );
+    return true;
+  }
+
   startWatchdog(generation) {
+    if (this.watchdog !== null) {
+      return;
+    }
     this.watchdog = setInterval(() => {
       if (!this.active || !this.lifecycle.isCurrent(generation)) {
         return;
@@ -5421,12 +6536,14 @@ class AdaptiveSensorController {
     const Recognition =
       globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
     if (!Recognition) {
+      this.recognitionTerminal = true;
       this.onAction({
         type: "SENSOR_STATUS",
         sensor: "speech",
         status: "unavailable",
         at: this.clock(),
       });
+      this.releaseMicrophoneCapture("not-requested");
       this.onCaption("Browser speech recognition unavailable. Gesture and parity remain.");
       return;
     }
@@ -5472,6 +6589,8 @@ class AdaptiveSensorController {
         ].includes(event.error);
         if (terminal) {
           this.recognitionTerminal = true;
+          this.detachRecognition();
+          this.releaseMicrophoneCapture("denied");
           this.onAction({
             type: "SENSOR_STATUS",
             sensor: "speech",
@@ -5480,7 +6599,7 @@ class AdaptiveSensorController {
             at: this.clock(),
           });
           this.onCaption(
-            "Speech service unavailable; the physical mic may still be active. Use gesture or parity.",
+            "Speech service unavailable; microphone capture stopped. Use gesture or parity.",
           );
         } else {
           this.scheduleRecognitionRestart(generation);
@@ -5511,6 +6630,7 @@ class AdaptiveSensorController {
       if (terminal) {
         this.recognitionTerminal = true;
         this.detachRecognition();
+        this.releaseMicrophoneCapture("denied");
         this.onAction({
           type: "SENSOR_STATUS",
           sensor: "speech",
@@ -5621,8 +6741,13 @@ class AdaptiveSensorController {
         typeof this.video.cancelVideoFrameCallback === "function"
       ) {
         this.video.cancelVideoFrameCallback(this.frameHandle);
-      } else if (typeof cancelAnimationFrame === "function") {
-        cancelAnimationFrame(this.frameHandle);
+      } else if (
+        this.frameHandleKind === "animation" &&
+        typeof globalThis.cancelAnimationFrame === "function"
+      ) {
+        globalThis.cancelAnimationFrame(this.frameHandle);
+      } else if (this.frameHandleKind === "timer") {
+        clearTimeout(this.frameHandle);
       }
     }
     this.frameHandle = null;
@@ -5636,8 +6761,17 @@ class AdaptiveSensorController {
     if (typeof speechSynthesis !== "undefined") {
       speechSynthesis.cancel();
     }
-    stopStream(this.stream);
+    const streams = new Set(this.streams);
+    if (this.stream) {
+      streams.add(this.stream);
+    }
+    for (const stream of streams) {
+      stopStream(stream);
+    }
+    this.streams.clear();
     this.stream = null;
+    this.microphoneStream = null;
+    this.cameraStream = null;
     if (this.video) {
       try {
         this.video.pause();
@@ -5666,6 +6800,7 @@ class AdaptiveSensorController {
     this.detectorRequestId += 1;
     this.faceBaseline = null;
     this.motionPoint = { x: 0.5, y: 0.5 };
+    this.smoothedAim = null;
     this.lastFrameToken = null;
     this.gestureGate.reset();
     this.armed = false;
@@ -5771,7 +6906,12 @@ class RadialAimCoordinator {
       return { ok: true, effect: "center", changed };
     }
 
-    const options = machine.state.options;
+    const requestedIds = Array.isArray(sample.optionIds)
+      ? new Set(sample.optionIds)
+      : null;
+    const options = requestedIds
+      ? machine.state.options.filter((option) => requestedIds.has(option.id))
+      : machine.state.options;
     if (!options.length) {
       this.reset();
       return { ok: false, effect: "ignored", changed: false };
@@ -5951,7 +7091,6 @@ const byId = (id) => document.getElementById(id);
 const elements = {
   launchScreen: byId("launchScreen"),
   app: byId("app"),
-  startLive: byId("startLive"),
   startAccessible: byId("startAccessible"),
   startSimulation: byId("startSimulation"),
   launchCapability: byId("launchCapability"),
@@ -5971,6 +7110,10 @@ const elements = {
   runtimeCapabilityDetail: byId("runtimeCapabilityDetail"),
   runtimeSafariAction: byId("runtimeSafariAction"),
   runtimeSafariLink: byId("runtimeSafariLink"),
+  permissionPanel: byId("permissionPanel"),
+  permissionStatus: byId("permissionStatus"),
+  permissionMic: byId("permissionMic"),
+  permissionCamera: byId("permissionCamera"),
   capabilitySensorFree: byId("capabilitySensorFree"),
   taskValues: byId("taskValues"),
   responseKicker: byId("responseKicker"),
@@ -5996,6 +7139,11 @@ const elements = {
   orbSubLabel: byId("orbSubLabel"),
   dwellRing: byId("dwellRing"),
   caption: byId("caption"),
+  mobileChoicePage: byId("mobileChoicePage"),
+  mobileRepeat: byId("mobileRepeat"),
+  mobileWhatChanged: byId("mobileWhatChanged"),
+  mobileUndo: byId("mobileUndo"),
+  mobileStop: byId("mobileStop"),
   previousChoice: byId("previousChoice"),
   nextChoice: byId("nextChoice"),
   confirmChoice: byId("confirmChoice"),
@@ -6008,12 +7156,18 @@ const elements = {
   centerCancels: byId("centerCancels"),
   voiceRepairs: byId("voiceRepairs"),
   sensorRecovery: byId("sensorRecovery"),
+  glanceProxy: byId("glanceProxy"),
+  touchFallback: byId("touchFallback"),
+  interruptionRecovery: byId("interruptionRecovery"),
+  permissionValue: byId("permissionValue"),
+  sensorOnTime: byId("sensorOnTime"),
   eventTrace: byId("eventTrace"),
   modeStats: byId("modeStats"),
   comparisonTable: byId("comparisonTable"),
   comparisonPanel: byId("comparisonPanel"),
   exportMetrics: byId("exportMetrics"),
   companionMode: byId("companionMode"),
+  hapticToggle: byId("hapticToggle"),
   installApp: byId("installApp"),
   applyUpdate: byId("applyUpdate"),
   useAccessible: byId("useAccessible"),
@@ -6052,6 +7206,12 @@ const stageCopy = {
 const startupQuery = new URLSearchParams(window.location.search);
 const ephemeralSessionId = createEphemeralSessionId();
 const aiAdapter = new AdaptiveAIAdapter();
+const mobileMetrics = new MobileMetricsTracker({
+  clock: () => performance.now(),
+});
+const mobileFeedback = new MobileFeedback({
+  onHaptic: () => mobileMetrics.noteHaptic(),
+});
 let logicalNow = null;
 let machine = createMachine();
 let sensorController = null;
@@ -6075,6 +7235,12 @@ let liveStartFailed = false;
 let runtimeSensorIssues = new Set();
 let runtimeCapabilities = detectRuntimeCapabilities();
 let capabilityPresentation = null;
+let microphonePermissionAttempted = !runtimeCapabilities.speechRecognitionApi;
+let sensorPermissionBusy = false;
+let visibleChoiceIds = [];
+let interruptionPending = false;
+let lastOrientation =
+  window.innerWidth > window.innerHeight ? "landscape" : "portrait";
 
 function sessionNow() {
   return logicalNow === null ? performance.now() : logicalNow;
@@ -6123,17 +7289,37 @@ function refreshCapabilityGuidance({ recheck = true } = {}) {
     }
   }
 
-  elements.startLive.disabled =
-    replayLocked || !capabilityPresentation.canStartLive;
-  elements.startLive.textContent = !capabilityPresentation.canStartLive
-    ? "Live sensors unavailable here"
-    : runtimeCapabilities.speechRecognitionApi
-      ? "Start voice + camera"
-      : "Start camera + mic · speech unavailable";
+  const sessionStarted = machine.state.status !== "idle";
+  const microphoneActive = machine.state.sensors.microphone === "active";
+  const cameraActive = machine.state.sensors.camera === "active";
+  elements.permissionMic.disabled =
+    replayLocked ||
+    sensorPermissionBusy ||
+    !sessionStarted ||
+    microphoneActive ||
+    !runtimeCapabilities.liveSensorPrerequisites ||
+    !runtimeCapabilities.speechRecognitionApi;
+  elements.permissionMic.textContent = microphoneActive
+    ? machine.state.sensors.speech === "active"
+      ? "Voice enabled"
+      : "Microphone enabled · voice starting"
+    : !runtimeCapabilities.speechRecognitionApi
+      ? "Voice unavailable · use controls"
+      : "Enable voice · microphone";
+  elements.permissionCamera.disabled =
+    replayLocked ||
+    sensorPermissionBusy ||
+    !sessionStarted ||
+    cameraActive ||
+    !runtimeCapabilities.liveSensorPrerequisites ||
+    !microphonePermissionAttempted;
+  elements.permissionCamera.textContent = cameraActive
+    ? "Front camera enabled"
+    : "Then enable front camera";
   elements.capabilitySensorFree.disabled =
-    replayLocked || machine.state.sessionKind === "accessible";
+    replayLocked || (!sensorController && machine.state.sessionKind === "accessible");
   elements.capabilitySensorFree.textContent =
-    machine.state.sessionKind === "accessible"
+    !sensorController && machine.state.sessionKind === "accessible"
       ? "Sensor-free mode active"
       : "Use sensor-free mode";
   return capabilityPresentation;
@@ -6169,6 +7355,7 @@ function createSensorController() {
   return new AdaptiveSensorController({
     video: elements.sensorPreview,
     clock: () => performance.now(),
+    generationSeed: Math.max(0, machine.state.sensors.generation - 1),
     onAction(action) {
       if (!machine || machine.state.sessionKind === "simulation") {
         return { ok: false, effect: "ignored" };
@@ -6176,6 +7363,20 @@ function createSensorController() {
       const result = machine.dispatch(action);
       if (result.ok) {
         trackRuntimeSensorCapability(action);
+      }
+      if (
+        action.type === "SENSOR_STATUS" &&
+        ["microphone", "camera"].includes(action.sensor)
+      ) {
+        mobileMetrics.noteSensorStatus(action.sensor, action.status);
+      }
+      if (
+        action.type === "SENSOR_LOSS" ||
+        (action.type === "SENSOR_STATUS" &&
+          ["denied", "lost", "muted", "failed"].includes(action.status))
+      ) {
+        elements.permissionStatus.textContent =
+          "A live sensor was interrupted or revoked. Sensor-derived aim and confirmation are frozen; choose sensor-free mode or retry the optional permission.";
       }
       aimCoordinator.synchronize(machine.state);
       if (!sensorTransitioning) {
@@ -6195,43 +7396,15 @@ function createSensorController() {
         source: "voice",
       });
       if (!["access-request", "ai-request"].includes(result.effect)) {
-        sensorController?.announce(machine.state.announcement);
+        sensorController?.announce(
+          shortSpokenSummary(machine.state.announcement),
+        );
       }
     },
     onCaption(text) {
       elements.caption.textContent = text;
     },
   });
-}
-
-async function startLive() {
-  if (replayLocked || machine.state.status !== "idle") {
-    return;
-  }
-  const preflight = refreshCapabilityGuidance();
-  if (!preflight.canStartLive) {
-    elements.launchCapability.focus();
-    return;
-  }
-  showApplication();
-  logicalNow = null;
-  machine.dispatch({ type: "START", kind: "live", generation: 1 });
-  sensorController = createSensorController();
-  render();
-  const started = await sensorController.start();
-  if (!started) {
-    liveStartFailed = true;
-    transitionToSensorFree("startup-fallback");
-    elements.assertiveStatus.textContent =
-      "Sensors unavailable. Sensor-free controls are active with the same task.";
-  } else {
-    liveStartFailed = false;
-    refreshCapabilityGuidance({ recheck: false });
-    sensorController.announce(
-      "Adaptive Orb ready. Ask me to create, plan, explain, or navigate. Say a mode name at any time.",
-    );
-  }
-  render();
 }
 
 function startAccessible() {
@@ -6241,9 +7414,114 @@ function startAccessible() {
   showApplication();
   logicalNow = null;
   machine.dispatch({ type: "START", kind: "accessible", generation: 1 });
+  mobileMetrics.start();
+  mobileFeedback.unlock();
+  if (typeof navigator.vibrate === "function") {
+    elements.hapticToggle.hidden = false;
+  }
   render();
   refreshCapabilityGuidance({ recheck: false });
   elements.orbStage.focus();
+}
+
+async function enableMicrophone() {
+  if (
+    replayLocked ||
+    sensorPermissionBusy ||
+    machine.state.status === "idle"
+  ) {
+    return false;
+  }
+  sensorPermissionBusy = true;
+  microphonePermissionAttempted = true;
+  mobileMetrics.notePermissionRequest("microphone");
+  elements.permissionStatus.textContent =
+    "Requesting microphone for voice commands. Camera remains off.";
+  refreshCapabilityGuidance();
+  sensorController ||= createSensorController();
+  const started = await sensorController.enableMicrophone();
+  mobileMetrics.noteSensorStatus(
+    "microphone",
+    started ? "active" : "failed",
+  );
+  if (started) {
+    elements.permissionStatus.textContent =
+      "Voice commands enabled. Audio follows the browser/OS input route; no device ID is selected or stored.";
+    elements.assertiveStatus.textContent =
+      "Voice enabled. Say create, plan, explain, navigate, repeat, stop, undo, or a mode name.";
+    mobileFeedback.signal("ready");
+    elements.caption.textContent = "Ready tone · voice enabled.";
+  } else {
+    elements.permissionStatus.textContent =
+      "Microphone or speech recognition unavailable. Full touch, keyboard, and switch controls remain; camera is still optional.";
+    machine.dispatch({
+      type: "SENSOR_STATUS",
+      sensor: "microphone",
+      status: "not-requested",
+      at: sessionNow(),
+    });
+    if (!sensorController?.cameraStream) {
+      sensorController?.stop("microphone unavailable");
+      sensorController = null;
+    }
+  }
+  sensorPermissionBusy = false;
+  liveStartFailed = !started;
+  refreshCapabilityGuidance({ recheck: false });
+  render();
+  return started;
+}
+
+async function enableCamera() {
+  if (
+    replayLocked ||
+    sensorPermissionBusy ||
+    machine.state.status === "idle" ||
+    !microphonePermissionAttempted
+  ) {
+    return false;
+  }
+  sensorPermissionBusy = true;
+  mobileMetrics.notePermissionRequest("camera");
+  elements.permissionStatus.textContent =
+    "Requesting the front camera for coarse, movement-tolerant aim and gestures.";
+  refreshCapabilityGuidance();
+  sensorController ||= createSensorController();
+  const started = await sensorController.enableCamera();
+  mobileMetrics.noteSensorStatus("camera", started ? "active" : "failed");
+  if (started) {
+    elements.permissionStatus.textContent =
+      "Front camera enabled. Frames remain ephemeral; front-camera coordinates are mirrored only when the browser reports user-facing capture.";
+    elements.assertiveStatus.textContent =
+      "Camera gesture input enabled. Gaze-like motion highlights only; voice, gesture, or a fallback control confirms.";
+    mobileFeedback.signal("ready");
+    elements.caption.textContent = "Ready tone · front camera enabled.";
+  } else {
+    elements.permissionStatus.textContent =
+      "Camera unavailable or denied. Voice and sensor-free controls remain available with the same conversation.";
+    machine.dispatch({
+      type: "SENSOR_STATUS",
+      sensor: "camera",
+      status: "not-requested",
+      at: sessionNow(),
+    });
+    if (!sensorController?.microphoneStream) {
+      sensorController?.stop("camera unavailable");
+      sensorController = null;
+    }
+    machine.dispatch({
+      type: "SENSOR_STATUS",
+      sensor: "estimator",
+      status: "not-requested",
+      label: "camera unavailable; fallback controls active",
+      at: sessionNow(),
+    });
+  }
+  sensorPermissionBusy = false;
+  liveStartFailed = !started;
+  refreshCapabilityGuidance({ recheck: false });
+  render();
+  return started;
 }
 
 function sleep(milliseconds) {
@@ -6303,12 +7581,19 @@ async function startSimulation() {
 }
 
 function speakCurrentResponse() {
-  const text = machine.state.conversation.currentResponse;
+  const text =
+    machine.state.conversation.responseSummary ||
+    machine.state.conversation.currentResponse;
+  return speakText(text);
+}
+
+function speakText(text) {
   if (!text || replayLocked) {
     return false;
   }
+  const concise = shortSpokenSummary(text);
   if (sensorController) {
-    sensorController.announce(text);
+    sensorController.announce(concise);
     return true;
   }
   if (
@@ -6320,8 +7605,8 @@ function speakCurrentResponse() {
     return false;
   }
   speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 0.96;
+  const utterance = new SpeechSynthesisUtterance(concise);
+  utterance.rate = 1;
   utterance.pitch = 1;
   speechSynthesis.speak(utterance);
   return true;
@@ -6364,10 +7649,9 @@ async function requestAIResponse(result) {
       at: sessionNow(),
     });
     if (accepted.ok) {
+      mobileMetrics.noteValue();
       render();
-      if (machine.state.sessionKind === "live") {
-        sensorController?.announce(machine.state.conversation.currentResponse);
-      }
+      speakCurrentResponse();
     }
   } catch {
     if (!controller.signal.aborted) {
@@ -6385,7 +7669,10 @@ function handleSensorAim(sample) {
   if (!machine || replayLocked) {
     return;
   }
-  const result = aimCoordinator.handle(machine, sample);
+  const result = aimCoordinator.handle(machine, {
+    ...sample,
+    optionIds: [...visibleChoiceIds],
+  });
   if (result.changed) {
     render();
   }
@@ -6417,7 +7704,7 @@ function handleSensorGesture(gesture) {
     result?.ok &&
     !["access-request", "ai-request"].includes(result.effect)
   ) {
-    sensorController?.announce(machine.state.announcement);
+    sensorController?.announce(shortSpokenSummary(machine.state.announcement));
   }
 }
 
@@ -6434,6 +7721,7 @@ function dispatchAndRender(action) {
     activeAIAbort = null;
   }
   const result = machine.dispatch(action);
+  mobileMetrics.noteAction(action, result);
   if (result.effect === "access-request") {
     transitionToSensorFree(action.source || "access-option");
     return result;
@@ -6454,8 +7742,35 @@ function dispatchAndRender(action) {
   if (result.effect === "stop") {
     sensorController?.stop("safety stop");
     sensorController = null;
+    mobileMetrics.noteSensorStatus("microphone", "off");
+    mobileMetrics.noteSensorStatus("camera", "off");
   }
   render();
+  if (action.type === "CONFIRM" && result.ok) {
+    mobileFeedback.signal("confirm");
+    elements.caption.textContent = "Confirm tone · selection accepted.";
+  } else if (["CENTER", "CANCEL"].includes(action.type) && result.ok) {
+    mobileFeedback.signal("ready");
+    elements.caption.textContent = "Rest tone · center canceled the active choice.";
+  } else if (action.type === "UNDO" && result.ok) {
+    mobileFeedback.signal("undo");
+    elements.caption.textContent = "Undo tone · prior reversible state restored.";
+  } else if (action.type === "STOP" && result.ok) {
+    mobileFeedback.signal("stop");
+    elements.caption.textContent = "Stop tone · sensors and speech stopped.";
+  } else if (
+    ["SWITCH_MODE", "AUTO_MODE"].includes(action.type) &&
+    result.ok
+  ) {
+    mobileFeedback.signal("ready");
+    elements.caption.textContent = `Mode tone · ${machine.state.mode} active.`;
+  }
+  if (
+    ["repeat", "what-changed"].includes(result.effect) &&
+    action.source !== "voice"
+  ) {
+    speakText(result.text || machine.state.announcement);
+  }
   if (result.effect === "ai-request") {
     void requestAIResponse(result);
   }
@@ -6567,11 +7882,39 @@ function renderConversation() {
 }
 
 function renderChoices() {
-  const signature = `${machine.state.mode}:${machine.state.options
+  const optionIds = machine.state.options.map((candidate) => candidate.id);
+  const compactViewport =
+    window.innerWidth <= 600 ||
+    (window.innerWidth > window.innerHeight && window.innerHeight <= 500);
+  const scope = `${machine.state.mode}:${optionIds.join("|")}`;
+  let visibleOptions = machine.state.options;
+  let choiceWindow = null;
+  if (compactViewport && machine.state.options.length > 4) {
+    choiceWindow = phoneChoiceWindow(
+      machine.state.options,
+      machine.state.highlight,
+    );
+    const visibleSet = new Set(choiceWindow.ids);
+    visibleOptions = machine.state.options.filter((option) =>
+      visibleSet.has(option.id),
+    );
+    elements.mobileChoicePage.hidden = false;
+    elements.mobileChoicePage.textContent =
+      `Choices ${choiceWindow.start + 1}–${choiceWindow.end} of ${
+        choiceWindow.total
+      } · page ${choiceWindow.page + 1} of ${
+        choiceWindow.pageCount
+      }. Say “next” or use Cycle choice to refine.`;
+  } else {
+    elements.mobileChoicePage.hidden = true;
+  }
+  visibleChoiceIds = visibleOptions.map((option) => option.id);
+  const visibleSet = new Set(visibleChoiceIds);
+  const signature = `${scope}:${compactViewport}:${choiceWindow?.page || 0}`;
+  const optionSignature = `${machine.state.mode}:${machine.state.options
     .map((candidate) => candidate.id)
     .join("|")}`;
-  if (signature !== lastChoiceSignature) {
-    lastChoiceSignature = signature;
+  if (!lastChoiceSignature.startsWith(optionSignature)) {
     elements.choiceLayer.replaceChildren();
     for (const candidate of machine.state.options) {
       const button = document.createElement("button");
@@ -6597,23 +7940,29 @@ function renderChoices() {
       });
       elements.choiceLayer.append(button);
     }
-    requestAnimationFrame(layoutChoices);
   }
+  lastChoiceSignature = `${optionSignature}:${signature}`;
 
   for (const button of elements.choiceLayer.querySelectorAll(".choice")) {
     const highlighted = button.dataset.optionId === machine.state.highlight;
+    button.dataset.phoneHidden = String(!visibleSet.has(button.dataset.optionId));
     button.disabled = replayLocked || machine.state.conversation.pending;
     button.dataset.highlighted = String(highlighted);
     button.dataset.armed = String(highlighted && machine.state.armed);
     button.setAttribute("aria-pressed", String(highlighted));
   }
+  requestAnimationFrame(layoutChoices);
 }
 
 function layoutChoices() {
   if (elements.app.hidden) {
     return;
   }
-  const buttons = [...elements.choiceLayer.querySelectorAll(".choice")];
+  const buttons = [
+    ...elements.choiceLayer.querySelectorAll(
+      '.choice:not([data-phone-hidden="true"])',
+    ),
+  ];
   const width = elements.orbStage.getBoundingClientRect().width;
   if (!width || !buttons.length) {
     return;
@@ -6697,11 +8046,13 @@ function render() {
       : "Demo AI · offline";
   elements.aiStatus.dataset.active = String(state.conversation.provider === "brainstem");
   elements.sensorStatus.textContent =
-    state.sessionKind === "accessible"
-      ? "Sensor-free"
-      : state.freezeCauses.length
+    state.sensors.camera === "active"
+      ? state.freezeCauses.length
         ? "Sensor safety freeze"
-        : `${state.sensors.camera} camera`;
+        : "Voice + front camera"
+      : state.sensors.microphone === "active"
+        ? "Voice on · camera off"
+        : "Sensor-free";
   elements.grammarTitle.textContent = grammar.title;
   elements.grammarDescription.textContent = grammar.description;
   elements.cameraState.textContent = state.sensors.camera;
@@ -6714,8 +8065,8 @@ function render() {
     state.sensors[signal] === null ? "—" : `${Math.max(0, Math.round(now - state.sensors[signal]))}`,
   );
   elements.freshnessState.textContent =
-    state.sessionKind === "accessible"
-      ? "Freshness: not required in sensor-free access"
+    state.sensors.camera !== "active"
+      ? "Camera freshness: not required while camera is off"
       : `Freshness ms · frame ${ages[0]} · content ${ages[1]} · estimate ${ages[2]}`;
 
   elements.safetyBanner.dataset.frozen = String(state.freezeCauses.length > 0);
@@ -6748,11 +8099,42 @@ function render() {
   elements.centerCancels.textContent = String(state.metrics.centerCancels);
   elements.voiceRepairs.textContent = String(state.metrics.voiceRepairs);
   elements.sensorRecovery.textContent = `${state.metrics.sensorLosses} / ${state.metrics.sensorRecoveries}`;
+  const mobileRecord = mobileMetrics.snapshot(performance.now(), {
+    voiceRepairs: state.metrics.voiceRepairs,
+    falseCommits: state.metrics.falseCommits,
+  });
+  elements.glanceProxy.textContent = `${mobileRecord.glanceTimeProxyMs} ms`;
+  elements.touchFallback.textContent = String(
+    mobileRecord.oneHandTouchFallbacks,
+  );
+  elements.interruptionRecovery.textContent =
+    `${mobileRecord.interruptionRecoveries} / ${mobileRecord.interruptionRecoveryMs} ms`;
+  elements.permissionValue.textContent =
+    mobileRecord.permissionToValueMs === null
+      ? "waiting"
+      : `${mobileRecord.permissionToValueMs} ms`;
+  elements.sensorOnTime.textContent = `${Math.round(
+    mobileRecord.sensorOnMs.total,
+  )} ms`;
+  for (const step of elements.permissionPanel.querySelectorAll(
+    "[data-permission-step]",
+  )) {
+    const sensor = step.dataset.permissionStep;
+    step.dataset.complete = String(
+      sensor === "sensor-free" || state.sensors[sensor] === "active",
+    );
+  }
   elements.confirmChoice.disabled =
     state.conversation.pending || !state.highlight || !state.armed;
   elements.undoChoice.disabled = state.history.length === 0;
   elements.resumeSession.disabled = !state.freezeCauses.includes("user-stop");
   elements.speakResponse.disabled = !state.conversation.currentResponse;
+  elements.mobileUndo.disabled = state.history.length === 0;
+  elements.mobileStop.disabled =
+    state.status === "idle" || state.status === "stopped";
+  elements.hapticToggle.textContent = mobileFeedback.hapticsEnabled
+    ? "Haptics: on"
+    : "Haptics: off";
   elements.companionMode.textContent = preferCompanion
     ? "AI: prefer companion"
     : "AI: offline demo";
@@ -6773,6 +8155,13 @@ function render() {
       elements.useAccessible,
       elements.stopSensors,
       elements.resumeSession,
+      elements.permissionMic,
+      elements.permissionCamera,
+      elements.mobileRepeat,
+      elements.mobileWhatChanged,
+      elements.mobileUndo,
+      elements.mobileStop,
+      elements.hapticToggle,
     ]) {
       control.disabled = true;
     }
@@ -6800,6 +8189,7 @@ function render() {
     lastComparisonSignature = comparisonSignature;
     renderTournamentComparison(elements.comparisonTable, record);
   }
+  refreshCapabilityGuidance({ recheck: false });
 }
 
 function exportMetrics() {
@@ -6807,6 +8197,12 @@ function exportMetrics() {
     return false;
   }
   const record = machine.exportRecord(sessionNow());
+  record.mobile = mobileMetrics.snapshot(performance.now(), {
+    voiceRepairs: record.metrics.voiceRepairs,
+    falseCommits: record.metrics.falseCommits,
+  });
+  record.mobile.publicSafe =
+    "Aggregate interaction timings and counts only; no transcript, raw media, calibration, device ID, or credential.";
   const blob = new Blob([`${JSON.stringify(record, null, 2)}\n`], {
     type: "application/json",
   });
@@ -6828,6 +8224,8 @@ function transitionToSensorFree(source, { resume = false } = {}) {
     };
   }
   sensorTransitioning = true;
+  mobileMetrics.noteSensorStatus("microphone", "off");
+  mobileMetrics.noteSensorStatus("camera", "off");
   const transition = performSensorFreeTransition({
     machine,
     controller: sensorController,
@@ -6837,6 +8235,8 @@ function transitionToSensorFree(source, { resume = false } = {}) {
   });
   sensorController = transition.controller;
   sensorTransitioning = false;
+  elements.permissionStatus.textContent =
+    "Sensor-free AI active. Camera, microphone, and recognition stopped before this status rendered.";
   aimCoordinator.reset();
   render();
   refreshCapabilityGuidance({ recheck: false });
@@ -6872,6 +8272,9 @@ function toggleCompanion() {
 }
 
 async function promptInstall() {
+  if (replayLocked) {
+    return;
+  }
   if (deferredInstallPrompt) {
     deferredInstallPrompt.prompt();
     await deferredInstallPrompt.userChoice;
@@ -6885,6 +8288,11 @@ async function promptInstall() {
 }
 
 function offerServiceWorkerUpdate(worker) {
+  if (replayLocked) {
+    elements.applyUpdate.hidden = true;
+    elements.applyUpdate.disabled = true;
+    return;
+  }
   waitingServiceWorker = worker;
   elements.applyUpdate.hidden = false;
   elements.pwaStatus.textContent = "App update ready";
@@ -6926,9 +8334,10 @@ async function registerOfflineApp() {
   }
 }
 
-elements.startLive.addEventListener("click", startLive);
 elements.startAccessible.addEventListener("click", startAccessible);
 elements.startSimulation.addEventListener("click", startSimulation);
+elements.permissionMic.addEventListener("click", enableMicrophone);
+elements.permissionCamera.addEventListener("click", enableCamera);
 elements.launchSafariLink.addEventListener(
   "click",
   prepareBrowserSensorRecovery,
@@ -6958,6 +8367,28 @@ elements.undoChoice.addEventListener("click", () =>
 elements.exportMetrics.addEventListener("click", exportMetrics);
 elements.speakResponse.addEventListener("click", speakCurrentResponse);
 elements.companionMode.addEventListener("click", toggleCompanion);
+elements.mobileRepeat.addEventListener("click", () =>
+  dispatchAndRender({ type: "REPEAT", source: "touch" }),
+);
+elements.mobileWhatChanged.addEventListener("click", () =>
+  dispatchAndRender({ type: "WHAT_CHANGED", source: "touch" }),
+);
+elements.mobileUndo.addEventListener("click", () =>
+  dispatchAndRender({ type: "UNDO", source: "touch" }),
+);
+elements.mobileStop.addEventListener("click", () => stopSession("touch"));
+elements.hapticToggle.addEventListener("click", () => {
+  if (replayLocked) {
+    return;
+  }
+  const enabled = mobileFeedback.setHaptics(
+    !mobileFeedback.hapticsEnabled,
+  );
+  elements.hapticToggle.textContent = enabled ? "Haptics: on" : "Haptics: off";
+  elements.assertiveStatus.textContent = enabled
+    ? "Optional haptics enabled on this supported device."
+    : "Optional haptics disabled.";
+});
 elements.installApp.addEventListener("click", promptInstall);
 elements.applyUpdate.addEventListener("click", () => {
   applyingServiceWorkerUpdate = true;
@@ -7015,9 +8446,44 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-window.addEventListener("resize", layoutChoices);
+function handleViewportChange(source) {
+  layoutChoices();
+  const orientation =
+    window.innerWidth > window.innerHeight ? "landscape" : "portrait";
+  if (replayLocked) {
+    return;
+  }
+  if (elements.app.hidden || machine.state.status === "idle") {
+    lastOrientation = orientation;
+    return;
+  }
+  if (orientation === lastOrientation) {
+    return;
+  }
+  lastOrientation = orientation;
+  mobileMetrics.noteOrientationChange();
+  aimCoordinator.reset();
+  sensorController?.handleOrientationChange();
+  machine.dispatch({
+    type: "ORIENTATION_CHANGE",
+    source,
+    orientation,
+    at: sessionNow(),
+  });
+  render();
+}
+
+window.addEventListener("resize", () => handleViewportChange("resize"));
+window.addEventListener("orientationchange", () =>
+  handleViewportChange("orientationchange"),
+);
 window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
+  if (replayLocked) {
+    deferredInstallPrompt = null;
+    elements.installApp.disabled = true;
+    return;
+  }
   deferredInstallPrompt = event;
   elements.installApp.disabled = false;
   elements.pwaStatus.textContent = "Install available";
@@ -7036,8 +8502,38 @@ navigator.serviceWorker?.addEventListener("controllerchange", () => {
   }
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && machine.state.status !== "idle") {
-    machine.dispatch({ type: "CENTER", source: "visibility" });
+  if (
+    replayLocked ||
+    machine.state.status === "idle" ||
+    machine.state.status === "stopped"
+  ) {
+    return;
+  }
+  if (document.hidden) {
+    interruptionPending = true;
+    mobileMetrics.beginInterruption();
+    if (typeof speechSynthesis !== "undefined") {
+      speechSynthesis.cancel();
+    }
+    if (sensorController) {
+      transitionToSensorFree("background-interruption");
+    } else {
+      machine.dispatch({ type: "CENTER", source: "visibility" });
+      aimCoordinator.reset();
+      render();
+    }
+  } else if (interruptionPending) {
+    interruptionPending = false;
+    mobileMetrics.recoverInterruption();
+    machine.dispatch({
+      type: "INTERRUPTION_RESUME",
+      source: "visibility",
+      at: sessionNow(),
+    });
+    mobileFeedback.signal("recover");
+    elements.permissionStatus.textContent =
+      "Interruption recovered sensor-free with conversation and task state preserved. Re-enable optional sensors when ready.";
+    elements.assertiveStatus.textContent = machine.state.announcement;
     render();
   }
 });
@@ -7052,6 +8548,9 @@ window.addEventListener("pagehide", () => {
   }
   sensorController?.stop("pagehide");
   sensorController = null;
+  mobileMetrics.noteSensorStatus("microphone", "off");
+  mobileMetrics.noteSensorStatus("camera", "off");
+  mobileFeedback.close();
 });
 window.addEventListener("pageshow", (event) => {
   if (event.persisted) {
@@ -7063,7 +8562,6 @@ refreshCapabilityGuidance();
 void registerOfflineApp();
 
 if (startupQuery.get("simulate") === "1") {
-  elements.startLive.disabled = true;
   elements.startAccessible.disabled = true;
   elements.startSimulation.disabled = true;
   requestAnimationFrame(startSimulation);

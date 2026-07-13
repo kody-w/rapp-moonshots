@@ -44,7 +44,10 @@ test("demo AI is deterministic, offline, and covers scenario response shapes", a
     user_input: "Prioritize the deep work block.",
   });
   assert.notEqual(followUp.message, first.message);
-  assert.equal(followUp.summary, "Deep work prioritized with recovery preserved");
+  assert.equal(
+    followUp.summary,
+    "Workshop checklist reordered with inspection first",
+  );
 });
 
 test("companion uses only the exact same-origin Brainstem request contract", async () => {

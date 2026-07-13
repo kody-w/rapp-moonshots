@@ -1,6 +1,8 @@
 # Adaptive Orb
 
-Adaptive Orb is one AI conversation—not a chat box and not three separate
+Adaptive Orb is a mobile-first, eyes-up operating layer for AI in kitchens,
+workshops, field work, accessibility, and other moments when hands or attention
+are occupied. It is one conversation—not a chat box and not three separate
 pages. One memory-only conversation, task, undo history, safety state, sensor
 lifecycle, and metrics model moves between three contextual grammars:
 
@@ -15,6 +17,9 @@ Automatic selection uses the current response shape. Say `orbit`, `compass`,
 `tunnel`, or `auto mode` to override it without replacing state. Center relaxes
 and clears aim; explicit voice, gesture, keyboard, touch, or switch confirmation
 is always separate.
+
+It is not for driving, safety-critical control, or replacing attention to
+people, tools, heat, traffic, terrain, or other surroundings.
 
 ## Public PWA
 
@@ -36,10 +41,10 @@ no AI request and covers four scenario packs:
 
 | Pack | AI situation | Natural grammar |
 |---|---|---|
-| Create | broad creative direction and predicted actions | Orbit |
-| Plan | bounded priorities that can be compared | Compass |
-| Explain | nested concepts and revisions | Tunnel |
-| Navigate | stable routes that can open deeper tools/tasks | Compass → Tunnel |
+| Eyes-up note (`create`) | walking note capture or quick decision support | Orbit |
+| Field checklist (`plan`) | workshop/field steps that can be compared | Compass |
+| Kitchen guide (`explain`) | nested hands-busy guidance and revisions | Tunnel |
+| Access & decide (`navigate`) | switch-friendly choices and deeper tasks | Compass → Tunnel |
 
 The exact cobalt-beacon task remains a reversible Navigate scenario.
 
@@ -84,7 +89,8 @@ visibly falls back to deterministic demo AI with the same conversation intact.
   `SpeechRecognition`, or speech synthesis works in iOS standalone mode.
 - Every launch capability-detects standalone display, secure context,
   `getUserMedia`, `SpeechRecognition`/`webkitSpeechRecognition`, and speech
-  synthesis. Hardware and permission remain unknown until the user starts.
+  synthesis. Hardware and permission remain unknown until each optional
+  permission step is chosen.
 - When an installed iOS runtime lacks an API or live permission/startup fails,
   visible guidance activates sensor-free parity and offers **Open in Safari for
   live sensors**. The same HTTPS URL opens externally where iOS permits; Safari
@@ -93,8 +99,11 @@ visibly falls back to deterministic demo AI with the same conversation intact.
   the external browser URL.
 - Camera and microphone require HTTPS or localhost. Touch, keyboard, and switch
   parity remain when speech, `FaceDetector`, or camera sensing is unavailable.
-- Portrait, landscape, dynamic viewport, large radial targets, and safe-area
-  insets are supported.
+- The primary contracts are 390×844 portrait and 844×390 landscape. Safe-area
+  insets, dynamic viewport units, 44 px fallback targets, a 112 px+ center orb,
+  no horizontal overflow, and touch/active parity are explicit.
+- Phones show at most four primary petals. Cycling or saying `next`/`previous`
+  refines larger sets without changing shared state.
 - The versioned service worker caches only the static shell, manifest, and local
   icons. It bypasses `/api/`, POST, cross-origin, media, conversation, AI
   responses, calibration, metrics, and exports.
@@ -103,16 +112,27 @@ visibly falls back to deterministic demo AI with the same conversation intact.
 
 See [ROLLBACK.md](ROLLBACK.md) for unregister and cache cleanup.
 
-## Permission and safety flow
+## Progressive permission and safety flow
 
-When runtime prerequisites are present, one **Start voice + camera** click
-requests one combined media stream. Successful permission enables the intended
-hands-free flow: speak broad intent, hold a coarse direction to highlight, and
-nod or speak to confirm. Missing speech can leave camera gestures available
-without claiming voice support. Failed prerequisites or permission visibly
-degrade to **Start sensor-free access**, which creates no media or recognition
-and exposes the same semantic scenario/task path to touch, keyboard, and switch
-controls.
+1. **Start sensor-free AI** immediately exposes the complete semantic
+   conversation/task path and requests no hardware.
+2. **Enable voice · microphone** is optional. Recognition uses the normal
+   browser/OS input route, including a selected wired or Bluetooth headset; the
+   app never requests, stores, or exports a `deviceId`.
+3. **Then enable front camera** is optional. It requests user-facing capture,
+   mirrors coordinates only when appropriate, and adds coarse aim/gesture.
+
+The camera is never required to begin, and a microphone denial does not trigger
+a restart loop. Terminal speech denial stops the separately granted physical
+microphone stream. Any transition back to sensor-free stops camera, microphone,
+recognition, and synthesis before sensor-free status renders.
+
+After optional grants, the intended flow is hands-free: speak broad intent,
+hold a coarse direction to highlight, and gesture or speak to confirm. Global
+`repeat`, `stop`, `undo`, `what changed`, `next`, and `previous` commands are
+also exposed as large touch/switch controls. AI speech uses a short first
+summary; captions mirror earcon meaning. Haptics are hidden when unsupported
+and off until the user explicitly opts in.
 
 Sensing remains deliberately coarse. `FaceDetector`, when available, supplies
 only a transient face-box/head-position proxy. Otherwise a 48×36 local
@@ -120,6 +140,13 @@ frame-motion estimate is used. Neither is eye tracking. Fresh frame, valid
 content, and accepted processing timestamps expire independently. Invalid
 content immediately revokes sensor aim/arm. Delayed detector and permission
 work is generation-, content-, identity-, and request-gated.
+
+Front-camera coordinates are mirrored consistently and low-confidence aim is
+smoothed to tolerate ordinary movement/noise. Orientation changes clear aim,
+gesture phase, stale calibration, and dwell while preserving conversation,
+task, undo history, mode, and safety state. Backgrounding, lock, visibility
+loss, or interruption tears optional sensors down; resume is sensor-free and
+reports recovery instead of silently restarting permission.
 
 `stop`, `cancel`, and `undo` preempt normal speech. Stop also aborts pending AI
 work and tears down camera, microphone, recognition, synthesis, derived frame
@@ -138,6 +165,11 @@ turn roles, fixed application-owned semantic labels, modes, task fields, safety
 metrics, and provider status—not conversation/model text, model-supplied option
 IDs, session ID, frames, audio, face boxes, or secrets.
 
+Mobile aggregates are added only at explicit export: glance-time proxy, voice
+repairs, false commits, one-hand touch/switch fallback, interruption/recovery
+time, permission-to-first-value time, and per-sensor on-time. They contain no
+raw interaction coordinates or transcript.
+
 ## Deterministic evidence
 
 `?simulate=1` locks all external input and conducts one 12-turn semantic AI
@@ -154,6 +186,9 @@ drill.
 
 Success is announced only after exact semantic state and the conversation
 fingerprint match. Evidence exports contain no prompt or response text.
+`evidence/mobile-evidence.json` separately records the deterministic 390×844 /
+844×390 layout, progressive-permission, interruption, and aggregate metric
+contract without changing either safety fingerprint.
 
 ## Build and verify
 
@@ -169,7 +204,9 @@ installed. It covers AI adapter failover, shared conversation/task/history,
 automatic/manual modes, replay locking, PWA assets/cache policy, iOS hooks,
 standalone capability/permission degradation, Safari recovery guidance, proxy
 validation and secret handling, sensor-free parity, detector races, privacy,
-Clawpilot theming, and checked-in evidence.
+orientation/background recovery, progressive sensor grants, exact mobile
+layouts, touch sizing, no hover-only action, Clawpilot theming, and checked-in
+evidence.
 
 ## Important files
 
@@ -177,6 +214,8 @@ Clawpilot theming, and checked-in evidence.
 - `src/ai.mjs` — scenario packs, deterministic responder, strict adapters;
 - `src/capabilities.mjs` — standalone/live API detection and honest fallback;
 - `src/core.mjs` — shared conversation/task/history/safety machine;
+- `src/mobile.mjs` — mobile layout, four-choice window, no-look summaries,
+  aggregate metrics, earcons, and opt-in haptics;
 - `src/sensors.mjs` / `src/session.mjs` — guarded media and aim lifecycles;
 - `server.py` — optional same-origin Brainstem companion;
 - `manifest.webmanifest`, `service-worker.js`, `icons/` — local PWA;

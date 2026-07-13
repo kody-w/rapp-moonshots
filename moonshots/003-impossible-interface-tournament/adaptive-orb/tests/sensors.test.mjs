@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AdaptiveOrbMachine } from "../src/core.mjs";
+import {
+  AdaptiveOrbMachine,
+  commitSensorFreeAfterTeardown,
+} from "../src/core.mjs";
 import {
   AdaptiveSensorController,
   CoarseGestureGate,
@@ -19,6 +22,44 @@ test("media lifecycle generations reject delayed work", () => {
   const second = guard.begin();
   assert.equal(guard.isCurrent(second), true);
   assert.notEqual(first, second);
+
+  const resumed = new EpochGuard(7);
+  assert.equal(resumed.begin(), 8);
+  assert.equal(resumed.isCurrent(8), true);
+});
+
+test("sensor re-enable generation aligns after sensor-free interruption", () => {
+  const machine = new AdaptiveOrbMachine({ clock: () => 20 });
+  machine.dispatch({
+    type: "START",
+    kind: "accessible",
+    generation: 1,
+    at: 0,
+  });
+  commitSensorFreeAfterTeardown(machine, {
+    source: "background-interruption",
+    at: 10,
+  });
+  assert.equal(machine.state.sensors.generation, 2);
+  const controller = new AdaptiveSensorController({
+    video: null,
+    generationSeed: machine.state.sensors.generation - 1,
+    clock: () => 20,
+  });
+  const generation = controller.ensureProgressiveLifecycle();
+  assert.equal(generation, machine.state.sensors.generation);
+  assert.equal(
+    machine.dispatch({
+      type: "SENSOR_SAMPLE",
+      generation,
+      frameAt: 20,
+      contentAt: 20,
+      processedAt: 20,
+      at: 20,
+    }).effect,
+    "sample",
+  );
+  controller.stop("generation-alignment-test");
 });
 
 test("detector results require matching generation content epoch and identity", () => {
@@ -436,6 +477,45 @@ test("invalid content immediately revokes aim and requires content plus processi
   controller.stop("content-test");
 });
 
+test("aim smoothing tolerates motion noise and orientation revokes stale calibration", () => {
+  const aims = [];
+  const actions = [];
+  const controller = new AdaptiveSensorController({
+    video: null,
+    onAim: (aim) => aims.push(aim),
+    onAction: (action) => actions.push(action),
+    clock: () => 100,
+  });
+  const generation = controller.lifecycle.begin();
+  controller.lifecycleGeneration = generation;
+  controller.active = true;
+  controller.cameraStream = { getTracks: () => [] };
+  controller.freshness.reset(generation);
+  controller.emitAim({ x: 0.2, y: 0.4 }, 0.5, "fallback", 10);
+  controller.emitAim({ x: 0.8, y: 0.6 }, 0.5, "fallback", 20);
+  assert.equal(aims.length, 2);
+  assert.ok(aims[1].x > 0.2 && aims[1].x < 0.8);
+  assert.ok(aims[1].y > 0.4 && aims[1].y < 0.6);
+
+  const previous = new Uint8Array([2, 4, 6]);
+  controller.previousGray = previous;
+  controller.setArmed(true, "choice-a");
+  controller.recalibrateOrientation();
+  assert.equal(controller.smoothedAim, null);
+  assert.equal(controller.previousGray, null);
+  assert.deepEqual([...previous], [0, 0, 0]);
+  assert.equal(controller.armed, false);
+  assert.equal(controller.contentBlocked, true);
+  assert.ok(
+    actions.some(
+      (action) =>
+        action.type === "SENSOR_LOSS" &&
+        action.cause === "content-invalid",
+    ),
+  );
+  controller.stop("orientation-test");
+});
+
 test("shutdown zeros every pending detector-derived buffer", () => {
   const never = new Promise(() => {});
   const controller = new AdaptiveSensorController({
@@ -599,5 +679,313 @@ test("controller disposes media when stop races delayed preview play", async () 
     Object.defineProperty(globalThis, "navigator", originalNavigator);
   } else {
     delete globalThis.navigator;
+  }
+});
+
+test("progressive microphone then front-camera grants share one guarded lifecycle", async () => {
+  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const originalRecognition = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "SpeechRecognition",
+  );
+  const constraints = [];
+  const audioTrack = {
+    kind: "audio",
+    stopped: false,
+    stop() {
+      this.stopped = true;
+    },
+    addEventListener() {},
+  };
+  const videoTrack = {
+    kind: "video",
+    stopped: false,
+    stop() {
+      this.stopped = true;
+    },
+    addEventListener() {},
+    getSettings() {
+      return { facingMode: "user" };
+    },
+  };
+  const audioStream = { getTracks: () => [audioTrack] };
+  const videoStream = {
+    getTracks: () => [videoTrack],
+    getVideoTracks: () => [videoTrack],
+  };
+  class Recognition {
+    start() {
+      this.onstart?.();
+    }
+
+    abort() {}
+  }
+  Object.defineProperty(globalThis, "SpeechRecognition", {
+    configurable: true,
+    value: Recognition,
+  });
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      mediaDevices: {
+        async getUserMedia(request) {
+          constraints.push(request);
+          return request.video ? videoStream : audioStream;
+        },
+      },
+    },
+  });
+  const video = {
+    dataset: {},
+    srcObject: null,
+    async play() {},
+    pause() {},
+    setAttribute() {},
+  };
+  const controller = new AdaptiveSensorController({
+    video,
+    clock: () => 10,
+  });
+  try {
+    assert.equal(await controller.enableMicrophone(), true);
+    const generation = controller.lifecycleGeneration;
+    assert.equal(controller.streams.size, 1);
+    assert.equal(controller.cameraStream, null);
+    assert.equal(await controller.enableCamera(), true);
+    assert.equal(controller.lifecycleGeneration, generation);
+    assert.equal(controller.streams.size, 2);
+    assert.equal(video.dataset.mirrored, "true");
+    assert.equal(constraints[0].video, false);
+    assert.equal(constraints[0].audio.echoCancellation, true);
+    assert.equal(constraints[0].audio.noiseSuppression, true);
+    assert.equal(constraints[0].audio.autoGainControl, true);
+    assert.equal(constraints[1].audio, false);
+    assert.equal(constraints[1].video.facingMode.ideal, "user");
+
+    controller.stop("progressive-test");
+    assert.equal(audioTrack.stopped, true);
+    assert.equal(videoTrack.stopped, true);
+    assert.equal(controller.streams.size, 0);
+    assert.equal(controller.microphoneStream, null);
+    assert.equal(controller.cameraStream, null);
+    assert.equal(video.srcObject, null);
+  } finally {
+    controller.stop("progressive-test-finally");
+    if (originalNavigator) {
+      Object.defineProperty(globalThis, "navigator", originalNavigator);
+    } else {
+      delete globalThis.navigator;
+    }
+    if (originalRecognition) {
+      Object.defineProperty(
+        globalThis,
+        "SpeechRecognition",
+        originalRecognition,
+      );
+    } else {
+      delete globalThis.SpeechRecognition;
+    }
+  }
+});
+
+test("terminal speech denial stops separately granted microphone capture", async () => {
+  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const originalRecognition = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "SpeechRecognition",
+  );
+  const track = {
+    kind: "audio",
+    stopped: false,
+    stop() {
+      this.stopped = true;
+    },
+    addEventListener() {},
+  };
+  class DeniedRecognition {
+    start() {
+      const error = new Error("denied");
+      error.name = "NotAllowedError";
+      throw error;
+    }
+
+    abort() {}
+  }
+  Object.defineProperty(globalThis, "SpeechRecognition", {
+    configurable: true,
+    value: DeniedRecognition,
+  });
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      mediaDevices: {
+        async getUserMedia() {
+          return { getTracks: () => [track] };
+        },
+      },
+    },
+  });
+  const actions = [];
+  const controller = new AdaptiveSensorController({
+    video: null,
+    clock: () => 15,
+    onAction: (action) => actions.push(action),
+  });
+  try {
+    assert.equal(await controller.enableMicrophone(), false);
+    assert.equal(track.stopped, true);
+    assert.equal(controller.microphoneStream, null);
+    assert.equal(controller.streams.size, 0);
+    assert.ok(
+      actions.some(
+        (action) =>
+          action.type === "SENSOR_STATUS" &&
+          action.sensor === "microphone" &&
+          action.status === "denied",
+      ),
+    );
+  } finally {
+    controller.stop("speech-denial-test");
+    if (originalNavigator) {
+      Object.defineProperty(globalThis, "navigator", originalNavigator);
+    } else {
+      delete globalThis.navigator;
+    }
+    if (originalRecognition) {
+      Object.defineProperty(
+        globalThis,
+        "SpeechRecognition",
+        originalRecognition,
+      );
+    } else {
+      delete globalThis.SpeechRecognition;
+    }
+  }
+});
+
+test("camera denial does not restart or discard an already granted microphone", async () => {
+  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const originalRecognition = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "SpeechRecognition",
+  );
+  let cameraRequests = 0;
+  const audioTrack = {
+    kind: "audio",
+    stopped: false,
+    stop() {
+      this.stopped = true;
+    },
+    addEventListener() {},
+  };
+  const audioStream = { getTracks: () => [audioTrack] };
+  class Recognition {
+    start() {
+      this.onstart?.();
+    }
+
+    abort() {}
+  }
+  Object.defineProperty(globalThis, "SpeechRecognition", {
+    configurable: true,
+    value: Recognition,
+  });
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      mediaDevices: {
+        async getUserMedia(request) {
+          if (request.video) {
+            cameraRequests += 1;
+            const error = new Error("denied");
+            error.name = "NotAllowedError";
+            throw error;
+          }
+          return audioStream;
+        },
+      },
+    },
+  });
+  const actions = [];
+  const controller = new AdaptiveSensorController({
+    video: null,
+    clock: () => 20,
+    onAction: (action) => actions.push(action),
+  });
+  try {
+    assert.equal(await controller.enableMicrophone(), true);
+    assert.equal(await controller.enableCamera(), false);
+    assert.equal(cameraRequests, 1);
+    assert.equal(audioTrack.stopped, false);
+    assert.equal(controller.microphoneStream, audioStream);
+    assert.equal(controller.streams.has(audioStream), true);
+    assert.equal(
+      actions.filter(
+        (action) =>
+          action.type === "SENSOR_STATUS" &&
+          action.sensor === "camera" &&
+          action.status === "denied",
+      ).length,
+      1,
+    );
+    controller.stop("camera-denial-test");
+    assert.equal(audioTrack.stopped, true);
+  } finally {
+    if (originalNavigator) {
+      Object.defineProperty(globalThis, "navigator", originalNavigator);
+    } else {
+      delete globalThis.navigator;
+    }
+    if (originalRecognition) {
+      Object.defineProperty(
+        globalThis,
+        "SpeechRecognition",
+        originalRecognition,
+      );
+    } else {
+      delete globalThis.SpeechRecognition;
+    }
+  }
+});
+
+test("late progressive permission resolution is stopped after interruption teardown", async () => {
+  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  let resolvePermission;
+  const permission = new Promise((resolve) => {
+    resolvePermission = resolve;
+  });
+  const track = {
+    kind: "audio",
+    stopped: false,
+    stop() {
+      this.stopped = true;
+    },
+    addEventListener() {},
+  };
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      mediaDevices: {
+        getUserMedia: () => permission,
+      },
+    },
+  });
+  const controller = new AdaptiveSensorController({
+    video: null,
+    clock: () => 30,
+  });
+  try {
+    const requested = controller.enableMicrophone();
+    controller.stop("background-interruption");
+    resolvePermission({ getTracks: () => [track] });
+    assert.equal(await requested, false);
+    assert.equal(track.stopped, true);
+    assert.equal(controller.streams.size, 0);
+  } finally {
+    if (originalNavigator) {
+      Object.defineProperty(globalThis, "navigator", originalNavigator);
+    } else {
+      delete globalThis.navigator;
+    }
   }
 });

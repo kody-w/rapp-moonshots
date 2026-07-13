@@ -198,3 +198,23 @@ test("invalid dwell samples are ignored without event growth", () => {
   );
   assert.equal(machine.state.events.length, eventCount);
 });
+
+test("sensor aim cannot select choices outside the visible phone window", () => {
+  const machine = liveMachine();
+  const aim = new RadialAimCoordinator();
+  const result = aim.handle(machine, {
+    x: 0.5,
+    y: 0.1,
+    zone: "radial",
+    at: 100,
+    optionIds: ["route-beacons", "sensor-free"],
+  });
+  assert.equal(result.effect, "highlight");
+  assert.equal(machine.state.highlight, "route-beacons");
+  assert.equal(
+    machine.state.options
+      .slice(0, 4)
+      .some((option) => option.id === machine.state.highlight),
+    false,
+  );
+});

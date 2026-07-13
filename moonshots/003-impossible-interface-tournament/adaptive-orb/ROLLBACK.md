@@ -8,7 +8,8 @@ moonshots/003-impossible-interface-tournament/adaptive-orb/
 
 ## Immediate runtime stop
 
-1. Say **stop**, press `S`, or choose **End sensors**.
+1. Say **stop**, press `S`, choose the large **Stop** control, or choose
+   **End sensors**.
 2. The app aborts pending AI work, invalidates media/detector generations,
    cancels recognition/synthesis/retries, stops every media track, zeroes
    derived buffers, clears the canvas, and detaches the preview.
@@ -32,6 +33,9 @@ In browser DevTools → Application:
 2. Storage/Cache Storage → delete keys beginning `adaptive-orb-static-`.
 3. Remove the Home Screen app if installed.
 4. Reload online.
+
+The current cache is `adaptive-orb-static-v3`; the prefix-based cleanup also
+removes older v1/v2 caches.
 
 For a controlled same-origin console:
 
@@ -76,10 +80,26 @@ Every listed path must begin
 `moonshots/003-impossible-interface-tournament/adaptive-orb/`.
 
 If live sensing or companion quality is uncertain but the artifact should stay
-available, keep public demo AI and use **Start sensor-free access** or
+available, keep public demo AI and use **Start sensor-free AI** or
 `?simulate=1`. For iOS standalone capability or permission failures, retain the
 visible sensor-free offer and **Open in Safari for live sensors** guidance; do
 not claim that installation implies hardware access. Safari must repeat its own
 runtime and permission check and may also degrade. Never weaken capability
 preflight, no-gaze-commit, freshness, request identity, same-origin, no-store,
 or static-cache allowlist gates as a workaround.
+
+## Mobile sensor fallback
+
+The default launch is already **Start sensor-free AI**. Microphone and front
+camera are separate optional upgrades. To roll live input back without losing
+the in-memory conversation, choose **End sensors** or **Use sensor-free mode**;
+teardown completes before the sensor-free status renders. After background,
+lock, permission revocation, or orientation uncertainty, remain sensor-free
+until the user deliberately re-enables each needed permission.
+
+Do not add an automatic permission restart, combine the two permission steps,
+pin a headset with `deviceId`, remove the four-choice phone window, or bypass
+fresh-content reacquisition. If 390×844 or 844×390 rendering regresses, revert
+the mobile follow-up rather than weakening safe areas, 44 px targets, center
+rest, or touch/switch parity. Never present the product for driving or
+safety-critical control.

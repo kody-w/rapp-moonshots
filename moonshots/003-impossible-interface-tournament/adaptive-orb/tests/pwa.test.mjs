@@ -56,7 +56,7 @@ test("service worker allowlists static shell and bypasses all sensitive data", a
   assert.match(worker, /request\.method !== "GET"/);
   assert.match(worker, /url\.origin !== self\.location\.origin/);
   assert.match(worker, /ACTIVATE_UPDATE/);
-  assert.match(worker, /adaptive-orb-static-v2/);
+  assert.match(worker, /adaptive-orb-static-v3/);
   assert.doesNotMatch(
     worker,
     /MediaStream|conversation_history|user_input|metrics|calibration|indexedDB/,
@@ -151,7 +151,10 @@ test("HTML and CSS include honest standalone degradation, Safari recovery, and p
   assert.match(template, /Share → Add to Home Screen/);
   assert.match(template, /require HTTPS or localhost/);
   assert.match(template, /Open in Safari for live sensors/);
-  assert.match(template, /installed icon guarantees neither/);
+  assert.match(template, /Installation works for offline/);
+  assert.match(template, /id="permissionMic"/);
+  assert.match(template, /id="permissionCamera"/);
+  assert.match(template, /Start sensor-free AI/);
   assert.match(template, /id="capabilitySensorFree"/);
   assert.match(template, /id="runtimeCapability"/);
   assert.match(template, /manifest\.webmanifest/);
@@ -167,8 +170,11 @@ test("HTML and CSS include honest standalone degradation, Safari recovery, and p
   assert.match(capabilities, /webkitSpeechRecognition/);
   assert.match(capabilities, /showSafariLink/);
   assert.match(app, /detectRuntimeCapabilities/);
-  assert.match(app, /liveStartFailed = true/);
-  assert.match(app, /preflight\.canStartLive/);
+  assert.match(app, /kind: "accessible"/);
+  assert.match(app, /sensorController\.enableMicrophone\(\)/);
+  assert.match(app, /sensorController\.enableCamera\(\)/);
+  assert.match(app, /background-interruption/);
+  assert.match(app, /INTERRUPTION_RESUME/);
   assert.match(app, /transitionToSensorFree\("open-browser"\)/);
   assert.match(app, /applyingServiceWorkerUpdate && !reloadingForWorker/);
 });

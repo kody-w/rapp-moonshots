@@ -86,19 +86,20 @@
 
     <section class="launch-screen" id="launchScreen" aria-labelledby="launchTitle">
       <div class="launch-card">
-        <p class="eyebrow">One AI conversation · three adaptive grammars</p>
+        <p class="eyebrow">Mobile-first · eyes up · hands busy</p>
         <h1 id="launchTitle">Adaptive Orb</h1>
         <p class="launch-lede">
-          Speak a broad request, select stable follow-ups, and travel through
-          deeper revisions without opening a chat box. One memory-only
-          conversation moves between Voice Orbit, Gaze Compass, and Gesture Tunnel.
+          An eyes-up operating layer for AI when hands and attention are
+          occupied. Start without sensors, then optionally add voice and
+          front-camera gestures one permission at a time.
         </p>
         <div class="disclosure" role="note" aria-label="Sensor and speech disclosure">
           <strong>Before permission:</strong> camera frames are analyzed only in
           ephemeral local memory and are never recorded. The Web Speech API is a
           browser service and may send audio to a browser or OS vendor for
           processing. This app cannot audit or control that vendor processing.
-          Choose sensor-free access to request neither camera nor microphone.
+          The useful default requests neither camera nor microphone.
+          Microphone and camera are separate later choices, never prerequisites.
           Installation and offline readiness do not prove that live sensor or
           speech APIs are available in the installed runtime.
         </div>
@@ -129,27 +130,27 @@
           </div>
         </section>
         <div class="launch-actions">
-          <button class="primary-action" id="startLive" type="button">
-            Start voice + camera
+          <button class="primary-action" id="startAccessible" type="button">
+            Start sensor-free AI
           </button>
-          <button id="startAccessible" type="button">Start sensor-free access</button>
           <button id="startSimulation" type="button">
             Run multi-turn AI simulation
           </button>
         </div>
         <p class="small-note">
-          GitHub Pages uses deterministic demo AI with no credentials or network.
-          The optional companion sends conversation text only to a same-origin
-          operator-configured RAPP Brainstem proxy.
+          Try eyes-up note capture, a workshop checklist, hands-busy cooking
+          guidance, or switch-friendly decisions. Not for driving,
+          safety-critical control, or replacing attention to your surroundings.
         </p>
         <details class="launch-help">
           <summary>Install on iPhone or iPad</summary>
           <p>
             In Safari, choose Share → Add to Home Screen. Camera and microphone
-            require HTTPS or localhost. An installed icon guarantees neither
-            camera/microphone access nor SpeechRecognition. This app checks the
-            current runtime every launch. If standalone access is restricted,
-            use sensor-free controls or Open in Safari for live sensors.
+            require HTTPS or localhost. Installation works for offline,
+            sensor-free AI even when live APIs do not. After launch, optional
+            permission steps request microphone first and front camera second.
+            If standalone access is restricted, stay sensor-free or use Open
+            in Safari for live sensors.
           </p>
         </details>
       </div>
@@ -206,12 +207,48 @@
         </button>
       </section>
 
+      <section
+        class="permission-steps"
+        id="permissionPanel"
+        aria-labelledby="permissionTitle"
+      >
+        <div>
+          <p class="eyebrow">Progressive permissions</p>
+          <h2 id="permissionTitle">Useful first. Sensors optional.</h2>
+          <ol class="permission-sequence">
+            <li data-permission-step="sensor-free" data-complete="true">
+              <strong>1 · Sensor-free AI</strong>
+              <span>active now</span>
+            </li>
+            <li data-permission-step="microphone">
+              <strong>2 · Microphone</strong>
+              <span>optional voice</span>
+            </li>
+            <li data-permission-step="camera">
+              <strong>3 · Front camera</strong>
+              <span>optional coarse gesture</span>
+            </li>
+          </ol>
+          <p class="small-note" id="permissionStatus">
+            No sensor permission requested. Headset and Bluetooth microphones
+            follow normal browser and OS input routing; this app does not choose
+            or persist a device.
+          </p>
+        </div>
+        <div class="permission-actions">
+          <button id="permissionMic" type="button">Enable voice · microphone</button>
+          <button id="permissionCamera" type="button" disabled>
+            Then enable front camera
+          </button>
+        </div>
+      </section>
+
       <section class="task-ribbon" aria-labelledby="taskTitle">
         <div>
           <p class="eyebrow" id="taskTitle">Shared conversation and task memory</p>
           <p id="taskPrompt">
-            Speak a create, plan, explain, or navigate intent. The exact cobalt
-            task remains available as a reversible navigation scenario.
+            Choose an eyes-up note, field checklist, kitchen guide, or
+            switch-friendly decision. The cobalt task remains reversible.
           </p>
         </div>
         <ol class="task-values" id="taskValues" aria-label="Current route values"></ol>
@@ -265,7 +302,7 @@
                 <p class="eyebrow" id="responseKicker">Memory-only AI response</p>
                 <h2 id="responseTitle">Choose a scenario or speak broadly</h2>
               </div>
-              <button id="speakResponse" type="button">Speak response</button>
+              <button id="speakResponse" type="button">Repeat short summary</button>
             </div>
             <p id="responseText">
               Demo AI is ready offline. Voice Orbit will turn broad intent into
@@ -304,8 +341,17 @@
           </div>
 
           <p class="caption" id="caption" aria-live="polite">
-            Start at center. Speak the full broad intent.
+            Sensor-free AI ready. Center rests; captions mirror every earcon.
           </p>
+          <p class="mobile-choice-page" id="mobileChoicePage" hidden>
+            Four primary choices shown. Say “next,” or use Cycle choice to refine.
+          </p>
+          <nav class="mobile-global-controls" aria-label="No-look global controls">
+            <button id="mobileRepeat" type="button">Repeat</button>
+            <button id="mobileWhatChanged" type="button">What changed</button>
+            <button id="mobileUndo" type="button">Undo</button>
+            <button id="mobileStop" type="button">Stop</button>
+          </nav>
           <div class="parity-controls" aria-label="Keyboard, touch, and switch parity">
             <button id="previousChoice" type="button">Previous</button>
             <button id="nextChoice" type="button">Cycle choice</button>
@@ -332,6 +378,11 @@
             <div><dt>Center cancels</dt><dd id="centerCancels">0</dd></div>
             <div><dt>Voice repairs</dt><dd id="voiceRepairs">0</dd></div>
             <div><dt>Sensor loss / recovery</dt><dd id="sensorRecovery">0 / 0</dd></div>
+            <div><dt>Glance proxy</dt><dd id="glanceProxy">0 ms</dd></div>
+            <div><dt>One-hand fallback</dt><dd id="touchFallback">0</dd></div>
+            <div><dt>Interruption recovery</dt><dd id="interruptionRecovery">0 / 0 ms</dd></div>
+            <div><dt>Permission → value</dt><dd id="permissionValue">waiting</dd></div>
+            <div><dt>Sensor-on time</dt><dd id="sensorOnTime">0 ms</dd></div>
           </dl>
           <ol class="event-trace" id="eventTrace" aria-label="Recent semantic events"></ol>
         </aside>
@@ -393,6 +444,12 @@
             Sensor-free parity always remains available.
           </p>
           <p>
+            <strong>Install tutorial:</strong> (1) open this HTTPS page in Safari,
+            (2) tap Share, (3) choose Add to Home Screen, and (4) open Adaptive
+            Orb from the new icon. Start sensor-free; add microphone and camera
+            only if that standalone runtime offers them.
+          </p>
+          <p>
             <strong>Standalone degradation:</strong> if an installed runtime
             lacks an API or permission, choose sensor-free mode. On iOS, use
             <strong>Open in Safari for live sensors</strong> where the same HTTPS
@@ -410,6 +467,7 @@
       <footer class="footer-actions">
         <button id="exportMetrics" type="button">Export public-safe semantic JSON</button>
         <button id="companionMode" type="button">AI: offline demo</button>
+        <button id="hapticToggle" type="button" hidden>Haptics: off</button>
         <button id="installApp" type="button">Install app</button>
         <button id="applyUpdate" type="button" hidden>Apply app update</button>
         <button id="useAccessible" type="button">Continue sensor-free</button>

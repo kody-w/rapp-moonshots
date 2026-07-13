@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "product": "Adaptive Orb mobile-first contract",
+  "evidenceKind": "deterministic synthetic interaction timing",
+  "conversationFingerprint": "071ba015",
+  "exactTaskFingerprint": "c1b6e39f",
+  "layouts": {
+    "contract": {
+      "portrait": {
+        "width": 390,
+        "height": 844
+      },
+      "landscape": {
+        "width": 844,
+        "height": 390
+      },
+      "minimumTargetPx": 44,
+      "maximumPrimaryChoices": 4,
+      "centerOrbMinimumPx": 112
+    },
+    "portrait": {
+      "width": 390,
+      "height": 844,
+      "orientation": "portrait",
+      "usableWidth": 390,
+      "usableHeight": 763,
+      "orbDiameter": 374,
+      "minimumTargetPx": 44,
+      "maximumPrimaryChoices": 4,
+      "noHorizontalOverflow": true
+    },
+    "landscape": {
+      "width": 844,
+      "height": 390,
+      "orientation": "landscape",
+      "usableWidth": 750,
+      "usableHeight": 369,
+      "orbDiameter": 265,
+      "minimumTargetPx": 44,
+      "maximumPrimaryChoices": 4,
+      "noHorizontalOverflow": true
+    }
+  },
+  "progressivePermissions": [
+    "sensor-free-value",
+    "optional-microphone",
+    "optional-front-camera"
+  ],
+  "maximumPrimaryChoices": 4,
+  "noHoverDependency": true,
+  "normalBrowserAudioRouting": true,
+  "interruptionResumeMode": "sensor-free",
+  "scenarios": [
+    "eyes-up-note",
+    "field-workshop-checklist",
+    "hands-busy-kitchen-guide",
+    "accessibility-switch-decision"
+  ],
+  "notFor": [
+    "driving",
+    "safety-critical control"
+  ],
+  "metrics": {
+    "viewportContract": "390x844 portrait · 844x390 landscape",
+    "glanceTimeProxyMs": 150,
+    "glanceSamples": 1,
+    "voiceRepairs": 2,
+    "falseCommits": 0,
+    "oneHandTouchFallbacks": 2,
+    "interruptions": 1,
+    "interruptionRecoveries": 1,
+    "interruptionRecoveryMs": 150,
+    "permissionToValueMs": 350,
+    "permissionRequests": {
+      "microphone": 1,
+      "camera": 1
+    },
+    "sensorOnMs": {
+      "microphone": 450,
+      "camera": 400,
+      "total": 850
+    },
+    "orientationChanges": 1,
+    "hapticSignals": 0
+  },
+  "privacy": "Aggregate semantic timings only; no transcript, media, calibration, device ID, API response, credential, or analytics."
+}

@@ -123,7 +123,7 @@ function describeRuntimeCapabilities(
       ? "Installed offline shell; live access is not guaranteed"
       : "Live-sensor prerequisites detected; permission is not confirmed";
     explanation =
-      "This runtime exposes the required APIs, but hardware and permission are checked only after Start.";
+      "This runtime exposes the APIs, but hardware and permission are checked only when each optional microphone or camera step is chosen.";
   }
 
   return Object.freeze({

@@ -18,6 +18,7 @@ const [
   capabilities,
   sensors,
   session,
+  mobile,
   core,
   packageText,
   build,
@@ -34,6 +35,7 @@ const [
     read("src/capabilities.mjs"),
     read("src/sensors.mjs"),
     read("src/session.mjs"),
+    read("src/mobile.mjs"),
     read("src/core.mjs"),
     read("package.json"),
     read("scripts/build.mjs"),
@@ -47,6 +49,7 @@ const evidenceFiles = process.argv.includes("--check-evidence")
       read("evidence/deterministic-replay.json"),
       read("evidence/conversation-metrics.json"),
       read("evidence/conversation-replay.json"),
+      read("evidence/mobile-evidence.json"),
     ])
   : null;
 
@@ -203,6 +206,9 @@ check("one browser-native media lifecycle has race and cleanup guards", () => {
   assert.match(sensors, /track\.stop\(\)/);
   assert.match(sensors, /video\.srcObject = null/);
   assert.match(sensors, /pagehide|cleanupRuntime/);
+  assert.match(sensors, /this\.streams\.clear\(\)/);
+  assert.match(sensors, /enableMicrophone/);
+  assert.match(sensors, /enableCamera/);
   assert.match(app, /window\.addEventListener\("pagehide"/);
   assert.match(app, /event\.persisted/);
 });
@@ -327,7 +333,7 @@ check("PWA manifest and service worker cache only local static allowlist", () =>
   assert.equal(manifest.scope, "./");
   assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512"));
-  assert.match(serviceWorker, /adaptive-orb-static-v2/);
+  assert.match(serviceWorker, /adaptive-orb-static-v3/);
   assert.match(serviceWorker, /STATIC_ASSETS/);
   assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.match(serviceWorker, /ACTIVATE_UPDATE/);
@@ -345,7 +351,7 @@ check("mobile and iOS hooks expose safe-area install and capability degradation"
   assert.match(template, /Share → Add to Home Screen/);
   assert.match(template, /require HTTPS or localhost/);
   assert.match(template, /Open in Safari for live sensors/);
-  assert.match(template, /installed icon guarantees neither/);
+  assert.match(template, /Installation works for offline/);
   assert.match(template, /id="capabilitySensorFree"/);
   assert.match(styles, /env\(safe-area-inset-top\)/);
   assert.match(styles, /env\(safe-area-inset-bottom\)/);
@@ -362,14 +368,75 @@ check("standalone sensing is runtime-detected and fails to visible parity", () =
   assert.match(capabilities, /Installability and offline access do not guarantee/);
   assert.match(capabilities, /showSafariLink/);
   assert.match(app, /refreshCapabilityGuidance/);
-  assert.match(app, /if \(!preflight\.canStartLive\)/);
-  assert.match(app, /liveStartFailed = true/);
+  assert.match(app, /sensorController\.enableMicrophone\(\)/);
+  assert.match(app, /sensorController\.enableCamera\(\)/);
+  assert.match(app, /liveStartFailed = !started/);
   assert.match(app, /trackRuntimeSensorCapability/);
   assert.match(app, /transitionToSensorFree\("open-browser"\)/);
   assert.match(sensors, /"NotAllowedError", "SecurityError", "NotSupportedError"/);
   assert.match(sensors, /Speech permission or service is unavailable/);
   assert.match(html, /Open in Safari for live sensors/);
   assert.match(html, /Sensor-free mode active/);
+});
+
+check("mobile-first contract is progressive, responsive, and eyes-up", () => {
+  assert.match(template, /Start sensor-free AI/);
+  assert.match(template, /id="permissionMic"/);
+  assert.match(template, /id="permissionCamera"/);
+  assert.ok(
+    template.indexOf("Start sensor-free AI") <
+      template.indexOf('id="permissionMic"'),
+  );
+  assert.ok(
+    template.indexOf('id="permissionMic"') <
+      template.indexOf('id="permissionCamera"'),
+  );
+  for (const phrase of [
+    "eyes-up note",
+    "workshop checklist",
+    "hands-busy cooking",
+    "switch-friendly",
+    "Not for driving",
+    "Headset and Bluetooth microphones",
+  ]) {
+    assert.match(template, new RegExp(phrase, "i"));
+  }
+  for (const id of [
+    "mobileRepeat",
+    "mobileWhatChanged",
+    "mobileUndo",
+    "mobileStop",
+    "glanceProxy",
+    "touchFallback",
+    "interruptionRecovery",
+    "permissionValue",
+    "sensorOnTime",
+  ]) {
+    assert.match(template, new RegExp(`id="${id}"`));
+  }
+  assert.match(styles, /390 × 844 portrait/);
+  assert.match(styles, /844 × 390/);
+  assert.match(styles, /env\(safe-area-inset-left\)/);
+  assert.match(styles, /env\(safe-area-inset-right\)/);
+  assert.match(styles, /min-height: 44px/);
+  assert.match(styles, /overflow-x: clip/);
+  assert.equal((styles.match(/:hover/g) || []).length, 4);
+  assert.ok((styles.match(/:active/g) || []).length >= 4);
+  assert.match(mobile, /maximumPrimaryChoices: 4/);
+  assert.match(mobile, /centerOrbMinimumPx: 112/);
+  assert.match(app, /optionIds: \[\.\.\.visibleChoiceIds\]/);
+  assert.match(app, /shortSpokenSummary/);
+  assert.match(app, /ORIENTATION_CHANGE/);
+  assert.match(app, /INTERRUPTION_RESUME/);
+  assert.match(app, /background-interruption/);
+  assert.match(app, /record\.mobile = mobileMetrics\.snapshot/);
+  assert.doesNotMatch(app, /sensorController\.start\(\)/);
+  assert.match(sensors, /facingMode: \{ ideal: "user" \}/);
+  assert.match(sensors, /noiseSuppression: true/);
+  assert.match(sensors, /autoGainControl: true/);
+  assert.match(sensors, /smoothedAim/);
+  assert.match(sensors, /recalibrateOrientation/);
+  assert.doesNotMatch(sensors, /deviceId/);
 });
 
 check("honest FaceDetector fallback and vendor speech disclosure are visible", () => {
@@ -450,6 +517,7 @@ if (process.argv.includes("--check-evidence")) {
     const replay = JSON.parse(evidenceFiles[1]);
     const conversationMetrics = JSON.parse(evidenceFiles[2]);
     const conversationReplay = JSON.parse(evidenceFiles[3]);
+    const mobileEvidence = JSON.parse(evidenceFiles[4]);
     assert.equal(metrics.deterministicFingerprint, record.deterministicFingerprint);
     assert.deepEqual(metrics.verification, {
       expectedFingerprint: "c1b6e39f",
@@ -491,6 +559,22 @@ if (process.argv.includes("--check-evidence")) {
       conversationRecord.events.length,
     );
     assert.deepEqual(conversationReplay.events, conversationRecord.events);
+    assert.equal(mobileEvidence.conversationFingerprint, "071ba015");
+    assert.equal(mobileEvidence.exactTaskFingerprint, "c1b6e39f");
+    assert.equal(mobileEvidence.layouts.portrait.width, 390);
+    assert.equal(mobileEvidence.layouts.portrait.height, 844);
+    assert.equal(mobileEvidence.layouts.landscape.width, 844);
+    assert.equal(mobileEvidence.layouts.landscape.height, 390);
+    assert.equal(mobileEvidence.layouts.portrait.noHorizontalOverflow, true);
+    assert.equal(mobileEvidence.layouts.landscape.noHorizontalOverflow, true);
+    assert.equal(mobileEvidence.maximumPrimaryChoices, 4);
+    assert.equal(mobileEvidence.noHoverDependency, true);
+    assert.deepEqual(mobileEvidence.progressivePermissions, [
+      "sensor-free-value",
+      "optional-microphone",
+      "optional-front-camera",
+    ]);
+    assert.match(mobileEvidence.privacy, /no transcript, media/);
   });
 }
 

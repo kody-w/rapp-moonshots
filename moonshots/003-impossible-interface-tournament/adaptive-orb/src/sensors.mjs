@@ -1,6 +1,6 @@
 class EpochGuard {
-  constructor() {
-    this.generation = 0;
+  constructor(initialGeneration = 0) {
+    this.generation = Math.max(0, Number(initialGeneration) || 0);
   }
 
   begin() {
@@ -203,6 +203,7 @@ class AdaptiveSensorController {
     onSpeech = () => {},
     onCaption = () => {},
     clock = () => performance.now(),
+    generationSeed = 0,
   } = {}) {
     this.video = video;
     this.onAction = onAction;
@@ -211,11 +212,16 @@ class AdaptiveSensorController {
     this.onSpeech = onSpeech;
     this.onCaption = onCaption;
     this.clock = clock;
-    this.lifecycle = new EpochGuard();
+    this.lifecycle = new EpochGuard(generationSeed);
     this.detectorGuard = new DetectorEpochGuard();
     this.freshness = new FreshnessGate();
     this.gestureGate = new CoarseGestureGate();
     this.stream = null;
+    this.streams = new Set();
+    this.microphoneStream = null;
+    this.cameraStream = null;
+    this.lifecycleGeneration = 0;
+    this.frontCameraMirrored = true;
     this.active = false;
     this.frameHandle = null;
     this.frameHandleKind = null;
@@ -237,6 +243,7 @@ class AdaptiveSensorController {
     this.previousGray = null;
     this.faceBaseline = null;
     this.motionPoint = { x: 0.5, y: 0.5 };
+    this.smoothedAim = null;
     this.neutralSince = null;
     this.lastMotionGestureAt = -Infinity;
     this.armed = false;
@@ -254,8 +261,251 @@ class AdaptiveSensorController {
     });
   }
 
+  ensureProgressiveLifecycle() {
+    if (
+      this.active &&
+      this.lifecycle.isCurrent(this.lifecycleGeneration)
+    ) {
+      return this.lifecycleGeneration;
+    }
+    const generation = this.lifecycle.begin();
+    this.lifecycleGeneration = generation;
+    this.active = true;
+    this.freshness.reset(generation);
+    this.recognitionTerminal = false;
+    this.recognitionRetries = 0;
+    return generation;
+  }
+
+  recalibrateOrientation() {
+    this.smoothedAim = null;
+    this.faceBaseline = null;
+    this.motionPoint = { x: 0.5, y: 0.5 };
+    if (this.previousGray) {
+      this.previousGray.fill(0);
+      this.previousGray = null;
+    }
+    this.gestureGate.reset();
+    if (
+      this.cameraStream &&
+      this.active &&
+      this.lifecycle.isCurrent(this.lifecycleGeneration)
+    ) {
+      this.invalidateContent(this.lifecycleGeneration, this.clock());
+    }
+  }
+
+  registerStream(stream) {
+    this.streams.add(stream);
+    if (!this.stream) {
+      this.stream = stream;
+    }
+  }
+
+  releaseStream(stream) {
+    if (!stream) {
+      return;
+    }
+    stopStream(stream);
+    this.streams.delete(stream);
+    if (this.microphoneStream === stream) {
+      this.microphoneStream = null;
+    }
+    if (this.cameraStream === stream) {
+      this.cameraStream = null;
+    }
+    if (this.stream === stream) {
+      this.stream = this.streams.values().next().value || null;
+    }
+  }
+
+  releaseMicrophoneCapture(status = "denied") {
+    const stream = this.microphoneStream;
+    if (!stream) {
+      return;
+    }
+    if (stream === this.cameraStream) {
+      for (const track of stream.getTracks?.() || []) {
+        if (track.kind === "audio") {
+          try {
+            track.stop();
+          } catch {
+            // Track may already be stopped.
+          }
+        }
+      }
+      this.microphoneStream = null;
+    } else {
+      this.releaseStream(stream);
+    }
+    this.onAction({
+      type: "SENSOR_STATUS",
+      sensor: "microphone",
+      status,
+      at: this.clock(),
+    });
+  }
+
+  async enableMicrophone() {
+    if (this.microphoneStream) {
+      return true;
+    }
+    const generation = this.ensureProgressiveLifecycle();
+    this.onAction({
+      type: "SENSOR_STATUS",
+      sensor: "microphone",
+      status: "starting",
+      at: this.clock(),
+    });
+    let acquired = null;
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("media-unsupported");
+      }
+      acquired = await navigator.mediaDevices.getUserMedia({
+        video: false,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      if (!this.active || !this.lifecycle.isCurrent(generation)) {
+        stopStream(acquired);
+        return false;
+      }
+      this.microphoneStream = acquired;
+      this.registerStream(acquired);
+      this.attachTrackSafety(acquired, generation);
+      this.onAction({
+        type: "SENSOR_STATUS",
+        sensor: "microphone",
+        status: "active",
+        at: this.clock(),
+      });
+      this.startWatchdog(generation);
+      this.startRecognition(generation);
+      if (this.recognitionTerminal || !this.recognition) {
+        this.releaseMicrophoneCapture(
+          this.recognitionTerminal ? "denied" : "not-requested",
+        );
+        return false;
+      }
+      return true;
+    } catch (error) {
+      this.releaseStream(acquired);
+      if (this.active && this.lifecycle.isCurrent(generation)) {
+        const reason = error?.name || error?.message || "microphone-failed";
+        this.onAction({
+          type: "SENSOR_STATUS",
+          sensor: "microphone",
+          status: "denied",
+          reason,
+          at: this.clock(),
+        });
+        this.onCaption(
+          "Microphone unavailable. Sensor-free AI and camera permission remain separate.",
+        );
+      }
+      return false;
+    }
+  }
+
+  async enableCamera() {
+    if (this.cameraStream) {
+      return true;
+    }
+    const generation = this.ensureProgressiveLifecycle();
+    this.onAction({
+      type: "SENSOR_STATUS",
+      sensor: "camera",
+      status: "starting",
+      at: this.clock(),
+    });
+    let acquired = null;
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("media-unsupported");
+      }
+      acquired = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "user" },
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 24, max: 30 },
+        },
+        audio: false,
+      });
+      if (!this.active || !this.lifecycle.isCurrent(generation)) {
+        stopStream(acquired);
+        return false;
+      }
+      const videoTrack = acquired.getVideoTracks?.()[0];
+      const facingMode = videoTrack?.getSettings?.().facingMode;
+      this.frontCameraMirrored = facingMode !== "environment";
+      this.cameraStream = acquired;
+      this.registerStream(acquired);
+      this.attachTrackSafety(acquired, generation);
+      if (this.video) {
+        this.video.srcObject = acquired;
+        this.video.muted = true;
+        this.video.playsInline = true;
+        if (this.video.dataset) {
+          this.video.dataset.mirrored = String(this.frontCameraMirrored);
+          this.video.dataset.facingMode =
+            this.frontCameraMirrored ? "user" : "environment";
+        }
+        await this.video.play();
+      }
+      if (!this.active || !this.lifecycle.isCurrent(generation)) {
+        this.releaseStream(acquired);
+        if (this.video) {
+          this.video.srcObject = null;
+        }
+        return false;
+      }
+      this.onAction({
+        type: "SENSOR_STATUS",
+        sensor: "camera",
+        status: "active",
+        at: this.clock(),
+      });
+      this.configureEstimator();
+      this.startFrameLoop(generation);
+      this.startWatchdog(generation);
+      return true;
+    } catch (error) {
+      this.releaseStream(acquired);
+      if (this.video) {
+        this.video.srcObject = null;
+      }
+      if (this.active && this.lifecycle.isCurrent(generation)) {
+        const reason = error?.name || error?.message || "camera-failed";
+        this.onAction({
+          type: "SENSOR_STATUS",
+          sensor: "camera",
+          status: "denied",
+          reason,
+          at: this.clock(),
+        });
+        this.onAction({
+          type: "SENSOR_STATUS",
+          sensor: "estimator",
+          status: "not-requested",
+          label: "camera unavailable · sensor-free parity active",
+          at: this.clock(),
+        });
+        this.onCaption(
+          "Camera unavailable. Microphone and sensor-free AI remain usable.",
+        );
+      }
+      return false;
+    }
+  }
+
   async start() {
     const generation = this.lifecycle.begin();
+    this.lifecycleGeneration = generation;
     this.active = true;
     this.freshness.reset(generation);
     this.onAction({
@@ -278,7 +528,7 @@ class AdaptiveSensorController {
       }
       acquired = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: "user",
+          facingMode: { ideal: "user" },
           width: { ideal: 640 },
           height: { ideal: 480 },
           frameRate: { ideal: 30, max: 30 },
@@ -286,6 +536,7 @@ class AdaptiveSensorController {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
+          autoGainControl: true,
         },
       });
       if (!this.active || !this.lifecycle.isCurrent(generation)) {
@@ -294,11 +545,22 @@ class AdaptiveSensorController {
       }
 
       this.stream = acquired;
+      this.streams.add(acquired);
+      this.microphoneStream = acquired;
+      this.cameraStream = acquired;
+      const videoTrack = acquired.getVideoTracks?.()[0];
+      const facingMode = videoTrack?.getSettings?.().facingMode;
+      this.frontCameraMirrored = facingMode !== "environment";
       this.attachTrackSafety(acquired, generation);
       if (this.video) {
         this.video.srcObject = acquired;
         this.video.muted = true;
         this.video.playsInline = true;
+        if (this.video.dataset) {
+          this.video.dataset.mirrored = String(this.frontCameraMirrored);
+          this.video.dataset.facingMode =
+            this.frontCameraMirrored ? "user" : "environment";
+        }
         await this.video.play();
       }
       if (!this.active || !this.lifecycle.isCurrent(generation)) {
@@ -430,9 +692,9 @@ class AdaptiveSensorController {
           this.processFrame(at, metadata, generation);
           schedule();
         });
-      } else {
+      } else if (typeof globalThis.requestAnimationFrame === "function") {
         this.frameHandleKind = "animation";
-        this.frameHandle = requestAnimationFrame((at) => {
+        this.frameHandle = globalThis.requestAnimationFrame((at) => {
           this.processFrame(
             at,
             {
@@ -443,6 +705,20 @@ class AdaptiveSensorController {
           );
           schedule();
         });
+      } else {
+        this.frameHandleKind = "timer";
+        this.frameHandle = setTimeout(() => {
+          const at = this.clock();
+          this.processFrame(
+            at,
+            {
+              mediaTime: this.video?.currentTime,
+              presentedFrames: this.video?.webkitDecodedFrameCount,
+            },
+            generation,
+          );
+          schedule();
+        }, 34);
       }
     };
     schedule();
@@ -500,6 +776,7 @@ class AdaptiveSensorController {
     this.releasePendingDetectorBuffers();
     this.faceBaseline = null;
     this.motionPoint = { x: 0.5, y: 0.5 };
+    this.smoothedAim = null;
     this.revokeSensorArm();
     this.contentBlocked = true;
     if (this.active && this.lifecycle.isCurrent(generation)) {
@@ -750,15 +1027,19 @@ class AdaptiveSensorController {
           });
           return;
         }
-        const x = (box.x + box.width / 2) / this.video.videoWidth;
+        const rawX = (box.x + box.width / 2) / this.video.videoWidth;
+        const x = this.frontCameraMirrored ? 1 - rawX : rawX;
         const y = (box.y + box.height / 2) / this.video.videoHeight;
         if (!this.faceBaseline) {
           this.faceBaseline = { x, y };
         }
-        const point = {
+        const target = {
           x: clamp(0.5 + (x - this.faceBaseline.x) * 3.2),
           y: clamp(0.5 + (y - this.faceBaseline.y) * 3.2),
         };
+        this.motionPoint.x += (target.x - this.motionPoint.x) * 0.34;
+        this.motionPoint.y += (target.y - this.motionPoint.y) * 0.34;
+        const point = { ...this.motionPoint };
         const processedSample = { generation, processedAt: at };
         const freshnessAccepted = this.emitFreshness(processedSample);
         if (
@@ -808,11 +1089,12 @@ class AdaptiveSensorController {
     const contentEpoch = this.contentEpoch;
     let rotationDelta = null;
     if (motion.activeTotal > 0 && motion.difference > 0.35) {
+      const rawCentroidX =
+        motion.centroidX /
+        motion.activeTotal /
+        Math.max(1, this.analysisCanvas.width - 1);
       const centroid = {
-        x:
-          motion.centroidX /
-          motion.activeTotal /
-          Math.max(1, this.analysisCanvas.width - 1),
+        x: this.frontCameraMirrored ? 1 - rawCentroidX : rawCentroidX,
         y:
           motion.centroidY /
           motion.activeTotal /
@@ -929,15 +1211,23 @@ class AdaptiveSensorController {
   }
 
   emitAim(point, confidence, estimator, at) {
-    const dx = point.x - 0.5;
-    const dy = point.y - 0.5;
+    const alpha = confidence >= 0.7 ? 0.38 : 0.24;
+    const smoothed = this.smoothedAim
+      ? {
+          x: this.smoothedAim.x + (point.x - this.smoothedAim.x) * alpha,
+          y: this.smoothedAim.y + (point.y - this.smoothedAim.y) * alpha,
+        }
+      : { x: point.x, y: point.y };
+    this.smoothedAim = smoothed;
+    const dx = smoothed.x - 0.5;
+    const dy = smoothed.y - 0.5;
     const radius = Math.hypot(dx, dy);
     const zone = radius < 0.13 ? "center" : "radial";
-    this.onAim({ ...point, confidence, estimator, zone, at });
+    this.onAim({ ...smoothed, confidence, estimator, zone, at });
 
     const gesture = this.gestureGate.sample({
       zone,
-      y: point.y,
+      y: smoothed.y,
       at,
       armed: this.armed,
       epoch: this.armedEpoch,
@@ -968,7 +1258,25 @@ class AdaptiveSensorController {
     this.armedChoiceId = normalizedChoice;
   }
 
+  handleOrientationChange() {
+    if (
+      !this.active ||
+      !this.cameraStream ||
+      !this.lifecycle.isCurrent(this.lifecycleGeneration)
+    ) {
+      return false;
+    }
+    this.recalibrateOrientation();
+    this.onCaption(
+      "Orientation changed. Camera aim is recalibrating from fresh frames.",
+    );
+    return true;
+  }
+
   startWatchdog(generation) {
+    if (this.watchdog !== null) {
+      return;
+    }
     this.watchdog = setInterval(() => {
       if (!this.active || !this.lifecycle.isCurrent(generation)) {
         return;
@@ -982,12 +1290,14 @@ class AdaptiveSensorController {
     const Recognition =
       globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
     if (!Recognition) {
+      this.recognitionTerminal = true;
       this.onAction({
         type: "SENSOR_STATUS",
         sensor: "speech",
         status: "unavailable",
         at: this.clock(),
       });
+      this.releaseMicrophoneCapture("not-requested");
       this.onCaption("Browser speech recognition unavailable. Gesture and parity remain.");
       return;
     }
@@ -1033,6 +1343,8 @@ class AdaptiveSensorController {
         ].includes(event.error);
         if (terminal) {
           this.recognitionTerminal = true;
+          this.detachRecognition();
+          this.releaseMicrophoneCapture("denied");
           this.onAction({
             type: "SENSOR_STATUS",
             sensor: "speech",
@@ -1041,7 +1353,7 @@ class AdaptiveSensorController {
             at: this.clock(),
           });
           this.onCaption(
-            "Speech service unavailable; the physical mic may still be active. Use gesture or parity.",
+            "Speech service unavailable; microphone capture stopped. Use gesture or parity.",
           );
         } else {
           this.scheduleRecognitionRestart(generation);
@@ -1072,6 +1384,7 @@ class AdaptiveSensorController {
       if (terminal) {
         this.recognitionTerminal = true;
         this.detachRecognition();
+        this.releaseMicrophoneCapture("denied");
         this.onAction({
           type: "SENSOR_STATUS",
           sensor: "speech",
@@ -1182,8 +1495,13 @@ class AdaptiveSensorController {
         typeof this.video.cancelVideoFrameCallback === "function"
       ) {
         this.video.cancelVideoFrameCallback(this.frameHandle);
-      } else if (typeof cancelAnimationFrame === "function") {
-        cancelAnimationFrame(this.frameHandle);
+      } else if (
+        this.frameHandleKind === "animation" &&
+        typeof globalThis.cancelAnimationFrame === "function"
+      ) {
+        globalThis.cancelAnimationFrame(this.frameHandle);
+      } else if (this.frameHandleKind === "timer") {
+        clearTimeout(this.frameHandle);
       }
     }
     this.frameHandle = null;
@@ -1197,8 +1515,17 @@ class AdaptiveSensorController {
     if (typeof speechSynthesis !== "undefined") {
       speechSynthesis.cancel();
     }
-    stopStream(this.stream);
+    const streams = new Set(this.streams);
+    if (this.stream) {
+      streams.add(this.stream);
+    }
+    for (const stream of streams) {
+      stopStream(stream);
+    }
+    this.streams.clear();
     this.stream = null;
+    this.microphoneStream = null;
+    this.cameraStream = null;
     if (this.video) {
       try {
         this.video.pause();
@@ -1227,6 +1554,7 @@ class AdaptiveSensorController {
     this.detectorRequestId += 1;
     this.faceBaseline = null;
     this.motionPoint = { x: 0.5, y: 0.5 };
+    this.smoothedAim = null;
     this.lastFrameToken = null;
     this.gestureGate.reset();
     this.armed = false;
