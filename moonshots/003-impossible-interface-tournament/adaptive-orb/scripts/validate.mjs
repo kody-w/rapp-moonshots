@@ -15,6 +15,7 @@ const [
   styles,
   app,
   ai,
+  capabilities,
   sensors,
   session,
   core,
@@ -30,6 +31,7 @@ const [
     read("src/styles.css"),
     read("src/app.mjs"),
     read("src/ai.mjs"),
+    read("src/capabilities.mjs"),
     read("src/sensors.mjs"),
     read("src/session.mjs"),
     read("src/core.mjs"),
@@ -325,7 +327,7 @@ check("PWA manifest and service worker cache only local static allowlist", () =>
   assert.equal(manifest.scope, "./");
   assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512"));
-  assert.match(serviceWorker, /adaptive-orb-static-v1/);
+  assert.match(serviceWorker, /adaptive-orb-static-v2/);
   assert.match(serviceWorker, /STATIC_ASSETS/);
   assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.match(serviceWorker, /ACTIVATE_UPDATE/);
@@ -342,11 +344,32 @@ check("mobile and iOS hooks expose safe-area install and capability degradation"
   assert.match(template, /apple-touch-icon/);
   assert.match(template, /Share → Add to Home Screen/);
   assert.match(template, /require HTTPS or localhost/);
+  assert.match(template, /Open in Safari for live sensors/);
+  assert.match(template, /installed icon guarantees neither/);
+  assert.match(template, /id="capabilitySensorFree"/);
   assert.match(styles, /env\(safe-area-inset-top\)/);
   assert.match(styles, /env\(safe-area-inset-bottom\)/);
   assert.match(styles, /orientation: landscape/);
   assert.match(sensors, /webkitSpeechRecognition/);
   assert.match(sensors, /frame-motion fallback/);
+});
+
+check("standalone sensing is runtime-detected and fails to visible parity", () => {
+  assert.match(capabilities, /display-mode: standalone/);
+  assert.match(capabilities, /navigatorObject\?\.standalone === true/);
+  assert.match(capabilities, /mediaDevices\?\.getUserMedia/);
+  assert.match(capabilities, /webkitSpeechRecognition/);
+  assert.match(capabilities, /Installability and offline access do not guarantee/);
+  assert.match(capabilities, /showSafariLink/);
+  assert.match(app, /refreshCapabilityGuidance/);
+  assert.match(app, /if \(!preflight\.canStartLive\)/);
+  assert.match(app, /liveStartFailed = true/);
+  assert.match(app, /trackRuntimeSensorCapability/);
+  assert.match(app, /transitionToSensorFree\("open-browser"\)/);
+  assert.match(sensors, /"NotAllowedError", "SecurityError", "NotSupportedError"/);
+  assert.match(sensors, /Speech permission or service is unavailable/);
+  assert.match(html, /Open in Safari for live sensors/);
+  assert.match(html, /Sensor-free mode active/);
 });
 
 check("honest FaceDetector fallback and vendor speech disclosure are visible", () => {

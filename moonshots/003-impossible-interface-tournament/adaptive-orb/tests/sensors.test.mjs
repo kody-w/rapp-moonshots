@@ -461,6 +461,63 @@ test("shutdown zeros every pending detector-derived buffer", () => {
   assert.equal(pending[0].every((value) => value === 0), true);
 });
 
+test("synchronous speech permission failure becomes terminal and visible", () => {
+  const originalRecognition = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "SpeechRecognition",
+  );
+  class DeniedRecognition {
+    start() {
+      const error = new Error("denied");
+      error.name = "NotAllowedError";
+      throw error;
+    }
+
+    abort() {}
+  }
+  Object.defineProperty(globalThis, "SpeechRecognition", {
+    configurable: true,
+    value: DeniedRecognition,
+  });
+  const actions = [];
+  const captions = [];
+  try {
+    const controller = new AdaptiveSensorController({
+      video: null,
+      clock: () => 20,
+      onAction: (action) => {
+        actions.push(action);
+        return { ok: true };
+      },
+      onCaption: (caption) => captions.push(caption),
+    });
+    const generation = controller.lifecycle.begin();
+    controller.active = true;
+    controller.startRecognition(generation);
+    assert.equal(controller.recognitionTerminal, true);
+    assert.ok(
+      actions.some(
+        (action) =>
+          action.type === "SENSOR_STATUS" &&
+          action.sensor === "speech" &&
+          action.status === "denied",
+      ),
+    );
+    assert.match(captions.at(-1), /sensor-free parity/);
+    controller.stop("speech-permission-test");
+  } finally {
+    if (originalRecognition) {
+      Object.defineProperty(
+        globalThis,
+        "SpeechRecognition",
+        originalRecognition,
+      );
+    } else {
+      delete globalThis.SpeechRecognition;
+    }
+  }
+});
+
 test("stopStream stops every acquired media track", () => {
   const tracks = [
     { stopped: false, stop() { this.stopped = true; } },

@@ -80,10 +80,19 @@ visibly falls back to deterministic demo AI with the same conversation intact.
 - `manifest.webmanifest` uses standalone display and only local PNG icons,
   including a 180 px Apple touch icon.
 - On iPhone/iPad Safari: **Share → Add to Home Screen**.
-- Camera and microphone require HTTPS or localhost.
-- `webkitSpeechRecognition` is used when available. Touch, keyboard, and
-  switch parity remain when iOS speech, `FaceDetector`, or camera sensing is
-  unavailable.
+- Installability/offline readiness is **not** evidence that camera, microphone,
+  `SpeechRecognition`, or speech synthesis works in iOS standalone mode.
+- Every launch capability-detects standalone display, secure context,
+  `getUserMedia`, `SpeechRecognition`/`webkitSpeechRecognition`, and speech
+  synthesis. Hardware and permission remain unknown until the user starts.
+- When an installed iOS runtime lacks an API or live permission/startup fails,
+  visible guidance activates sensor-free parity and offers **Open in Safari for
+  live sensors**. The same HTTPS URL opens externally where iOS permits; Safari
+  performs a separate capability/permission check, so availability is still
+  not guaranteed. Any active local sensor session is torn down before opening
+  the external browser URL.
+- Camera and microphone require HTTPS or localhost. Touch, keyboard, and switch
+  parity remain when speech, `FaceDetector`, or camera sensing is unavailable.
 - Portrait, landscape, dynamic viewport, large radial targets, and safe-area
   insets are supported.
 - The versioned service worker caches only the static shell, manifest, and local
@@ -96,11 +105,14 @@ See [ROLLBACK.md](ROLLBACK.md) for unregister and cache cleanup.
 
 ## Permission and safety flow
 
-One **Start voice + camera** click requests one combined media stream. After
-that, the intended primary flow is hands-free: speak broad intent, hold a coarse
-direction to highlight, and nod or speak to confirm. **Start sensor-free
-access** creates no media or recognition and exposes the same semantic
-scenario/task path to touch, keyboard, and switch controls.
+When runtime prerequisites are present, one **Start voice + camera** click
+requests one combined media stream. Successful permission enables the intended
+hands-free flow: speak broad intent, hold a coarse direction to highlight, and
+nod or speak to confirm. Missing speech can leave camera gestures available
+without claiming voice support. Failed prerequisites or permission visibly
+degrade to **Start sensor-free access**, which creates no media or recognition
+and exposes the same semantic scenario/task path to touch, keyboard, and switch
+controls.
 
 Sensing remains deliberately coarse. `FaceDetector`, when available, supplies
 only a transient face-box/head-position proxy. Otherwise a 48×36 local
@@ -155,13 +167,15 @@ npm run verify
 The suite uses Node's test runner and Python's stdlib `unittest`; no packages are
 installed. It covers AI adapter failover, shared conversation/task/history,
 automatic/manual modes, replay locking, PWA assets/cache policy, iOS hooks,
-proxy validation and secret handling, sensor-free parity, detector races,
-privacy, Clawpilot theming, and checked-in evidence.
+standalone capability/permission degradation, Safari recovery guidance, proxy
+validation and secret handling, sensor-free parity, detector races, privacy,
+Clawpilot theming, and checked-in evidence.
 
 ## Important files
 
 - `index.html` — generated self-contained application shell;
 - `src/ai.mjs` — scenario packs, deterministic responder, strict adapters;
+- `src/capabilities.mjs` — standalone/live API detection and honest fallback;
 - `src/core.mjs` — shared conversation/task/history/safety machine;
 - `src/sensors.mjs` / `src/session.mjs` — guarded media and aim lifecycles;
 - `server.py` — optional same-origin Brainstem companion;

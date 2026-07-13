@@ -41,6 +41,7 @@ button:hover {
 
 button:focus-visible,
 summary:focus-visible,
+.capability-link:focus-visible,
 [tabindex]:focus-visible {
   outline: 3px solid var(--cp-accent);
   outline-offset: 3px;
@@ -133,6 +134,59 @@ button:disabled {
   background: var(--cp-surface-soft);
 }
 
+.capability-notice,
+.runtime-capability {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--cp-border);
+  border-left: 4px solid var(--cp-success);
+  border-radius: 0.625rem;
+  background: var(--cp-surface-soft);
+}
+
+.capability-notice[data-degraded="true"],
+.runtime-capability[data-degraded="true"] {
+  border-left-color: var(--cp-warning);
+}
+
+.capability-notice p,
+.runtime-capability p {
+  margin: 4px 0 0;
+  color: var(--cp-text-muted);
+  font-size: 0.88rem;
+}
+
+.capability-browser-action {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.capability-browser-action[hidden],
+.runtime-capability[hidden] {
+  display: none;
+}
+
+.capability-browser-action small {
+  color: var(--cp-text-muted);
+}
+
+.capability-link {
+  width: fit-content;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--cp-accent);
+  border-radius: 0.625rem;
+  color: var(--cp-link);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.capability-link:hover {
+  background: var(--cp-accent-soft);
+  color: var(--cp-accent-hover);
+}
+
 .launch-actions {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -173,6 +227,16 @@ button:disabled {
   justify-content: space-between;
   gap: 20px;
   padding: 8px 0 18px;
+}
+
+.runtime-capability {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.runtime-capability > button,
+.capability-link {
+  width: 100%;
 }
 
 .topbar h1 {
@@ -221,6 +285,23 @@ button:disabled {
 .safety-banner[data-frozen="true"] {
   border-color: var(--cp-danger);
   background: var(--cp-accent-soft);
+}
+
+.runtime-capability {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 12px;
+  background: var(--cp-surface);
+}
+
+.runtime-capability > div {
+  min-width: 0;
+}
+
+.runtime-capability > button {
+  flex: 0 0 auto;
 }
 
 .task-ribbon {

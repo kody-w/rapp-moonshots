@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Adaptive Orb AI",
   "short_name": "Adaptive Orb",
-  "description": "A hands-free adaptive AI conversation using voice, coarse gaze, and gesture.",
+  "description": "An adaptive AI conversation with optional voice, coarse gaze, gesture, and sensor-free controls.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

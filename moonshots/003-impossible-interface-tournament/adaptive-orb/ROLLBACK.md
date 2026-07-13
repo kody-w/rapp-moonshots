@@ -77,5 +77,9 @@ Every listed path must begin
 
 If live sensing or companion quality is uncertain but the artifact should stay
 available, keep public demo AI and use **Start sensor-free access** or
-`?simulate=1`. Never weaken no-gaze-commit, freshness, request identity,
-same-origin, no-store, or static-cache allowlist gates as a workaround.
+`?simulate=1`. For iOS standalone capability or permission failures, retain the
+visible sensor-free offer and **Open in Safari for live sensors** guidance; do
+not claim that installation implies hardware access. Safari must repeat its own
+runtime and permission check and may also degrade. Never weaken capability
+preflight, no-gaze-commit, freshness, request identity, same-origin, no-store,
+or static-cache allowlist gates as a workaround.

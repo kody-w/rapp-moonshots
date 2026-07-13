@@ -99,7 +99,35 @@
           browser service and may send audio to a browser or OS vendor for
           processing. This app cannot audit or control that vendor processing.
           Choose sensor-free access to request neither camera nor microphone.
+          Installation and offline readiness do not prove that live sensor or
+          speech APIs are available in the installed runtime.
         </div>
+        <section
+          class="capability-notice"
+          id="launchCapability"
+          tabindex="-1"
+          role="status"
+          aria-live="polite"
+        >
+          <strong id="launchCapabilityTitle">Checking live-sensor capability</strong>
+          <p id="launchCapabilityDetail">
+            Installability and offline access are separate from camera,
+            microphone, and speech availability.
+          </p>
+          <div class="capability-browser-action" id="launchSafariAction" hidden>
+            <a
+              class="capability-link"
+              id="launchSafariLink"
+              target="_blank"
+              rel="external noopener"
+            >Open in Safari for live sensors</a>
+            <small>
+              Where iOS permits, this opens the same secure app URL in Safari for a
+              separate capability and permission check. Otherwise copy this
+              address into Safari.
+            </small>
+          </div>
+        </section>
         <div class="launch-actions">
           <button class="primary-action" id="startLive" type="button">
             Start voice + camera
@@ -118,8 +146,10 @@
           <summary>Install on iPhone or iPad</summary>
           <p>
             In Safari, choose Share → Add to Home Screen. Camera and microphone
-            require HTTPS or localhost. If speech or sensing is unavailable,
-            large touch, keyboard, and switch controls remain.
+            require HTTPS or localhost. An installed icon guarantees neither
+            camera/microphone access nor SpeechRecognition. This app checks the
+            current runtime every launch. If standalone access is restricted,
+            use sensor-free controls or Open in Safari for live sensors.
           </p>
         </details>
       </div>
@@ -144,6 +174,37 @@
         <strong id="safetyTitle">Safe to explore.</strong>
         <span id="safetyDetail">Gaze highlights; explicit voice or gesture confirms.</span>
       </div>
+
+      <section
+        class="runtime-capability"
+        id="runtimeCapability"
+        data-degraded="true"
+        role="status"
+        aria-live="polite"
+        hidden
+      >
+        <div>
+          <strong id="runtimeCapabilityTitle">Live capability is limited</strong>
+          <p id="runtimeCapabilityDetail">
+            Sensor-free controls remain available.
+          </p>
+          <div class="capability-browser-action" id="runtimeSafariAction" hidden>
+            <a
+              class="capability-link"
+              id="runtimeSafariLink"
+              target="_blank"
+              rel="external noopener"
+            >Open in Safari for live sensors</a>
+            <small>
+              Opens this same secure URL where iOS permits; otherwise copy the
+              address into Safari. Safari will perform its own permission check.
+            </small>
+          </div>
+        </div>
+        <button id="capabilitySensorFree" type="button">
+          Use sensor-free mode
+        </button>
+      </section>
 
       <section class="task-ribbon" aria-labelledby="taskTitle">
         <div>
@@ -325,9 +386,18 @@
         <summary>Install, offline behavior, and iOS help</summary>
         <div class="disclosure-grid">
           <p>
-            <strong>iOS:</strong> Safari Share → Add to Home Screen. Use HTTPS
-            for camera/microphone. <code>webkitSpeechRecognition</code> is used
-            when available; otherwise use touch or switch parity.
+            <strong>iOS:</strong> Safari Share → Add to Home Screen. Installability
+            and offline use do not guarantee live camera, microphone, or speech
+            inside standalone mode. The app capability-detects each launch;
+            <code>webkitSpeechRecognition</code> is used only when present.
+            Sensor-free parity always remains available.
+          </p>
+          <p>
+            <strong>Standalone degradation:</strong> if an installed runtime
+            lacks an API or permission, choose sensor-free mode. On iOS, use
+            <strong>Open in Safari for live sensors</strong> where the same HTTPS
+            URL can be opened externally; Safari performs a separate permission
+            check and availability is still not guaranteed.
           </p>
           <p>
             <strong>Offline:</strong> the service worker caches only the app shell,

@@ -104,11 +104,23 @@ function stripModuleSyntax(source) {
     .trim();
 }
 
-const [template, styles, ai, core, sensors, session, comparison, app, evidence] =
+const [
+  template,
+  styles,
+  ai,
+  capabilities,
+  core,
+  sensors,
+  session,
+  comparison,
+  app,
+  evidence,
+] =
   await Promise.all([
     readFile(resolve(root, "src/index.template.html"), "utf8"),
     readFile(resolve(root, "src/styles.css"), "utf8"),
     readFile(resolve(root, "src/ai.mjs"), "utf8"),
+    readFile(resolve(root, "src/capabilities.mjs"), "utf8"),
     readFile(resolve(root, "src/core.mjs"), "utf8"),
     readFile(resolve(root, "src/sensors.mjs"), "utf8"),
     readFile(resolve(root, "src/session.mjs"), "utf8"),
@@ -120,6 +132,7 @@ const [template, styles, ai, core, sensors, session, comparison, app, evidence] 
 const bundledScript = [
   `const BUILD_TOURNAMENT_EVIDENCE = Object.freeze(${JSON.stringify(evidence)});`,
   stripModuleSyntax(ai),
+  stripModuleSyntax(capabilities),
   stripModuleSyntax(core),
   stripModuleSyntax(sensors),
   stripModuleSyntax(session),

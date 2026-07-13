@@ -25,6 +25,9 @@ test("generated index is self-contained and has the required product hooks", asy
   assert.match(html, /EXPECTED_CONVERSATION_FINGERPRINT = "071ba015"/);
   assert.match(html, /class AdaptiveAIAdapter/);
   assert.match(html, /navigator\.serviceWorker\.register/);
+  assert.match(html, /detectRuntimeCapabilities/);
+  assert.match(html, /Open in Safari for live sensors/);
+  assert.match(html, /id="capabilitySensorFree"/);
   assert.match(html, /\/api\/chat/);
   assert.match(html, /replay-rejected/);
   assert.doesNotMatch(html, /<iframe\b/i);

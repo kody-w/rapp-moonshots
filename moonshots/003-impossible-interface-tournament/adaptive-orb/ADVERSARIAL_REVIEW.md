@@ -37,7 +37,9 @@ untrusted.
 | Mode change loses context or safety | One machine owns conversation, task, undo snapshots, freezes, freshness, and metrics | Rendering defects could misstate state |
 | Replay is perturbed by user input | Replay authority rejects pointer, voice, keyboard, sensor, and external state actions; exact fingerprint precedes success | Rendering is not fingerprinted |
 | bfcache revives torn media/AI state | `pagehide` aborts AI, stops media, invalidates lifecycle; persisted `pageshow` reloads | Reload needs another permission gesture |
-| iOS lacks speech/FaceDetector/install prompt | `webkitSpeechRecognition`, coarse frame motion, visible Share instructions, and large touch/switch parity | This is not universal accessibility certification |
+| Installed iOS icon is mistaken for live-sensor support | Every launch separately detects standalone display, secure context, media capture, recognition, and synthesis; copy explicitly says installability is not capability | API presence still cannot prove hardware or permission before Start |
+| iOS standalone lacks APIs or rejects permission | Visible sensor-free parity activates; degraded installed iOS gets an **Open in Safari for live sensors** same-URL link where feasible, after current sensors are torn down | Safari performs a separate check and may also lack or deny access; the link cannot guarantee success |
+| iOS lacks FaceDetector/install prompt | Coarse frame motion, visible Share instructions, and large touch/switch parity remain | This is not universal accessibility certification |
 
 ## Privacy boundary
 

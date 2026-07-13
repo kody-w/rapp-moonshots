@@ -1,4 +1,5 @@
 import { AI_SCENARIOS, AdaptiveAIAdapter, createEphemeralSessionId } from "./ai.mjs";
+import { buildBrowserLaunchUrl, describeRuntimeCapabilities, detectRuntimeCapabilities } from "./capabilities.mjs";
 import { AdaptiveOrbMachine, CONVERSATION_DETERMINISTIC_SCRIPT, DWELL_TARGET_MS, EXPECTED_CONVERSATION_FINGERPRINT, choiceShapeForState, conversationFingerprintFor, dispatchDeterministicStep, verifyConversationRecord } from "./core.mjs";
 import { AdaptiveSensorController } from "./sensors.mjs";
 import { RadialAimCoordinator, performSensorFreeTransition } from "./session.mjs";
@@ -11,6 +12,11 @@ const elements = {
   startLive: byId("startLive"),
   startAccessible: byId("startAccessible"),
   startSimulation: byId("startSimulation"),
+  launchCapability: byId("launchCapability"),
+  launchCapabilityTitle: byId("launchCapabilityTitle"),
+  launchCapabilityDetail: byId("launchCapabilityDetail"),
+  launchSafariAction: byId("launchSafariAction"),
+  launchSafariLink: byId("launchSafariLink"),
   modeStatus: byId("modeStatus"),
   aiStatus: byId("aiStatus"),
   pwaStatus: byId("pwaStatus"),
@@ -18,6 +24,12 @@ const elements = {
   safetyBanner: byId("safetyBanner"),
   safetyTitle: byId("safetyTitle"),
   safetyDetail: byId("safetyDetail"),
+  runtimeCapability: byId("runtimeCapability"),
+  runtimeCapabilityTitle: byId("runtimeCapabilityTitle"),
+  runtimeCapabilityDetail: byId("runtimeCapabilityDetail"),
+  runtimeSafariAction: byId("runtimeSafariAction"),
+  runtimeSafariLink: byId("runtimeSafariLink"),
+  capabilitySensorFree: byId("capabilitySensorFree"),
   taskValues: byId("taskValues"),
   responseKicker: byId("responseKicker"),
   responseTitle: byId("responseTitle"),
@@ -117,6 +129,10 @@ let waitingServiceWorker = null;
 let reloadingForWorker = false;
 let applyingServiceWorkerUpdate = false;
 let activeAIAbort = null;
+let liveStartFailed = false;
+let runtimeSensorIssues = new Set();
+let runtimeCapabilities = detectRuntimeCapabilities();
+let capabilityPresentation = null;
 
 function sessionNow() {
   return logicalNow === null ? performance.now() : logicalNow;
@@ -127,6 +143,78 @@ function createMachine() {
     clock: () => sessionNow(),
     sessionId: ephemeralSessionId,
   });
+}
+
+function refreshCapabilityGuidance({ recheck = true } = {}) {
+  if (recheck) {
+    runtimeCapabilities = detectRuntimeCapabilities();
+  }
+  capabilityPresentation = describeRuntimeCapabilities(runtimeCapabilities, {
+    liveStartFailed,
+    runtimeIssues: [...runtimeSensorIssues],
+    browserLaunchUrl: buildBrowserLaunchUrl(),
+  });
+
+  elements.launchCapability.dataset.degraded = String(
+    capabilityPresentation.degraded,
+  );
+  elements.launchCapabilityTitle.textContent = capabilityPresentation.title;
+  elements.launchCapabilityDetail.textContent = capabilityPresentation.detail;
+  elements.runtimeCapability.dataset.degraded = String(
+    capabilityPresentation.degraded,
+  );
+  elements.runtimeCapability.hidden = !capabilityPresentation.degraded;
+  elements.runtimeCapabilityTitle.textContent = capabilityPresentation.title;
+  elements.runtimeCapabilityDetail.textContent = capabilityPresentation.detail;
+
+  for (const [group, link] of [
+    [elements.launchSafariAction, elements.launchSafariLink],
+    [elements.runtimeSafariAction, elements.runtimeSafariLink],
+  ]) {
+    const showLink =
+      capabilityPresentation.showSafariLink && !replayLocked;
+    group.hidden = !showLink;
+    if (showLink) {
+      link.href = capabilityPresentation.browserLaunchUrl;
+    } else {
+      link.removeAttribute("href");
+    }
+  }
+
+  elements.startLive.disabled =
+    replayLocked || !capabilityPresentation.canStartLive;
+  elements.startLive.textContent = !capabilityPresentation.canStartLive
+    ? "Live sensors unavailable here"
+    : runtimeCapabilities.speechRecognitionApi
+      ? "Start voice + camera"
+      : "Start camera + mic · speech unavailable";
+  elements.capabilitySensorFree.disabled =
+    replayLocked || machine.state.sessionKind === "accessible";
+  elements.capabilitySensorFree.textContent =
+    machine.state.sessionKind === "accessible"
+      ? "Sensor-free mode active"
+      : "Use sensor-free mode";
+  return capabilityPresentation;
+}
+
+function trackRuntimeSensorCapability(action) {
+  let changed = false;
+  if (action.type === "SENSOR_STATUS") {
+    if (["denied", "unavailable"].includes(action.status)) {
+      runtimeSensorIssues.add(action.sensor);
+      changed = true;
+    } else if (action.status === "active") {
+      changed = runtimeSensorIssues.delete(action.sensor);
+    }
+  } else if (action.type === "SENSOR_LOSS" && action.sensor) {
+    runtimeSensorIssues.add(action.sensor);
+    changed = true;
+  } else if (action.type === "SENSOR_RECOVER" && action.sensor) {
+    changed = runtimeSensorIssues.delete(action.sensor);
+  }
+  if (changed) {
+    refreshCapabilityGuidance({ recheck: false });
+  }
 }
 
 function showApplication() {
@@ -144,6 +232,9 @@ function createSensorController() {
         return { ok: false, effect: "ignored" };
       }
       const result = machine.dispatch(action);
+      if (result.ok) {
+        trackRuntimeSensorCapability(action);
+      }
       aimCoordinator.synchronize(machine.state);
       if (!sensorTransitioning) {
         render();
@@ -175,6 +266,11 @@ async function startLive() {
   if (replayLocked || machine.state.status !== "idle") {
     return;
   }
+  const preflight = refreshCapabilityGuidance();
+  if (!preflight.canStartLive) {
+    elements.launchCapability.focus();
+    return;
+  }
   showApplication();
   logicalNow = null;
   machine.dispatch({ type: "START", kind: "live", generation: 1 });
@@ -182,10 +278,13 @@ async function startLive() {
   render();
   const started = await sensorController.start();
   if (!started) {
+    liveStartFailed = true;
     transitionToSensorFree("startup-fallback");
     elements.assertiveStatus.textContent =
       "Sensors unavailable. Sensor-free controls are active with the same task.";
   } else {
+    liveStartFailed = false;
+    refreshCapabilityGuidance({ recheck: false });
     sensorController.announce(
       "Adaptive Orb ready. Ask me to create, plan, explain, or navigate. Say a mode name at any time.",
     );
@@ -201,6 +300,7 @@ function startAccessible() {
   logicalNow = null;
   machine.dispatch({ type: "START", kind: "accessible", generation: 1 });
   render();
+  refreshCapabilityGuidance({ recheck: false });
   elements.orbStage.focus();
 }
 
@@ -727,6 +827,7 @@ function render() {
       elements.installApp,
       elements.applyUpdate,
       elements.exportMetrics,
+      elements.capabilitySensorFree,
       elements.useAccessible,
       elements.stopSensors,
       elements.resumeSession,
@@ -796,12 +897,23 @@ function transitionToSensorFree(source, { resume = false } = {}) {
   sensorTransitioning = false;
   aimCoordinator.reset();
   render();
+  refreshCapabilityGuidance({ recheck: false });
   elements.orbStage.focus();
   return transition.result;
 }
 
 function stopSession(source) {
   return dispatchAndRender({ type: "STOP", source });
+}
+
+function prepareBrowserSensorRecovery(event) {
+  if (replayLocked) {
+    event.preventDefault();
+    return;
+  }
+  if (machine.state.status !== "idle" && machine.state.sessionKind === "live") {
+    transitionToSensorFree("open-browser");
+  }
 }
 
 function toggleCompanion() {
@@ -849,7 +961,8 @@ async function registerOfflineApp() {
         updateViaCache: "none",
       },
     );
-    elements.pwaStatus.textContent = navigator.standalone
+    refreshCapabilityGuidance();
+    elements.pwaStatus.textContent = runtimeCapabilities.standalone
       ? "Installed · offline shell"
       : "Offline shell ready";
     if (registration.waiting) {
@@ -874,6 +987,14 @@ async function registerOfflineApp() {
 elements.startLive.addEventListener("click", startLive);
 elements.startAccessible.addEventListener("click", startAccessible);
 elements.startSimulation.addEventListener("click", startSimulation);
+elements.launchSafariLink.addEventListener(
+  "click",
+  prepareBrowserSensorRecovery,
+);
+elements.runtimeSafariLink.addEventListener(
+  "click",
+  prepareBrowserSensorRecovery,
+);
 elements.previousChoice.addEventListener("click", () =>
   dispatchAndRender({ type: "CYCLE", delta: -1, source: "touch" }),
 );
@@ -900,6 +1021,9 @@ elements.applyUpdate.addEventListener("click", () => {
   applyingServiceWorkerUpdate = true;
   waitingServiceWorker?.postMessage({ type: "ACTIVATE_UPDATE" });
 });
+elements.capabilitySensorFree.addEventListener("click", () =>
+  transitionToSensorFree("capability-guidance"),
+);
 elements.useAccessible.addEventListener("click", () => transitionToSensorFree("touch"));
 elements.stopSensors.addEventListener("click", () => transitionToSensorFree("end-sensors"));
 elements.resumeSession.addEventListener("click", () => {
@@ -959,7 +1083,9 @@ window.addEventListener("beforeinstallprompt", (event) => {
 window.addEventListener("appinstalled", () => {
   deferredInstallPrompt = null;
   elements.installApp.disabled = true;
-  elements.pwaStatus.textContent = "Installed · offline shell";
+  elements.pwaStatus.textContent =
+    "Installed · offline shell; live sensors separate";
+  refreshCapabilityGuidance();
 });
 navigator.serviceWorker?.addEventListener("controllerchange", () => {
   if (applyingServiceWorkerUpdate && !reloadingForWorker) {
@@ -991,6 +1117,7 @@ window.addEventListener("pageshow", (event) => {
   }
 });
 
+refreshCapabilityGuidance();
 void registerOfflineApp();
 
 if (startupQuery.get("simulate") === "1") {

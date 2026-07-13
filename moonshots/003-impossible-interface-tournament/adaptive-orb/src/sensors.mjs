@@ -1065,8 +1065,26 @@ class AdaptiveSensorController {
         status: "active",
         at: this.clock(),
       });
-    } catch {
-      this.scheduleRecognitionRestart(generation);
+    } catch (error) {
+      const terminal = ["NotAllowedError", "SecurityError", "NotSupportedError"].includes(
+        error?.name,
+      );
+      if (terminal) {
+        this.recognitionTerminal = true;
+        this.detachRecognition();
+        this.onAction({
+          type: "SENSOR_STATUS",
+          sensor: "speech",
+          status: "denied",
+          reason: error.name,
+          at: this.clock(),
+        });
+        this.onCaption(
+          "Speech permission or service is unavailable. Use gesture or sensor-free parity.",
+        );
+      } else {
+        this.scheduleRecognitionRestart(generation);
+      }
     }
   }
 

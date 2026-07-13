@@ -77,6 +77,27 @@ Verify a changed `CACHE_VERSION` produces a waiting worker, **Apply app update**
 sends `ACTIVATE_UPDATE`, old versioned static caches are deleted on activation,
 and the page reloads once on controller change.
 
+## iOS standalone capability protocol
+
+Treat installation and live sensing as independent variables. Test both a
+Safari tab and Add-to-Home-Screen standalone launch on supported iPhone/iPad
+hardware under these cases:
+
+1. secure context with all APIs exposed, before and after permission;
+2. missing `getUserMedia`;
+3. missing `SpeechRecognition`/`webkitSpeechRecognition`;
+4. missing speech synthesis;
+5. denied camera/microphone or terminal speech permission;
+6. live track loss after a successful start.
+
+Acceptance requires runtime detection on every launch, no pre-permission claim
+that hardware works, a visible sensor-free path for every degraded case, and
+**Open in Safari for live sensors** only for degraded iOS standalone on a
+secure HTTP(S) URL. The link must remove `?simulate=1`; Safari performs a new
+capability/permission check and the UI must not promise success. Installed
+offline conversation and deterministic simulation must remain usable without
+live APIs.
+
 ## Live study boundary
 
 A consented live study should record only semantic measures: completion,

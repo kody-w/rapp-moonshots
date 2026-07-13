@@ -56,7 +56,7 @@ test("service worker allowlists static shell and bypasses all sensitive data", a
   assert.match(worker, /request\.method !== "GET"/);
   assert.match(worker, /url\.origin !== self\.location\.origin/);
   assert.match(worker, /ACTIVATE_UPDATE/);
-  assert.match(worker, /adaptive-orb-static-v1/);
+  assert.match(worker, /adaptive-orb-static-v2/);
   assert.doesNotMatch(
     worker,
     /MediaStream|conversation_history|user_input|metrics|calibration|indexedDB/,
@@ -138,22 +138,37 @@ test("offline worker serves canonical shell but never intercepts API or media", 
   }
 });
 
-test("HTML and CSS include iOS standalone, HTTPS help, safe areas, and parity hooks", async () => {
-  const [template, styles, sensors, app] = await Promise.all([
+test("HTML and CSS include honest standalone degradation, Safari recovery, and parity hooks", async () => {
+  const [template, styles, sensors, capabilities, app] = await Promise.all([
     readFile(new URL("src/index.template.html", root), "utf8"),
     readFile(new URL("src/styles.css", root), "utf8"),
     readFile(new URL("src/sensors.mjs", root), "utf8"),
+    readFile(new URL("src/capabilities.mjs", root), "utf8"),
     readFile(new URL("src/app.mjs", root), "utf8"),
   ]);
   assert.match(template, /apple-mobile-web-app-capable/);
   assert.match(template, /apple-touch-icon/);
   assert.match(template, /Share → Add to Home Screen/);
   assert.match(template, /require HTTPS or localhost/);
+  assert.match(template, /Open in Safari for live sensors/);
+  assert.match(template, /installed icon guarantees neither/);
+  assert.match(template, /id="capabilitySensorFree"/);
+  assert.match(template, /id="runtimeCapability"/);
   assert.match(template, /manifest\.webmanifest/);
   assert.match(styles, /env\(safe-area-inset-top\)/);
   assert.match(styles, /env\(safe-area-inset-bottom\)/);
   assert.match(styles, /orientation: landscape/);
   assert.match(sensors, /webkitSpeechRecognition/);
   assert.match(sensors, /frame-motion fallback/);
+  assert.match(sensors, /Speech permission or service is unavailable/);
+  assert.match(capabilities, /display-mode: standalone/);
+  assert.match(capabilities, /navigatorObject\?\.standalone/);
+  assert.match(capabilities, /mediaDevices\?\.getUserMedia/);
+  assert.match(capabilities, /webkitSpeechRecognition/);
+  assert.match(capabilities, /showSafariLink/);
+  assert.match(app, /detectRuntimeCapabilities/);
+  assert.match(app, /liveStartFailed = true/);
+  assert.match(app, /preflight\.canStartLive/);
+  assert.match(app, /transitionToSensorFree\("open-browser"\)/);
   assert.match(app, /applyingServiceWorkerUpdate && !reloadingForWorker/);
 });
