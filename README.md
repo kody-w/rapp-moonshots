@@ -16,7 +16,7 @@ A moonshot is not an idea document. It must finish with:
 |---:|---|---|---|
 | 001 | [FleetGate](moonshots/001-fleetgate/) | **Complete** | Identical RAPP agent behavior across macOS and Windows |
 | 002 | [Autonomous Invention Laboratory](moonshots/002-autonomous-invention-lab/) | **Complete** | Three applications + measured Shark Tank verdict |
-| 003 | [Impossible Interface Tournament](moonshots/003-impossible-interface-tournament/) | **Active** | Voice + webcam gaze + gesture, without conventional UI |
+| 003 | [Impossible Interface Tournament](moonshots/003-impossible-interface-tournament/) | **Complete** | Adaptive Orb mobile AI PWA |
 
 See [`BACKLOG.md`](BACKLOG.md) for the larger idea portfolio.
 

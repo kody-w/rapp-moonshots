@@ -99,4 +99,10 @@ Safety and fallback parity are mandatory before speed can win.
 
 ## Status
 
-**Active — Adaptive Orb AI/PWA integration building**
+**Complete — Adaptive Orb AI/PWA published**
+
+## Result
+
+- [Launch Adaptive Orb](adaptive-orb/)
+- [Read the tournament verdict](JUDGING.md)
+- [Inspect measured results](RESULTS.json)

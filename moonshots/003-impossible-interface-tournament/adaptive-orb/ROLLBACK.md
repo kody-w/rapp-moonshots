@@ -40,7 +40,10 @@ removes older v1/v2/v3/v4/v5/v6/v7/v8 caches.
 For a controlled same-origin console:
 
 ```js
-await Promise.all((await navigator.serviceWorker.getRegistrations()).map((r) => r.unregister()));
+const adaptiveOrbScope = new URL("./", document.baseURI).href;
+await Promise.all((await navigator.serviceWorker.getRegistrations())
+  .filter((registration) => registration.scope === adaptiveOrbScope)
+  .map((registration) => registration.unregister()));
 await Promise.all((await caches.keys())
   .filter((key) => key.startsWith("adaptive-orb-static-"))
   .map((key) => caches.delete(key)));
@@ -64,13 +67,16 @@ scope before production use.
 
 ## Repository rollback
 
-Do not rewrite history. Revert the Adaptive Orb follow-up commit:
+Do not rewrite history. The public application entered `main` through merge
+commit `bbcbc8e`. Revert that merge from `main`:
 
 ```bash
-git revert <adaptive-orb-conversation-commit>
+git revert -m 1 bbcbc8e
 ```
 
-Verify the revert is isolated:
+Then remove or mark Adaptive Orb withdrawn in the tournament index, result, and
+judging files in a separate integration commit. Verify the source revert is
+isolated:
 
 ```bash
 git diff --name-only <before>..<after>

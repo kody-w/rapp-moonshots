@@ -11,7 +11,7 @@
 | Agent Olympics | idea |
 | Fleet as a Starship | idea |
 | Autonomous Invention Laboratory | **complete as 002** |
-| Impossible Interface Tournament | **active as 003** |
+| Impossible Interface Tournament | **complete as 003** |
 | Sealed Surprise Moonshot | idea |
 
 Ideas become numbered moonshots only when execution begins.
