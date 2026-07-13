@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AdaptiveOrbMachine } from "../src/core.mjs";
 import {
+  ForegroundDeliveryGuard,
   RadialAimCoordinator,
   cancelGlobalSpeech,
+  deliverForegroundAIResponse,
   performSensorFreeTransition,
 } from "../src/session.mjs";
 
@@ -162,6 +164,74 @@ test("stop cancel undo and teardown cancel global speech without a controller", 
     globalObject,
   });
   assert.equal(canceled.length, 4);
+});
+
+test("delayed AI delivery stays silent and concealed across visibility loss", async () => {
+  let visible = true;
+  let resolveResponse;
+  const response = new Promise((resolve) => {
+    resolveResponse = resolve;
+  });
+  const guard = new ForegroundDeliveryGuard({
+    isForeground: () => visible,
+  });
+  const token = guard.capture();
+  const calls = [];
+  const delivery = deliverForegroundAIResponse({
+    response,
+    guard,
+    token,
+    accept() {
+      calls.push("accept");
+      return true;
+    },
+    reveal() {
+      calls.push("reveal");
+    },
+    speak() {
+      calls.push("speak");
+      return true;
+    },
+  });
+
+  visible = false;
+  guard.background();
+  resolveResponse({ summary: "late private response" });
+  assert.deepEqual(await delivery, {
+    delivered: false,
+    reason: "foreground-invalidated",
+  });
+  assert.deepEqual(calls, []);
+
+  visible = true;
+  guard.resume();
+  const resumedToken = guard.capture();
+  assert.equal(guard.canSpeak(resumedToken), false);
+  assert.equal(
+    guard.canSpeak(resumedToken, { explicit: true }),
+    true,
+    "an explicit foreground repeat may speak the already-visible response",
+  );
+  assert.equal(guard.noteInteraction(), true);
+
+  const foregroundDelivery = await deliverForegroundAIResponse({
+    response: Promise.resolve({ summary: "new foreground response" }),
+    guard,
+    token: guard.capture(),
+    accept() {
+      calls.push("accept");
+      return true;
+    },
+    reveal() {
+      calls.push("reveal");
+    },
+    speak() {
+      calls.push("speak");
+      return true;
+    },
+  });
+  assert.deepEqual(foregroundDelivery, { delivered: true, spoken: true });
+  assert.deepEqual(calls, ["accept", "reveal", "speak"]);
 });
 
 test("aim cache follows machine highlight and long gaps require reacquisition", () => {

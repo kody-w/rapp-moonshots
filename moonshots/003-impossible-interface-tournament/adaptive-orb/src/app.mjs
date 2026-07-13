@@ -3,8 +3,10 @@ import { buildBrowserLaunchUrl, describeRuntimeCapabilities, detectRuntimeCapabi
 import { AdaptiveOrbMachine, CONVERSATION_DETERMINISTIC_SCRIPT, DWELL_TARGET_MS, EXPECTED_CONVERSATION_FINGERPRINT, choiceShapeForState, conversationFingerprintFor, dispatchDeterministicStep, verifyConversationRecord } from "./core.mjs";
 import { AdaptiveSensorController } from "./sensors.mjs";
 import {
+  ForegroundDeliveryGuard,
   RadialAimCoordinator,
   cancelGlobalSpeech,
+  deliverForegroundAIResponse,
   performSensorFreeTransition,
 } from "./session.mjs";
 import { renderTournamentComparison } from "./comparison.mjs";
@@ -140,6 +142,7 @@ const stageCopy = {
 const startupQuery = new URLSearchParams(window.location.search);
 const ephemeralSessionId = createEphemeralSessionId();
 const aiAdapter = new AdaptiveAIAdapter();
+const foregroundDelivery = new ForegroundDeliveryGuard();
 const mobileMetrics = new MobileMetricsTracker({
   clock: () => performance.now(),
 });
@@ -307,10 +310,29 @@ function createSensorController() {
       if (
         action.type === "SENSOR_LOSS" ||
         (action.type === "SENSOR_STATUS" &&
-          ["denied", "lost", "muted", "failed"].includes(action.status))
+          ["denied", "unavailable", "lost", "muted", "failed"].includes(
+            action.status,
+          ))
       ) {
         elements.permissionStatus.textContent =
           "A live sensor was interrupted or revoked. Sensor-derived aim and confirmation are frozen; choose sensor-free mode or retry the optional permission.";
+      }
+      if (
+        action.type === "SENSOR_STATUS" &&
+        action.sensor === "speech" &&
+        action.status === "active"
+      ) {
+        elements.permissionStatus.textContent =
+          "Voice commands active through the browser speech service. Audio follows the browser/OS input route.";
+      } else if (
+        action.type === "SENSOR_STATUS" &&
+        action.sensor === "speech" &&
+        ["denied", "unavailable"].includes(action.status)
+      ) {
+        elements.permissionStatus.textContent =
+          "Speech recognition unavailable and microphone capture stopped. Touch, switch, keyboard, and gesture parity remain; choose Enable voice to retry explicitly.";
+        elements.assertiveStatus.textContent =
+          "Voice is unavailable. Microphone capture is off; all sensor-free controls remain active.";
       }
       aimCoordinator.synchronize(machine.state);
       if (!sensorTransitioning) {
@@ -324,6 +346,7 @@ function createSensorController() {
       if (replayLocked) {
         return;
       }
+      foregroundDelivery.noteInteraction();
       const result = dispatchAndRender({
         type: "VOICE",
         text,
@@ -379,10 +402,13 @@ async function enableMicrophone() {
     started ? "active" : "failed",
   );
   if (started) {
-    elements.permissionStatus.textContent =
-      "Voice commands enabled. Audio follows the browser/OS input route; no device ID is selected or stored.";
-    elements.assertiveStatus.textContent =
-      "Voice enabled. Say create, plan, explain, navigate, repeat, stop, undo, or a mode name.";
+    const speechActive = machine.state.sensors.speech === "active";
+    elements.permissionStatus.textContent = speechActive
+      ? "Voice commands active through the browser speech service. Audio follows the browser/OS input route; no device ID is selected or stored."
+      : "Microphone capture enabled. Speech recognition is starting; audio follows the browser/OS input route and no device ID is selected or stored.";
+    elements.assertiveStatus.textContent = speechActive
+      ? "Voice enabled. Say create, plan, explain, navigate, repeat, stop, undo, or a mode name."
+      : "Microphone is enabled while speech recognition starts. All parity controls remain available.";
     mobileFeedback.signal("ready");
     elements.caption.textContent = "Ready tone · voice enabled.";
   } else {
@@ -514,15 +540,28 @@ async function startSimulation() {
   render();
 }
 
-function speakCurrentResponse() {
+function speakCurrentResponse({
+  deliveryToken = foregroundDelivery.capture(),
+  explicit = false,
+} = {}) {
   const text =
     machine.state.conversation.responseSummary ||
     machine.state.conversation.currentResponse;
-  return speakText(text);
+  return speakText(text, { deliveryToken, explicit });
 }
 
-function speakText(text) {
-  if (!text || replayLocked) {
+function speakText(
+  text,
+  {
+    deliveryToken = foregroundDelivery.capture(),
+    explicit = false,
+  } = {},
+) {
+  if (
+    !text ||
+    replayLocked ||
+    !foregroundDelivery.canSpeak(deliveryToken, { explicit })
+  ) {
     return false;
   }
   const concise = shortSpokenSummary(text);
@@ -555,6 +594,16 @@ async function requestAIResponse(result) {
   ) {
     return;
   }
+  const deliveryToken = foregroundDelivery.capture();
+  if (!foregroundDelivery.canDeliver(deliveryToken)) {
+    machine.cancelPendingAI("paused until foreground interaction");
+    if (foregroundDelivery.canReveal(foregroundDelivery.capture())) {
+      elements.assertiveStatus.textContent =
+        "AI delivery paused. Interact in the foreground or choose Repeat before speech resumes.";
+      render();
+    }
+    return;
+  }
   activeAIAbort?.abort();
   const controller = new AbortController();
   activeAIAbort = controller;
@@ -567,28 +616,37 @@ async function requestAIResponse(result) {
     });
   }
   try {
-    const response = await aiAdapter.respond(result.request, {
-      preferCompanion: companionRequested,
-      scenarioHint: result.scenario,
+    await deliverForegroundAIResponse({
+      response: aiAdapter.respond(result.request, {
+        preferCompanion: companionRequested,
+        scenarioHint: result.scenario,
+        signal: controller.signal,
+      }),
+      guard: foregroundDelivery,
+      token: deliveryToken,
       signal: controller.signal,
+      accept(response) {
+        return machine.dispatch({
+          type: "AI_RESPONSE",
+          requestId: result.requestId,
+          response,
+          companionAttempted: companionRequested,
+          at: sessionNow(),
+        });
+      },
+      reveal() {
+        mobileMetrics.noteValue();
+        render();
+      },
+      speak() {
+        return speakCurrentResponse({ deliveryToken });
+      },
     });
-    if (controller.signal.aborted || replayLocked) {
-      return;
-    }
-    const accepted = machine.dispatch({
-      type: "AI_RESPONSE",
-      requestId: result.requestId,
-      response,
-      companionAttempted: companionRequested,
-      at: sessionNow(),
-    });
-    if (accepted.ok) {
-      mobileMetrics.noteValue();
-      render();
-      speakCurrentResponse();
-    }
   } catch {
-    if (!controller.signal.aborted) {
+    if (
+      !controller.signal.aborted &&
+      foregroundDelivery.canReveal(deliveryToken)
+    ) {
       elements.assertiveStatus.textContent =
         "AI response could not be validated. Conversation state was preserved.";
     }
@@ -616,6 +674,7 @@ function handleSensorGesture(gesture) {
   if (!machine || machine.state.sessionKind !== "live" || replayLocked) {
     return;
   }
+  foregroundDelivery.noteInteraction();
   let result;
   if (gesture.type === "rotate" && machine.state.mode === "tunnel") {
     result = dispatchAndRender({
@@ -712,7 +771,9 @@ function dispatchAndRender(action) {
     ["repeat", "what-changed"].includes(result.effect) &&
     action.source !== "voice"
   ) {
-    speakText(result.text || machine.state.announcement);
+    speakText(result.text || machine.state.announcement, {
+      explicit: result.effect === "repeat",
+    });
   }
   if (result.effect === "ai-request") {
     void requestAIResponse(result);
@@ -779,6 +840,9 @@ function renderTask() {
 }
 
 function renderConversation() {
+  if (!foregroundDelivery.canReveal(foregroundDelivery.capture())) {
+    return;
+  }
   const conversation = machine.state.conversation;
   const recent = conversation.turns.slice(-6);
   const signature = JSON.stringify({
@@ -1326,7 +1390,9 @@ elements.undoChoice.addEventListener("click", () =>
   dispatchAndRender({ type: "UNDO", source: "touch" }),
 );
 elements.exportMetrics.addEventListener("click", exportMetrics);
-elements.speakResponse.addEventListener("click", speakCurrentResponse);
+elements.speakResponse.addEventListener("click", () =>
+  speakCurrentResponse({ explicit: true }),
+);
 elements.companionMode.addEventListener("click", toggleCompanion);
 elements.mobileRepeat.addEventListener("click", () =>
   dispatchAndRender({ type: "REPEAT", source: "touch" }),
@@ -1407,6 +1473,16 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+function noteForegroundUserInteraction(event) {
+  if (event.isTrusted) {
+    foregroundDelivery.noteInteraction();
+  }
+}
+
+document.addEventListener("pointerdown", noteForegroundUserInteraction, true);
+document.addEventListener("keydown", noteForegroundUserInteraction, true);
+document.addEventListener("click", noteForegroundUserInteraction, true);
+
 function handleViewportChange(source) {
   layoutChoices();
   const orientation =
@@ -1463,17 +1539,21 @@ navigator.serviceWorker?.addEventListener("controllerchange", () => {
   }
 });
 document.addEventListener("visibilitychange", () => {
-  if (
-    replayLocked ||
-    machine.state.status === "idle" ||
-    machine.state.status === "stopped"
-  ) {
-    return;
-  }
   if (document.hidden) {
+    foregroundDelivery.background();
+    activeAIAbort?.abort();
+    activeAIAbort = null;
+    machine.cancelPendingAI("paused on background");
+    cancelGlobalSpeech(window);
+    if (
+      replayLocked ||
+      machine.state.status === "idle" ||
+      machine.state.status === "stopped"
+    ) {
+      return;
+    }
     interruptionPending = true;
     mobileMetrics.beginInterruption();
-    cancelGlobalSpeech(window);
     if (sensorController) {
       transitionToSensorFree("background-interruption");
     } else {
@@ -1481,7 +1561,17 @@ document.addEventListener("visibilitychange", () => {
       aimCoordinator.reset();
       render();
     }
-  } else if (interruptionPending) {
+    return;
+  }
+  foregroundDelivery.resume();
+  if (
+    replayLocked ||
+    machine.state.status === "idle" ||
+    machine.state.status === "stopped"
+  ) {
+    return;
+  }
+  if (interruptionPending) {
     interruptionPending = false;
     mobileMetrics.recoverInterruption();
     machine.dispatch({
@@ -1491,12 +1581,13 @@ document.addEventListener("visibilitychange", () => {
     });
     mobileFeedback.signal("recover");
     elements.permissionStatus.textContent =
-      "Interruption recovered sensor-free with conversation and task state preserved. Re-enable optional sensors when ready.";
+      "Interruption recovered sensor-free with conversation and task state preserved. Use a foreground control or Repeat before speech resumes; re-enable optional sensors when ready.";
     elements.assertiveStatus.textContent = machine.state.announcement;
     render();
   }
 });
 window.addEventListener("pagehide", () => {
+  foregroundDelivery.background();
   activeAIAbort?.abort();
   activeAIAbort = null;
   cancelGlobalSpeech(window);

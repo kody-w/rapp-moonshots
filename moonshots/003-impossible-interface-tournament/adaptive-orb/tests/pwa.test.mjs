@@ -56,7 +56,7 @@ test("service worker allowlists static shell and bypasses all sensitive data", a
   assert.match(worker, /request\.method !== "GET"/);
   assert.match(worker, /url\.origin !== self\.location\.origin/);
   assert.match(worker, /ACTIVATE_UPDATE/);
-  assert.match(worker, /adaptive-orb-static-v4/);
+  assert.match(worker, /adaptive-orb-static-v5/);
   assert.doesNotMatch(
     worker,
     /MediaStream|conversation_history|user_input|metrics|calibration|indexedDB/,

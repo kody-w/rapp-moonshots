@@ -344,6 +344,36 @@ check("AI adapters provide offline default and strict same-origin failover", () 
   assert.doesNotMatch(template, /<(?:input|textarea)\b/i);
 });
 
+check("foreground epochs gate delayed AI reveal and speech", () => {
+  assert.match(session, /class ForegroundDeliveryGuard/);
+  assert.match(session, /this\.interactionRequired = true/);
+  assert.match(session, /function deliverForegroundAIResponse|async function deliverForegroundAIResponse/);
+  assert.match(session, /guard\.canDeliver\(token\)/);
+  assert.match(session, /guard\.canReveal\(token\)/);
+  assert.match(session, /guard\.canSpeak\(token\)/);
+  assert.match(app, /foregroundDelivery\.background\(\)/);
+  assert.match(app, /activeAIAbort\?\.abort\(\)/);
+  assert.match(app, /machine\.cancelPendingAI\("paused on background"\)/);
+  assert.match(app, /foregroundDelivery\.canReveal\(deliveryToken\)/);
+  assert.match(app, /speakCurrentResponse\(\{ explicit: true \}\)/);
+  assert.match(sensors, /document\.hidden \|\| document\.visibilityState !== "visible"/);
+});
+
+check("recognition restarts distinguish clean ends and exhaust visibly", () => {
+  assert.match(sensors, /recognition\.onstart/);
+  assert.match(sensors, /recognitionSessionStarted/);
+  assert.match(sensors, /recognitionTransientFailures/);
+  assert.match(sensors, /recognitionExpectedEnd/);
+  assert.match(sensors, /kind: "ordinary-end"/);
+  assert.match(sensors, /kind: "transient-failure"/);
+  assert.match(sensors, /markRecognitionUnavailable/);
+  assert.match(sensors, /reason: "restart-exhausted"/);
+  assert.match(sensors, /releaseMicrophoneCapture/);
+  assert.match(sensors, /status === "denied" \? "denied" : "unavailable"/);
+  assert.match(sensors, /resetRecognitionForExplicitRecovery/);
+  assert.match(app, /Speech recognition unavailable and microphone capture stopped/);
+});
+
 check("stdlib companion keeps credentials server-side and validates strictly", () => {
   assert.match(server, /from http\.server import SimpleHTTPRequestHandler, ThreadingHTTPServer/);
   assert.match(server, /DEFAULT_BIND = "127\.0\.0\.1"/);
@@ -377,7 +407,7 @@ check("PWA manifest and service worker cache only local static allowlist", () =>
   assert.equal(manifest.scope, "./");
   assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512"));
-  assert.match(serviceWorker, /adaptive-orb-static-v4/);
+  assert.match(serviceWorker, /adaptive-orb-static-v5/);
   assert.match(serviceWorker, /STATIC_ASSETS/);
   assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.match(serviceWorker, /ACTIVATE_UPDATE/);

@@ -223,6 +223,7 @@ class AdaptiveSensorController {
     onCaption = () => {},
     clock = () => performance.now(),
     generationSeed = 0,
+    recognitionRetryBaseMs = 250,
   } = {}) {
     this.video = video;
     this.onAction = onAction;
@@ -248,7 +249,15 @@ class AdaptiveSensorController {
     this.recognition = null;
     this.recognitionRetry = null;
     this.recognitionRetries = 0;
+    this.recognitionTransientFailures = 0;
     this.recognitionTerminal = false;
+    this.recognitionSessionStarted = false;
+    this.recognitionSessionFailed = false;
+    this.recognitionExpectedEnd = false;
+    this.recognitionRetryBaseMs = Math.max(
+      0,
+      Number(recognitionRetryBaseMs) || 0,
+    );
     this.speaking = false;
     this.detector = null;
     this.detectorPending = false;
@@ -293,6 +302,10 @@ class AdaptiveSensorController {
     this.freshness.reset(generation);
     this.recognitionTerminal = false;
     this.recognitionRetries = 0;
+    this.recognitionTransientFailures = 0;
+    this.recognitionSessionStarted = false;
+    this.recognitionSessionFailed = false;
+    this.recognitionExpectedEnd = false;
     return generation;
   }
 
@@ -366,9 +379,18 @@ class AdaptiveSensorController {
   }
 
   async enableMicrophone() {
-    if (streamHasLiveTrack(this.microphoneStream, "audio")) {
+    const microphoneLive = streamHasLiveTrack(
+      this.microphoneStream,
+      "audio",
+    );
+    if (
+      microphoneLive &&
+      !this.recognitionTerminal &&
+      (this.recognition || this.recognitionRetry || this.speaking)
+    ) {
       return true;
     }
+    this.resetRecognitionForExplicitRecovery();
     if (this.microphoneStream) {
       if (
         this.active &&
@@ -1443,28 +1465,54 @@ class AdaptiveSensorController {
     const Recognition =
       globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
     if (!Recognition) {
-      this.recognitionTerminal = true;
-      this.onAction({
-        type: "SENSOR_STATUS",
-        sensor: "speech",
-        status: "unavailable",
-        at: this.clock(),
+      this.markRecognitionUnavailable(generation, {
+        reason: "unsupported",
+        caption:
+          "Browser speech recognition unavailable. Microphone capture stopped; gesture and parity remain.",
       });
-      this.releaseMicrophoneCapture("not-requested");
-      this.onCaption("Browser speech recognition unavailable. Gesture and parity remain.");
       return;
     }
-    if (!this.active || !this.lifecycle.isCurrent(generation)) {
+    if (
+      !this.active ||
+      !this.lifecycle.isCurrent(generation) ||
+      this.recognitionTerminal
+    ) {
       return;
     }
     try {
       const recognition = new Recognition();
+      this.recognitionSessionStarted = false;
+      this.recognitionSessionFailed = false;
+      this.recognitionExpectedEnd = false;
       recognition.continuous = true;
       recognition.interimResults = false;
       recognition.lang = "en-US";
       recognition.maxAlternatives = 1;
+      recognition.onstart = () => {
+        if (
+          !this.active ||
+          !this.lifecycle.isCurrent(generation) ||
+          this.recognition !== recognition ||
+          this.recognitionTerminal
+        ) {
+          return;
+        }
+        this.recognitionSessionStarted = true;
+        this.recognitionSessionFailed = false;
+        this.recognitionRetries = 0;
+        this.onAction({
+          type: "SENSOR_STATUS",
+          sensor: "speech",
+          status: "active",
+          at: this.clock(),
+        });
+      };
       recognition.onresult = (event) => {
-        if (!this.active || !this.lifecycle.isCurrent(generation)) {
+        if (
+          !this.active ||
+          !this.lifecycle.isCurrent(generation) ||
+          this.recognition !== recognition
+        ) {
           return;
         }
         for (let index = event.resultIndex; index < event.results.length; index += 1) {
@@ -1481,6 +1529,7 @@ class AdaptiveSensorController {
           const safety = /\b(?:stop|cancel|undo)\b/.test(normalized);
           if (safety || confidence >= 0.42) {
             this.recognitionRetries = 0;
+            this.recognitionTransientFailures = 0;
             this.onSpeech(text, confidence);
           } else {
             this.onCaption("Low-confidence speech ignored. Repeat or use parity.");
@@ -1488,6 +1537,13 @@ class AdaptiveSensorController {
         }
       };
       recognition.onerror = (event) => {
+        if (
+          !this.active ||
+          !this.lifecycle.isCurrent(generation) ||
+          this.recognition !== recognition
+        ) {
+          return;
+        }
         const terminal = [
           "not-allowed",
           "service-not-allowed",
@@ -1495,77 +1551,158 @@ class AdaptiveSensorController {
           "language-not-supported",
         ].includes(event.error);
         if (terminal) {
-          this.recognitionTerminal = true;
-          this.detachRecognition();
-          this.releaseMicrophoneCapture("denied");
-          this.onAction({
-            type: "SENSOR_STATUS",
-            sensor: "speech",
+          this.markRecognitionUnavailable(generation, {
             status: "denied",
             reason: event.error,
-            at: this.clock(),
+            caption:
+              "Speech service unavailable; microphone capture stopped. Use gesture or parity.",
           });
-          this.onCaption(
-            "Speech service unavailable; microphone capture stopped. Use gesture or parity.",
-          );
         } else {
-          this.scheduleRecognitionRestart(generation);
+          this.recognitionSessionFailed = true;
+          this.scheduleRecognitionRestart(generation, {
+            kind: "transient-failure",
+            reason: event.error || "recognition-error",
+          });
         }
       };
       recognition.onend = () => {
         if (
-          this.active &&
-          this.lifecycle.isCurrent(generation) &&
-          !this.speaking &&
-          !this.recognitionTerminal
+          !this.active ||
+          !this.lifecycle.isCurrent(generation) ||
+          this.recognition !== recognition ||
+          this.recognitionTerminal
         ) {
-          this.scheduleRecognitionRestart(generation);
+          return;
+        }
+        const expected = this.recognitionExpectedEnd || this.speaking;
+        const completedSession =
+          this.recognitionSessionStarted && !this.recognitionSessionFailed;
+        this.recognitionSessionStarted = false;
+        this.recognitionExpectedEnd = false;
+        if (expected) {
+          return;
+        }
+        if (completedSession) {
+          this.recognitionRetries = 0;
+          this.recognitionTransientFailures = 0;
+          this.scheduleRecognitionRestart(generation, {
+            kind: "ordinary-end",
+          });
+        } else {
+          this.scheduleRecognitionRestart(generation, {
+            kind: "transient-failure",
+            reason: "ended-before-session",
+          });
         }
       };
       this.recognition = recognition;
-      recognition.start();
       this.onAction({
         type: "SENSOR_STATUS",
         sensor: "speech",
-        status: "active",
+        status: "starting",
         at: this.clock(),
       });
+      recognition.start();
     } catch (error) {
       const terminal = ["NotAllowedError", "SecurityError", "NotSupportedError"].includes(
         error?.name,
       );
       if (terminal) {
-        this.recognitionTerminal = true;
-        this.detachRecognition();
-        this.releaseMicrophoneCapture("denied");
-        this.onAction({
-          type: "SENSOR_STATUS",
-          sensor: "speech",
+        this.markRecognitionUnavailable(generation, {
           status: "denied",
           reason: error.name,
-          at: this.clock(),
+          caption:
+            "Speech permission or service is unavailable. Microphone capture stopped; use gesture or sensor-free parity.",
         });
-        this.onCaption(
-          "Speech permission or service is unavailable. Use gesture or sensor-free parity.",
-        );
       } else {
-        this.scheduleRecognitionRestart(generation);
+        this.recognitionSessionFailed = true;
+        this.scheduleRecognitionRestart(generation, {
+          kind: "transient-failure",
+          reason: error?.name || "start-failed",
+        });
       }
     }
   }
 
-  scheduleRecognitionRestart(generation) {
+  resetRecognitionForExplicitRecovery() {
+    clearTimeout(this.recognitionRetry);
+    this.recognitionRetry = null;
+    this.detachRecognition();
+    this.recognitionTerminal = false;
+    this.recognitionRetries = 0;
+    this.recognitionTransientFailures = 0;
+    this.recognitionSessionStarted = false;
+    this.recognitionSessionFailed = false;
+    this.recognitionExpectedEnd = false;
+    this.speaking = false;
+  }
+
+  markRecognitionUnavailable(
+    generation,
+    {
+      status = "unavailable",
+      reason = "restart-exhausted",
+      caption =
+        "Speech recognition could not recover. Microphone capture stopped; use touch, switch, keyboard, or gesture parity, then retry explicitly.",
+    } = {},
+  ) {
+    if (!this.active || !this.lifecycle.isCurrent(generation)) {
+      return false;
+    }
+    this.recognitionTerminal = true;
+    clearTimeout(this.recognitionRetry);
+    this.recognitionRetry = null;
+    this.detachRecognition();
+    this.releaseMicrophoneCapture(
+      status === "denied" ? "denied" : "unavailable",
+    );
+    this.onAction({
+      type: "SENSOR_STATUS",
+      sensor: "speech",
+      status,
+      reason,
+      at: this.clock(),
+    });
+    this.onCaption(caption);
+    return true;
+  }
+
+  scheduleRecognitionRestart(
+    generation,
+    { kind = "transient-failure", reason = kind } = {},
+  ) {
     if (
       this.recognitionRetry ||
       !this.active ||
       !this.lifecycle.isCurrent(generation) ||
-      this.recognitionTerminal ||
-      this.recognitionRetries >= 5
+      this.recognitionTerminal
     ) {
-      return;
+      return false;
     }
-    const delay = Math.min(4000, 250 * 2 ** this.recognitionRetries);
-    this.recognitionRetries += 1;
+    const consumesRetry = kind === "transient-failure";
+    if (consumesRetry && this.recognitionTransientFailures >= 5) {
+      return this.markRecognitionUnavailable(generation, {
+        reason: "restart-exhausted",
+      });
+    }
+    const retryIndex = consumesRetry ? this.recognitionRetries : 0;
+    const delay = Math.min(
+      4000,
+      this.recognitionRetryBaseMs * 2 ** retryIndex,
+    );
+    if (consumesRetry) {
+      this.recognitionRetries += 1;
+      this.recognitionTransientFailures += 1;
+      this.onAction({
+        type: "SENSOR_STATUS",
+        sensor: "speech",
+        status: "recovering",
+        reason,
+        at: this.clock(),
+      });
+    } else {
+      this.recognitionRetries = 0;
+    }
     this.recognitionRetry = setTimeout(() => {
       this.recognitionRetry = null;
       if (
@@ -1578,12 +1715,15 @@ class AdaptiveSensorController {
         this.startRecognition(generation);
       }
     }, delay);
+    return true;
   }
 
   announce(text) {
     this.onCaption(text);
     if (
       !this.active ||
+      (typeof document !== "undefined" &&
+        (document.hidden || document.visibilityState !== "visible")) ||
       typeof speechSynthesis === "undefined" ||
       typeof SpeechSynthesisUtterance === "undefined"
     ) {
@@ -1592,6 +1732,7 @@ class AdaptiveSensorController {
     const generation = this.lifecycle.generation;
     this.speaking = true;
     if (this.recognition) {
+      this.recognitionExpectedEnd = true;
       try {
         this.recognition.abort();
       } catch {
@@ -1606,8 +1747,11 @@ class AdaptiveSensorController {
         return;
       }
       this.speaking = false;
+      this.recognitionExpectedEnd = false;
       if (!this.recognitionTerminal) {
-        this.scheduleRecognitionRestart(generation);
+        this.scheduleRecognitionRestart(generation, {
+          kind: "expected-resume",
+        });
       }
     };
     utterance.onend = finish;
@@ -1616,11 +1760,15 @@ class AdaptiveSensorController {
   }
 
   detachRecognition() {
-    if (!this.recognition) {
-      return;
-    }
     const recognition = this.recognition;
     this.recognition = null;
+    this.recognitionSessionStarted = false;
+    this.recognitionSessionFailed = false;
+    this.recognitionExpectedEnd = false;
+    if (!recognition) {
+      return;
+    }
+    recognition.onstart = null;
     recognition.onresult = null;
     recognition.onerror = null;
     recognition.onend = null;
@@ -1649,6 +1797,9 @@ class AdaptiveSensorController {
     clearTimeout(this.recognitionRetry);
     this.recognitionRetry = null;
     this.detachRecognition();
+    this.recognitionRetries = 0;
+    this.recognitionTransientFailures = 0;
+    this.speaking = false;
     cancelGlobalSpeech(globalThis);
     const streams = new Set(this.streams);
     if (this.stream) {

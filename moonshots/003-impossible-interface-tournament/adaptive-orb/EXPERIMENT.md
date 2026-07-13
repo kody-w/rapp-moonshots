@@ -87,7 +87,7 @@ Verify a changed `CACHE_VERSION` produces a waiting worker, **Apply app update**
 sends `ACTIVATE_UPDATE`, old versioned static caches are deleted on activation,
 and the page reloads once on controller change.
 
-This release uses `adaptive-orb-static-v4`.
+This release uses `adaptive-orb-static-v5`.
 
 ## iOS standalone capability protocol
 
@@ -103,7 +103,10 @@ hardware under these cases:
 5. denied camera/microphone or terminal speech permission;
 6. live track loss after a successful optional grant;
 7. interruption/background/lock and orientation change in both Safari and
-   standalone.
+   standalone;
+8. a delayed AI response resolving after visibility loss; and
+9. six clean recognition `onend` cycles followed separately by transient
+   restart exhaustion and explicit recovery.
 
 Acceptance requires runtime detection on every launch, no pre-permission claim
 that hardware works, useful sensor-free AI before permission, a visible
@@ -130,8 +133,9 @@ Acceptance requires:
 5. normal browser/OS headset routing with no `deviceId`;
 6. mirrored front-camera mapping, low-pass aim smoothing, fresh-content
    reacquisition, and orientation calibration reset;
-7. background/lock teardown before status, sensor-free resume, and unchanged
-   conversation/task/history/mode;
+7. background/lock teardown before status, pending AI delivery
+   abort/foreground-epoch invalidation, no hidden reveal or synthesis,
+   sensor-free resume, and unchanged conversation/task/history/mode;
 8. short spoken summaries, captioned earcons, and haptics only after supported
    opt-in;
 9. global repeat/stop/undo/what-changed parity without a text box; and

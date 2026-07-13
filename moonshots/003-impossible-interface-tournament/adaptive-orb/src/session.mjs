@@ -30,6 +30,87 @@ function performSensorFreeTransition({
   return { controller: null, result };
 }
 
+class ForegroundDeliveryGuard {
+  constructor({
+    isForeground = () =>
+      typeof document === "undefined" ||
+      (!document.hidden && document.visibilityState === "visible"),
+  } = {}) {
+    this.isForeground = isForeground;
+    this.epoch = 0;
+    this.foreground = Boolean(this.isForeground());
+    this.interactionRequired = false;
+  }
+
+  capture() {
+    return this.epoch;
+  }
+
+  background() {
+    this.epoch += 1;
+    this.foreground = false;
+    this.interactionRequired = true;
+    return this.epoch;
+  }
+
+  resume() {
+    this.foreground = Boolean(this.isForeground());
+    return this.foreground;
+  }
+
+  noteInteraction() {
+    if (!this.isAvailable()) {
+      return false;
+    }
+    this.interactionRequired = false;
+    return true;
+  }
+
+  isAvailable() {
+    return this.foreground && Boolean(this.isForeground());
+  }
+
+  canReveal(token = this.epoch) {
+    return this.isAvailable() && token === this.epoch;
+  }
+
+  canDeliver(token) {
+    return this.canReveal(token) && !this.interactionRequired;
+  }
+
+  canSpeak(token = this.epoch, { explicit = false } = {}) {
+    return this.canReveal(token) && (explicit || !this.interactionRequired);
+  }
+}
+
+async function deliverForegroundAIResponse({
+  response,
+  guard,
+  token,
+  signal,
+  accept,
+  reveal = () => {},
+  speak = () => false,
+}) {
+  const value = await response;
+  if (signal?.aborted) {
+    return { delivered: false, reason: "aborted" };
+  }
+  if (!guard.canDeliver(token)) {
+    return { delivered: false, reason: "foreground-invalidated" };
+  }
+  const accepted = accept(value);
+  if (accepted === false || accepted?.ok === false) {
+    return { delivered: false, reason: "response-rejected" };
+  }
+  if (!guard.canReveal(token)) {
+    return { delivered: false, reason: "foreground-invalidated" };
+  }
+  reveal(value);
+  const spoken = guard.canSpeak(token) ? speak(value) !== false : false;
+  return { delivered: true, spoken };
+}
+
 class RadialAimCoordinator {
   constructor({ maximumGapMs = 350 } = {}) {
     this.maximumGapMs = maximumGapMs;
@@ -136,7 +217,9 @@ class RadialAimCoordinator {
 }
 
 export {
+  ForegroundDeliveryGuard,
   RadialAimCoordinator,
   cancelGlobalSpeech,
+  deliverForegroundAIResponse,
   performSensorFreeTransition,
 };

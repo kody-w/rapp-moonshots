@@ -38,6 +38,12 @@ test("generated index is self-contained and has the required product hooks", asy
   assert.match(html, /BUILD_TOURNAMENT_EVIDENCE/);
   assert.match(html, /entry-quantity-/);
   assert.match(html, /class RadialAimCoordinator/);
+  assert.match(html, /class ForegroundDeliveryGuard/);
+  assert.match(html, /deliverForegroundAIResponse/);
+  assert.match(html, /paused on background/);
+  assert.match(html, /recognitionSessionStarted/);
+  assert.match(html, /kind: "ordinary-end"/);
+  assert.match(html, /reason: "restart-exhausted"/);
   assert.match(html, /pendingDetectorBuffers/);
   assert.match(html, /EXPECTED_DETERMINISTIC_FINGERPRINT = "c1b6e39f"/);
   assert.match(html, /EXPECTED_CONVERSATION_FINGERPRINT = "071ba015"/);

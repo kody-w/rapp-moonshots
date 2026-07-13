@@ -599,6 +599,226 @@ test("synchronous speech permission failure becomes terminal and visible", () =>
   }
 });
 
+test("six ordinary recognition onend cycles reset retry state", async () => {
+  const originalRecognition = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "SpeechRecognition",
+  );
+  class CyclingRecognition {
+    static instances = [];
+
+    constructor() {
+      CyclingRecognition.instances.push(this);
+    }
+
+    start() {
+      this.onstart?.();
+    }
+
+    abort() {}
+  }
+  Object.defineProperty(globalThis, "SpeechRecognition", {
+    configurable: true,
+    value: CyclingRecognition,
+  });
+  const actions = [];
+  const track = {
+    kind: "audio",
+    readyState: "live",
+    stopped: false,
+    stop() {
+      this.stopped = true;
+      this.readyState = "ended";
+    },
+  };
+  const stream = {
+    active: true,
+    getTracks: () => [track],
+  };
+  const controller = new AdaptiveSensorController({
+    video: null,
+    recognitionRetryBaseMs: 0,
+    onAction: (action) => {
+      actions.push(action);
+      return { ok: true };
+    },
+  });
+  const generation = controller.lifecycle.begin();
+  controller.lifecycleGeneration = generation;
+  controller.active = true;
+  controller.microphoneStream = stream;
+  controller.registerStream(stream);
+  try {
+    controller.startRecognition(generation);
+    for (let cycle = 0; cycle < 6; cycle += 1) {
+      const recognition = controller.recognition;
+      recognition.onend();
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      assert.notEqual(controller.recognition, recognition);
+      assert.equal(controller.recognitionTerminal, false);
+      assert.equal(controller.recognitionRetries, 0);
+      assert.equal(controller.recognitionTransientFailures, 0);
+    }
+    assert.equal(track.stopped, false);
+    assert.equal(
+      actions.some(
+        (action) =>
+          action.sensor === "speech" && action.status === "unavailable",
+      ),
+      false,
+    );
+    assert.ok(
+      actions.filter(
+        (action) =>
+          action.sensor === "speech" && action.status === "active",
+      ).length >= 7,
+    );
+  } finally {
+    controller.stop("ordinary-onend-test");
+    if (originalRecognition) {
+      Object.defineProperty(
+        globalThis,
+        "SpeechRecognition",
+        originalRecognition,
+      );
+    } else {
+      delete globalThis.SpeechRecognition;
+    }
+  }
+});
+
+test("recognition exhaustion stops capture and explicit enable recovers", async () => {
+  const originalRecognition = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "SpeechRecognition",
+  );
+  const originalNavigator = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "navigator",
+  );
+  let failStart = true;
+  class RecoverableRecognition {
+    start() {
+      this.onstart?.();
+      if (failStart) {
+        this.onerror?.({ error: "network" });
+      }
+    }
+
+    abort() {}
+  }
+  Object.defineProperty(globalThis, "SpeechRecognition", {
+    configurable: true,
+    value: RecoverableRecognition,
+  });
+  const actions = [];
+  const captions = [];
+  const initialTrack = {
+    kind: "audio",
+    readyState: "live",
+    stopped: false,
+    stop() {
+      this.stopped = true;
+      this.readyState = "ended";
+    },
+  };
+  const initialStream = {
+    active: true,
+    getTracks: () => [initialTrack],
+  };
+  const replacementTrack = {
+    kind: "audio",
+    readyState: "live",
+    stopped: false,
+    addEventListener() {},
+    stop() {
+      this.stopped = true;
+      this.readyState = "ended";
+    },
+  };
+  const replacementStream = {
+    active: true,
+    getTracks: () => [replacementTrack],
+  };
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      mediaDevices: {
+        getUserMedia: async () => replacementStream,
+      },
+    },
+  });
+  const controller = new AdaptiveSensorController({
+    video: null,
+    recognitionRetryBaseMs: 0,
+    onAction: (action) => {
+      actions.push(action);
+      return { ok: true };
+    },
+    onCaption: (caption) => captions.push(caption),
+  });
+  const generation = controller.lifecycle.begin();
+  controller.lifecycleGeneration = generation;
+  controller.active = true;
+  controller.microphoneStream = initialStream;
+  controller.registerStream(initialStream);
+  try {
+    controller.startRecognition(generation);
+    for (let tick = 0; tick < 100 && !controller.recognitionTerminal; tick += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+    assert.equal(controller.recognitionTerminal, true);
+    assert.equal(controller.recognition, null);
+    assert.equal(controller.microphoneStream, null);
+    assert.equal(initialTrack.stopped, true);
+    assert.ok(
+      actions.some(
+        (action) =>
+          action.sensor === "speech" &&
+          action.status === "unavailable" &&
+          action.reason === "restart-exhausted",
+      ),
+    );
+    assert.ok(
+      actions.some(
+        (action) =>
+          action.sensor === "microphone" &&
+          action.status === "unavailable",
+      ),
+    );
+    assert.match(captions.at(-1), /parity, then retry explicitly/);
+
+    failStart = false;
+    assert.equal(await controller.enableMicrophone(), true);
+    assert.equal(controller.recognitionTerminal, false);
+    assert.equal(controller.recognitionRetries, 0);
+    assert.equal(controller.recognitionTransientFailures, 0);
+    assert.equal(controller.microphoneStream, replacementStream);
+    assert.equal(replacementTrack.stopped, false);
+    assert.equal(
+      actions.at(-1).sensor,
+      "speech",
+    );
+    assert.equal(actions.at(-1).status, "active");
+  } finally {
+    controller.stop("explicit-recognition-recovery-test");
+    if (originalRecognition) {
+      Object.defineProperty(
+        globalThis,
+        "SpeechRecognition",
+        originalRecognition,
+      );
+    } else {
+      delete globalThis.SpeechRecognition;
+    }
+    if (originalNavigator) {
+      Object.defineProperty(globalThis, "navigator", originalNavigator);
+    } else {
+      delete globalThis.navigator;
+    }
+  }
+});
+
 test("stopStream stops every acquired media track", () => {
   const tracks = [
     { stopped: false, stop() { this.stopped = true; } },

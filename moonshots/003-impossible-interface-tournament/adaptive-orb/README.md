@@ -135,9 +135,13 @@ See [ROLLBACK.md](ROLLBACK.md) for unregister and cache cleanup.
    mirrors coordinates only when appropriate, and adds coarse aim/gesture.
 
 The camera is never required to begin, and a microphone denial does not trigger
-a restart loop. Terminal speech denial stops the separately granted physical
-microphone stream. Any transition back to sensor-free stops camera, microphone,
-recognition, and synthesis before sensor-free status renders.
+an unbounded restart loop. A clean recognition `onend` starts a fresh session
+without spending a lifetime failure budget; confirmed session start resets
+transient backoff. Repeated start failures exhaust visibly: speech becomes
+unavailable, microphone capture stops, parity remains, and only another
+explicit **Enable voice** action retries. Terminal speech denial follows the
+same capture-release rule. Any transition back to sensor-free stops camera,
+microphone, recognition, and synthesis before sensor-free status renders.
 
 After optional grants, the intended flow is hands-free: speak broad intent,
 hold a coarse direction to highlight, and gesture or speak to confirm. Global
@@ -162,8 +166,11 @@ Front-camera coordinates are mirrored consistently and low-confidence aim is
 smoothed to tolerate ordinary movement/noise. Orientation changes clear aim,
 gesture phase, stale calibration, and dwell while preserving conversation,
 task, undo history, mode, and safety state. Backgrounding, lock, visibility
-loss, or interruption tears optional sensors down; resume is sensor-free and
-reports recovery instead of silently restarting permission.
+loss, or interruption tears optional sensors down, aborts pending AI delivery,
+and invalidates its foreground epoch. A delayed response cannot update visible
+content or call synthesis while hidden. Resume is sensor-free, reports recovery
+instead of silently restarting permission, and requires a new foreground
+interaction or an explicit **Repeat** before speech can resume.
 
 `stop`, `cancel`, and `undo` preempt normal speech and unconditionally cancel
 global synthesis even when no sensor controller exists. Stop also aborts
