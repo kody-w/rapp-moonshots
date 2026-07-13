@@ -93,6 +93,16 @@ class ValidationTests(unittest.TestCase):
                 SERVER.configured_upstream_url(),
                 SERVER.DEFAULT_BRAINSTEM_URL,
             )
+            self.assertEqual(
+                SERVER.configured_allowed_hosts(),
+                frozenset({"localhost", "127.0.0.1", "::1"}),
+            )
+        with mock.patch.dict(
+            os.environ,
+            {"ADAPTIVE_ORB_ALLOWED_HOSTS": "orb.example.test"},
+            clear=True,
+        ):
+            self.assertIn("orb.example.test", SERVER.configured_allowed_hosts())
         with mock.patch.dict(
             os.environ,
             {"RAPP_BRAINSTEM_URL": "http://user:password@example.test/chat"},
@@ -143,6 +153,8 @@ class HandlerTests(unittest.TestCase):
             "scenario": "plan",
         }
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), TestHandler)
+        cls.httpd.allowed_hosts = SERVER.configured_allowed_hosts()
+        cls.httpd.session_token = SERVER.secrets.token_urlsafe(32)
         cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
         cls.thread.start()
         cls.port = cls.httpd.server_address[1]
@@ -163,18 +175,54 @@ class HandlerTests(unittest.TestCase):
         connection.close()
         return result
 
+    def authorized_headers(self, extra=None):
+        status, headers, raw = self.request(
+            "POST",
+            "/api/session",
+            headers={"Origin": f"http://127.0.0.1:{self.port}"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(raw), {"ready": True})
+        cookie = headers["Set-Cookie"]
+        self.assertIn("HttpOnly", cookie)
+        self.assertIn("SameSite=Strict", cookie)
+        values = {
+            "Origin": f"http://127.0.0.1:{self.port}",
+            "Cookie": cookie.split(";", 1)[0],
+        }
+        values.update(extra or {})
+        return values
+
     def test_valid_same_origin_chat_proxy(self):
-        body = json.dumps(valid_request()).encode("utf-8")
+        request = {
+            **valid_request(),
+            "conversation_history": [
+                {
+                    "role": "user" if index % 2 == 0 else "assistant",
+                    "content": f"{index:02d}-" + ("x" * 3997),
+                }
+                for index in range(15)
+            ],
+        }
+        body = json.dumps(request, separators=(",", ":")).encode("utf-8")
+        self.assertLess(len(body), SERVER.BODY_CAP_BYTES)
+        self.assertGreater(len(body), 60_000)
         status, headers, raw = self.request(
             "POST",
             "/api/chat",
             body,
-            {"Content-Type": "application/json", "Content-Length": str(len(body))},
+            self.authorized_headers(
+                {
+                    "Content-Type": "application/json",
+                    "Content-Length": str(len(body)),
+                }
+            ),
         )
         self.assertEqual(status, 200)
         self.assertEqual(headers["Cache-Control"], "no-store")
         self.assertIn("connect-src 'self'", headers["Content-Security-Policy"])
-        self.assertEqual(json.loads(raw)["provider"], "brainstem")
+        self.assertNotIn("Access-Control-Allow-Origin", headers)
+        self.assertEqual(json.loads(raw)["message"], "Accepted 15 history turns.")
 
     def test_invalid_shape_and_content_type_fail_closed(self):
         invalid = json.dumps({**valid_request(), "secret": "no"}).encode("utf-8")
@@ -182,7 +230,12 @@ class HandlerTests(unittest.TestCase):
             "POST",
             "/api/chat",
             invalid,
-            {"Content-Type": "application/json", "Content-Length": str(len(invalid))},
+            self.authorized_headers(
+                {
+                    "Content-Type": "application/json",
+                    "Content-Length": str(len(invalid)),
+                }
+            ),
         )
         self.assertEqual(status, 400)
         self.assertEqual(json.loads(raw), {"error": "invalid_request"})
@@ -190,19 +243,50 @@ class HandlerTests(unittest.TestCase):
             "POST",
             "/api/chat",
             b"plain",
-            {"Content-Type": "text/plain", "Content-Length": "5"},
+            self.authorized_headers(
+                {"Content-Type": "text/plain", "Content-Length": "5"}
+            ),
         )
         self.assertEqual(status, 415)
+        body = json.dumps(valid_request()).encode("utf-8")
+        status, _, raw = self.request(
+            "POST",
+            "/api/chat",
+            body,
+            {
+                "Origin": f"http://127.0.0.1:{self.port}",
+                "Content-Type": "application/json",
+                "Content-Length": str(len(body)),
+            },
+        )
+        self.assertEqual(status, 403)
+        self.assertEqual(json.loads(raw), {"error": "session_required"})
+        status, _, raw = self.request(
+            "POST",
+            "/api/chat",
+            body,
+            self.authorized_headers(
+                {
+                    "Origin": "https://attacker.example",
+                    "Content-Type": "application/json",
+                    "Content-Length": str(len(body)),
+                }
+            ),
+        )
+        self.assertEqual(status, 403)
+        self.assertEqual(json.loads(raw), {"error": "origin_rejected"})
 
     def test_body_cap_and_unknown_api_path_fail_closed(self):
         status, _, raw = self.request(
             "POST",
             "/api/chat",
             b"{}",
-            {
-                "Content-Type": "application/json",
-                "Content-Length": str(SERVER.BODY_CAP_BYTES + 1),
-            },
+            self.authorized_headers(
+                {
+                    "Content-Type": "application/json",
+                    "Content-Length": str(SERVER.BODY_CAP_BYTES + 1),
+                }
+            ),
         )
         self.assertEqual(status, 413)
         self.assertEqual(json.loads(raw), {"error": "body_too_large"})
@@ -210,16 +294,34 @@ class HandlerTests(unittest.TestCase):
             "POST",
             "/api/other",
             b"{}",
-            {"Content-Type": "application/json", "Content-Length": "2"},
+            self.authorized_headers(
+                {"Content-Type": "application/json", "Content-Length": "2"}
+            ),
         )
         self.assertEqual(status, 404)
         status, _, _ = self.request(
             "POST",
             "/api/chat?secret=forbidden",
             b"{}",
-            {"Content-Type": "application/json", "Content-Length": "2"},
+            self.authorized_headers(
+                {"Content-Type": "application/json", "Content-Length": "2"}
+            ),
         )
         self.assertEqual(status, 404)
+        status, headers, raw = self.request(
+            "POST",
+            "/api/chat",
+            b"{}",
+            {
+                "Host": "attacker.example",
+                "Origin": "http://attacker.example",
+                "Content-Type": "application/json",
+                "Content-Length": "2",
+            },
+        )
+        self.assertEqual(status, 421)
+        self.assertEqual(json.loads(raw), {"error": "host_rejected"})
+        self.assertNotIn("Access-Control-Allow-Origin", headers)
 
     def test_static_shell_has_security_headers(self):
         status, headers, raw = self.request("GET", "/manifest.webmanifest")
@@ -227,6 +329,17 @@ class HandlerTests(unittest.TestCase):
         self.assertEqual(headers["X-Content-Type-Options"], "nosniff")
         self.assertEqual(headers["Referrer-Policy"], "no-referrer")
         self.assertNotIn(b"RAPP_BRAINSTEM_SECRET", raw)
+        status, headers, _ = self.request("GET", "/?companion=1")
+        self.assertEqual(status, 200)
+        self.assertNotIn("Set-Cookie", headers)
+        status, headers, raw = self.request(
+            "GET",
+            "/",
+            headers={"Host": "attacker.example", "Origin": "http://attacker.example"},
+        )
+        self.assertEqual(status, 421)
+        self.assertEqual(json.loads(raw), {"error": "host_rejected"})
+        self.assertNotIn("Set-Cookie", headers)
 
 
 if __name__ == "__main__":

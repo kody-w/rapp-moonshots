@@ -28,7 +28,9 @@ The public PWA needs no account, key, dependency, or AI network. Its
 deterministic responder makes the whole experience inspectable on GitHub Pages
 and offline. Teams already running RAPP Brainstem can add one stdlib
 same-origin companion; secrets stay server-side, and failure returns visibly
-to demo AI without discarding the conversation.
+to demo AI without discarding the conversation. Host/Origin checks, a
+per-process same-site session cookie, and deterministic UTF-8 history budgeting
+keep that optional bridge local and bounded by default.
 
 The 12-turn replay proves all scenarios and grammars, undoes a wrong branch,
 then completes the exact cobalt-beacon safety task. It exports semantics, not

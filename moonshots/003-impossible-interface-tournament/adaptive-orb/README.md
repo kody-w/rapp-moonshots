@@ -61,11 +61,20 @@ Optional server-only settings:
 
 - `RAPP_BRAINSTEM_SECRET` — sent upstream as a bearer secret;
 - `RAPP_BRAINSTEM_TIMEOUT` — 1–30 seconds, default 8;
-- `ADAPTIVE_ORB_BIND` / `ADAPTIVE_ORB_PORT` — CLI flags take precedence.
+- `ADAPTIVE_ORB_BIND` / `ADAPTIVE_ORB_PORT` — CLI flags take precedence;
+- `ADAPTIVE_ORB_ALLOWED_HOSTS` — comma-separated explicit hostnames/addresses;
+  `--allow-host HOST` may also be repeated.
 
-The bind default and Brainstem URL default are loopback. The browser never
-receives, stores, or logs a key. Companion mode is opt-in in the footer (or
-`?companion=1`) and posts only this strict same-origin contract to `/api/chat`:
+The bind and Brainstem URL defaults are loopback. Host headers are restricted
+to `localhost`, `127.0.0.1`, `::1`, plus explicit configuration. Before each
+chat, a same-origin `POST /api/session` bootstrap issues an unguessable
+per-process `HttpOnly; SameSite=Strict` cookie in a no-store response;
+`/api/chat` requires that cookie and an exact same-origin `Origin`. Static shell
+responses never carry the token, and the service worker bypasses `/api/`.
+Restarting the server invalidates the authorization. The browser never
+receives, stores, or logs the upstream key. Companion mode is opt-in in the
+footer (or `?companion=1`) and posts only this strict same-origin contract to
+`/api/chat`:
 
 ```json
 {
@@ -75,10 +84,13 @@ receives, stores, or logs a key. Companion mode is opt-in in the footer (or
 }
 ```
 
-The stdlib proxy enforces an exact JSON shape, 64 KiB request cap, bounded
-history/text, upstream timeout and response cap, no CORS, no-store responses,
-safe logs, and normalized output. Unavailable or invalid Brainstem output
-visibly falls back to deterministic demo AI with the same conversation intact.
+The client UTF-8-measures JSON against a 60 KiB budget and deterministically
+removes oldest history first while preserving current input and the newest
+bounded context. The stdlib proxy independently enforces an exact JSON shape,
+64 KiB cap, bounded history/text, upstream timeout and response cap, no CORS,
+no-store responses, safe logs, and normalized output. Unavailable or invalid
+Brainstem output visibly falls back to deterministic demo AI with the same
+conversation intact.
 
 ## PWA and iOS
 
@@ -141,6 +153,11 @@ content, and accepted processing timestamps expire independently. Invalid
 content immediately revokes sensor aim/arm. Delayed detector and permission
 work is generation-, content-, identity-, and request-gated.
 
+An ended camera or microphone track is immediately released and nulled; a
+retry must acquire a new live track before that sensor can report active.
+Camera loss also revokes derived aim/arm and requires fresh valid content plus
+accepted processing. There is no automatic reacquisition loop.
+
 Front-camera coordinates are mirrored consistently and low-confidence aim is
 smoothed to tolerate ordinary movement/noise. Orientation changes clear aim,
 gesture phase, stale calibration, and dwell while preserving conversation,
@@ -148,10 +165,11 @@ task, undo history, mode, and safety state. Backgrounding, lock, visibility
 loss, or interruption tears optional sensors down; resume is sensor-free and
 reports recovery instead of silently restarting permission.
 
-`stop`, `cancel`, and `undo` preempt normal speech. Stop also aborts pending AI
-work and tears down camera, microphone, recognition, synthesis, derived frame
-buffers, and pending detector copies. Sensor-free transitions stop those
-resources before accessible status is committed or rendered.
+`stop`, `cancel`, and `undo` preempt normal speech and unconditionally cancel
+global synthesis even when no sensor controller exists. Stop also aborts
+pending AI work and tears down camera, microphone, recognition, derived frame
+buffers, and pending detector copies. Sensor-free transitions cancel synthesis
+and stop those resources before accessible status is committed or rendered.
 
 ## Memory and export
 
@@ -205,7 +223,9 @@ automatic/manual modes, replay locking, PWA assets/cache policy, iOS hooks,
 standalone capability/permission degradation, Safari recovery guidance, proxy
 validation and secret handling, sensor-free parity, detector races, privacy,
 orientation/background recovery, progressive sensor grants, exact mobile
-layouts, touch sizing, no hover-only action, Clawpilot theming, and checked-in
+layouts and radial center/edge clearance, exact choice DOM reconciliation,
+ended-track reacquisition, Host/Origin/session authorization, UTF-8 request
+budgets, touch sizing, no hover-only action, Clawpilot theming, and checked-in
 evidence.
 
 ## Important files
@@ -216,6 +236,7 @@ evidence.
 - `src/core.mjs` — shared conversation/task/history/safety machine;
 - `src/mobile.mjs` — mobile layout, four-choice window, no-look summaries,
   aggregate metrics, earcons, and opt-in haptics;
+- `src/choices.mjs` — exact choice signatures and fresh semantic DOM state;
 - `src/sensors.mjs` / `src/session.mjs` — guarded media and aim lifecycles;
 - `server.py` — optional same-origin Brainstem companion;
 - `manifest.webmanifest`, `service-worker.js`, `icons/` — local PWA;

@@ -3,6 +3,7 @@ import test from "node:test";
 import { AdaptiveOrbMachine } from "../src/core.mjs";
 import {
   RadialAimCoordinator,
+  cancelGlobalSpeech,
   performSensorFreeTransition,
 } from "../src/session.mjs";
 
@@ -85,7 +86,7 @@ test("sensor-free transition stops all live resources before accessible render",
       order.push("stop");
       resources.camera = false;
       resources.microphone = false;
-      resources.speech = false;
+      assert.equal(resources.speech, false);
     },
   };
   const transition = performSensorFreeTransition({
@@ -93,6 +94,14 @@ test("sensor-free transition stops all live resources before accessible render",
     controller,
     source: "gesture",
     at: 100,
+    globalObject: {
+      speechSynthesis: {
+        cancel() {
+          order.push("speech");
+          resources.speech = false;
+        },
+      },
+    },
     render() {
       order.push("render");
       assert.deepEqual(resources, {
@@ -106,7 +115,7 @@ test("sensor-free transition stops all live resources before accessible render",
       assert.equal(machine.state.sensors.speech, "disabled");
     },
   });
-  assert.deepEqual(order, ["stop", "render"]);
+  assert.deepEqual(order, ["speech", "stop", "render"]);
   assert.equal(transition.controller, null);
 
   const stopped = liveMachine();
@@ -130,6 +139,29 @@ test("sensor-free transition stops all live resources before accessible render",
   assert.deepEqual(stopped.state.freezeCauses, []);
   assert.equal(stopped.state.status, "active");
   assert.equal(stopped.state.sessionKind, "accessible");
+});
+
+test("stop cancel undo and teardown cancel global speech without a controller", () => {
+  const canceled = [];
+  const globalObject = {
+    speechSynthesis: {
+      cancel() {
+        canceled.push("cancel");
+      },
+    },
+  };
+  for (const action of ["STOP", "CANCEL", "UNDO"]) {
+    assert.equal(cancelGlobalSpeech(globalObject), true, action);
+  }
+  const machine = liveMachine();
+  performSensorFreeTransition({
+    machine,
+    controller: null,
+    source: "switch",
+    at: 30,
+    globalObject,
+  });
+  assert.equal(canceled.length, 4);
 });
 
 test("aim cache follows machine highlight and long gaps require reacquisition", () => {

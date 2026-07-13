@@ -1,4 +1,4 @@
-const CACHE_VERSION = "adaptive-orb-static-v3";
+const CACHE_VERSION = "adaptive-orb-static-v4";
 const STATIC_ASSETS = Object.freeze([
   "./",
   "./index.html",

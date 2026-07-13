@@ -1171,8 +1171,44 @@ button:disabled {
     padding-inline: 8px;
   }
 
-  /* Primary hardware contract: 390 × 844 portrait. */
-  @media (max-width: 600px) {
+  .orb-card,
+  .context-card {
+    padding: 12px;
+  }
+
+  .orb-stage {
+    width: 100%;
+    min-height: min(94vw, 520px);
+  }
+
+  .choice {
+    width: clamp(100px, 29vw, 126px);
+    min-height: 64px;
+    padding: 5px;
+  }
+
+  .choice small,
+  .mode-meter {
+    display: none;
+  }
+
+  .response-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .response-heading button {
+    width: 100%;
+  }
+
+  .disclosure-grid,
+  .mode-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Primary hardware contract: 390 × 844 portrait. */
+@media (orientation: portrait) and (max-width: 600px) {
     .launch-screen {
       align-items: start;
       padding:
@@ -1263,7 +1299,7 @@ button:disabled {
 
     .orb-stage {
       width: min(100%, 374px);
-      min-height: min(96vw, 374px);
+      min-height: 0;
     }
 
     .center-orb {
@@ -1279,9 +1315,22 @@ button:disabled {
     }
 
     .choice {
-      width: clamp(98px, 29vw, 116px);
+      width: clamp(76px, 24vw, 96px);
+      height: 68px;
       min-height: 68px;
       padding: 7px 5px;
+      overflow: hidden;
+    }
+
+    .choice strong {
+      display: -webkit-box;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    .choice small {
+      display: none;
     }
 
     .choice[data-phone-hidden="true"] {
@@ -1322,8 +1371,8 @@ button:disabled {
     }
   }
 
-  /* Primary compact landscape contract: 844 × 390. */
-  @media (orientation: landscape) and (max-height: 500px) {
+/* Primary compact landscape contract: 844 × 390. */
+@media (orientation: landscape) and (max-height: 500px) {
     .app-shell {
       width: 100%;
       padding:
@@ -1393,9 +1442,18 @@ button:disabled {
     }
 
     .choice {
-      width: 104px;
+      width: 90px;
+      height: 56px;
       min-height: 56px;
       padding: 4px;
+      overflow: hidden;
+    }
+
+    .choice strong {
+      display: -webkit-box;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
     }
 
     .choice small {
@@ -1420,60 +1478,6 @@ button:disabled {
       overflow: hidden;
     }
   }
-
-  .orb-card,
-  .context-card {
-    padding: 12px;
-  }
-
-  .orb-stage {
-    width: 100%;
-    min-height: min(94vw, 520px);
-  }
-
-  .choice {
-    width: clamp(100px, 29vw, 126px);
-    min-height: 64px;
-    padding: 5px;
-  }
-
-  .choice small {
-    display: none;
-  }
-
-  .mode-meter {
-    display: none;
-  }
-
-  .response-heading {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .response-heading button {
-    width: 100%;
-  }
-
-  .disclosure-grid,
-  .mode-stats {
-    grid-template-columns: 1fr;
-  }
-
-  @media (orientation: landscape) and (max-height: 620px) {
-    .orb-stage {
-      width: min(72vh, 620px);
-    }
-
-    .response-focus {
-      padding: 10px;
-    }
-
-    .conversation-landmarks {
-      max-height: 48px;
-      overflow: hidden;
-    }
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -2134,6 +2138,7 @@ const DEMO_RESPONSES = Object.freeze({
 const MAX_USER_INPUT = 4000;
 const MAX_HISTORY_TURNS = 24;
 const MAX_RESPONSE_TEXT = 12000;
+const CLIENT_REQUEST_BUDGET_BYTES = 60 * 1024;
 
 function inferScenario(text, fallback = "create") {
   const normalized = String(text || "").toLowerCase();
@@ -2215,6 +2220,39 @@ function validateAIRequest(value) {
     conversation_history: validateConversationHistory(value.conversation_history),
     session_id: value.session_id,
   };
+}
+
+function aiRequestByteLength(value) {
+  const serialized = JSON.stringify(value);
+  if (typeof TextEncoder === "function") {
+    return new TextEncoder().encode(serialized).byteLength;
+  }
+  return new Blob([serialized]).size;
+}
+
+function fitAIRequestToByteBudget(
+  value,
+  budgetBytes = CLIENT_REQUEST_BUDGET_BYTES,
+) {
+  const normalized = validateAIRequest(value);
+  const budget = Math.min(
+    CLIENT_REQUEST_BUDGET_BYTES,
+    Math.max(1, Number(budgetBytes) || 0),
+  );
+  const fitted = {
+    ...normalized,
+    conversation_history: [...normalized.conversation_history],
+  };
+  while (
+    fitted.conversation_history.length > 0 &&
+    aiRequestByteLength(fitted) > budget
+  ) {
+    fitted.conversation_history.shift();
+  }
+  if (aiRequestByteLength(fitted) > budget) {
+    throw new TypeError("current AI input exceeds the client byte budget");
+  }
+  return fitted;
 }
 
 function normalizeSuggestion(value, index) {
@@ -2391,7 +2429,7 @@ class CompanionAIAdapter {
   }
 
   async respond(request, { scenarioHint, signal } = {}) {
-    const normalized = validateAIRequest(request);
+    const normalized = fitAIRequestToByteBudget(request);
     if (typeof this.fetchImpl !== "function") {
       throw new Error("companion-fetch-unavailable");
     }
@@ -2404,6 +2442,19 @@ class CompanionAIAdapter {
     }
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
+      const sessionResponse = await this.fetchImpl("/api/session", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        redirect: "error",
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
+      if (!sessionResponse?.ok) {
+        throw new Error(
+          `companion-session-${sessionResponse?.status || "failed"}`,
+        );
+      }
       const response = await this.fetchImpl(this.endpoint, {
         method: "POST",
         credentials: "same-origin",
@@ -2496,7 +2547,7 @@ function buildBrainstemRequest(conversation) {
       content: turn.text.slice(0, MAX_USER_INPUT),
     }))
     .slice(-MAX_HISTORY_TURNS);
-  return validateAIRequest({
+  return fitAIRequestToByteBudget({
     user_input: turns[lastUserIndex].text,
     conversation_history: history,
     session_id: conversation.sessionId,
@@ -2706,10 +2757,11 @@ function mobileLayoutForViewport(
     viewportWidth > viewportHeight ? "landscape" : "portrait";
   const usableWidth = Math.max(0, viewportWidth - left - right);
   const usableHeight = Math.max(0, viewportHeight - top - bottom);
-  const orbDiameter =
+  const targetOrbDiameter =
     orientation === "portrait"
-      ? Math.min(390, Math.max(280, usableWidth - 16))
-      : Math.min(360, Math.max(248, usableHeight - 104));
+      ? Math.min(374, Math.max(280, usableWidth - 34))
+      : Math.min(350, Math.max(248, viewportHeight * 0.82));
+  const orbDiameter = Math.min(usableWidth, targetOrbDiameter);
   return Object.freeze({
     width: viewportWidth,
     height: viewportHeight,
@@ -2740,6 +2792,111 @@ function phoneChoiceWindow(options, highlightedId, limit = 4) {
     end: start + visible.length,
     total: normalized.length,
     refined: normalized.length > pageSize,
+  });
+}
+
+function radialChoiceGeometry({
+  stageDiameter,
+  choiceWidth,
+  choiceHeight,
+  centerDiameter,
+  choiceCount,
+  radiusRatio = 0.35,
+  choiceScale = 1.06,
+  edgeInset = 2,
+  centerGap = 1,
+}) {
+  const stage = Math.max(1, Number(stageDiameter) || 0);
+  const width = Math.max(1, Number(choiceWidth) || 0) * choiceScale;
+  const height = Math.max(1, Number(choiceHeight) || 0) * choiceScale;
+  const centerRadius = Math.max(0, Number(centerDiameter) || 0) / 2;
+  const count = Math.max(1, Math.min(8, Math.floor(Number(choiceCount) || 1)));
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
+  const stageRadius = stage / 2;
+  const angles = Array.from(
+    { length: count },
+    (_, index) => -Math.PI / 2 + (index / count) * Math.PI * 2,
+  );
+  const maximumRadius = Math.max(
+    0,
+    Math.min(
+      ...angles.map((angle) => {
+        const cosine = Math.abs(Math.cos(angle));
+        const sine = Math.abs(Math.sin(angle));
+        const horizontal =
+          cosine < 1e-9
+            ? Number.POSITIVE_INFINITY
+            : (stageRadius - edgeInset - halfWidth) / cosine;
+        const vertical =
+          sine < 1e-9
+            ? Number.POSITIVE_INFINITY
+            : (stageRadius - edgeInset - halfHeight) / sine;
+        return Math.max(0, Math.min(horizontal, vertical));
+      }),
+    ),
+  );
+  const clearsCenter = (radius) =>
+    angles.every((angle) => {
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      const dx = Math.max(Math.abs(x) - halfWidth, 0);
+      const dy = Math.max(Math.abs(y) - halfHeight, 0);
+      return Math.hypot(dx, dy) >= centerRadius + centerGap;
+    });
+  let minimumRadius = maximumRadius;
+  const feasible = clearsCenter(maximumRadius);
+  if (feasible) {
+    let low = 0;
+    let high = maximumRadius;
+    for (let attempt = 0; attempt < 32; attempt += 1) {
+      const midpoint = (low + high) / 2;
+      if (clearsCenter(midpoint)) {
+        high = midpoint;
+      } else {
+        low = midpoint;
+      }
+    }
+    minimumRadius = high;
+  }
+  const desiredRadius = stage * Math.max(0, Number(radiusRatio) || 0);
+  const radius = feasible
+    ? Math.min(maximumRadius, Math.max(minimumRadius, desiredRadius))
+    : maximumRadius;
+  const positions = angles.map((angle) => {
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    const dx = Math.max(Math.abs(x) - halfWidth, 0);
+    const dy = Math.max(Math.abs(y) - halfHeight, 0);
+    return Object.freeze({
+      x,
+      y,
+      left: stageRadius + x - halfWidth,
+      right: stageRadius + x + halfWidth,
+      top: stageRadius + y - halfHeight,
+      bottom: stageRadius + y + halfHeight,
+      centerClearance: Math.hypot(dx, dy) - centerRadius,
+    });
+  });
+  const overflow = positions.some(
+    (position) =>
+      position.left < -1e-6 ||
+      position.top < -1e-6 ||
+      position.right > stage + 1e-6 ||
+      position.bottom > stage + 1e-6,
+  );
+  const centerOverlap = positions.some(
+    (position) => position.centerClearance < -1e-6,
+  );
+  return Object.freeze({
+    radius,
+    minimumRadius,
+    maximumRadius,
+    feasible,
+    overflow,
+    centerOverlap,
+    safe: feasible && !overflow && !centerOverlap,
+    positions: Object.freeze(positions),
   });
 }
 
@@ -2987,6 +3144,96 @@ class MobileFeedback {
     }
     this.audioContext = null;
   }
+}
+
+function canonicalChoiceValue(value) {
+  if (value === null) {
+    return null;
+  }
+  if (Array.isArray(value)) {
+    return value.map(canonicalChoiceValue);
+  }
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalChoiceValue(value[key])]),
+    );
+  }
+  if (["string", "boolean"].includes(typeof value)) {
+    return value;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : { $number: String(value) };
+  }
+  if (typeof value === "undefined") {
+    return { $undefined: true };
+  }
+  throw new TypeError("Choice fields must be public-safe serializable values");
+}
+
+function exactChoiceSignature(mode, choices) {
+  const normalized = Array.isArray(choices) ? choices : [];
+  return JSON.stringify({
+    mode: String(mode || ""),
+    length: normalized.length,
+    choices: normalized.map(canonicalChoiceValue),
+  });
+}
+
+function choicePresentation(
+  candidate,
+  index,
+  {
+    highlightedId = null,
+    armed = false,
+    disabled = false,
+    visibleIds = null,
+  } = {},
+) {
+  const id = String(candidate?.id || "");
+  const label = String(candidate?.label || id);
+  const detail = String(candidate?.detail || "");
+  const visible =
+    !(visibleIds instanceof Set) || visibleIds.size === 0 || visibleIds.has(id);
+  return {
+    id,
+    label,
+    detail,
+    ariaLabel: `${detail ? `${label}. ${detail}.` : `${label}.`} Highlight only; separate confirmation required.`,
+    highlighted: highlightedId === id,
+    armed: armed && highlightedId === id,
+    disabled: disabled === true,
+    phoneHidden: !visible,
+    index: String(index),
+    effect: String(candidate?.effect || ""),
+    branch: String(candidate?.branch || ""),
+  };
+}
+
+function applyChoicePresentation(button, presentation) {
+  const title = button.querySelector("strong");
+  const detail = button.querySelector("small");
+  title.textContent = presentation.label;
+  detail.textContent = presentation.detail;
+  button.disabled = presentation.disabled;
+  button.dataset.optionId = presentation.id;
+  button.dataset.optionIndex = presentation.index;
+  button.dataset.highlighted = String(presentation.highlighted);
+  button.dataset.armed = String(presentation.armed);
+  button.dataset.phoneHidden = String(presentation.phoneHidden);
+  if (presentation.effect) {
+    button.dataset.optionEffect = presentation.effect;
+  } else {
+    delete button.dataset.optionEffect;
+  }
+  if (presentation.branch) {
+    button.dataset.optionBranch = presentation.branch;
+  } else {
+    delete button.dataset.optionBranch;
+  }
+  button.setAttribute("aria-label", presentation.ariaLabel);
+  button.setAttribute("aria-pressed", String(presentation.highlighted));
 }
 
 const MODE_NAMES = Object.freeze(["orbit", "compass", "tunnel"]);
@@ -5436,6 +5683,23 @@ function stopStream(stream) {
   }
 }
 
+function streamHasLiveTrack(stream, kind) {
+  if (
+    !stream ||
+    stream.active === false ||
+    typeof stream.getTracks !== "function"
+  ) {
+    return false;
+  }
+  return stream
+    .getTracks()
+    .some(
+      (track) =>
+        (!kind || track.kind === kind) &&
+        track.readyState !== "ended",
+    );
+}
+
 function clamp(value, minimum = 0, maximum = 1) {
   return Math.min(maximum, Math.max(minimum, value));
 }
@@ -5593,8 +5857,21 @@ class AdaptiveSensorController {
   }
 
   async enableMicrophone() {
-    if (this.microphoneStream) {
+    if (streamHasLiveTrack(this.microphoneStream, "audio")) {
       return true;
+    }
+    if (this.microphoneStream) {
+      if (
+        this.active &&
+        this.lifecycle.isCurrent(this.lifecycleGeneration)
+      ) {
+        this.handleTrackEnded(
+          this.microphoneStream,
+          this.lifecycleGeneration,
+        );
+      } else {
+        this.releaseStream(this.microphoneStream);
+      }
     }
     const generation = this.ensureProgressiveLifecycle();
     this.onAction({
@@ -5619,6 +5896,9 @@ class AdaptiveSensorController {
       if (!this.active || !this.lifecycle.isCurrent(generation)) {
         stopStream(acquired);
         return false;
+      }
+      if (!streamHasLiveTrack(acquired, "audio")) {
+        throw new Error("microphone-track-not-live");
       }
       this.microphoneStream = acquired;
       this.registerStream(acquired);
@@ -5658,8 +5938,18 @@ class AdaptiveSensorController {
   }
 
   async enableCamera() {
-    if (this.cameraStream) {
+    if (streamHasLiveTrack(this.cameraStream, "video")) {
       return true;
+    }
+    if (this.cameraStream) {
+      if (
+        this.active &&
+        this.lifecycle.isCurrent(this.lifecycleGeneration)
+      ) {
+        this.handleTrackEnded(this.cameraStream, this.lifecycleGeneration);
+      } else {
+        this.releaseStream(this.cameraStream);
+      }
     }
     const generation = this.ensureProgressiveLifecycle();
     this.onAction({
@@ -5686,6 +5976,9 @@ class AdaptiveSensorController {
         stopStream(acquired);
         return false;
       }
+      if (!streamHasLiveTrack(acquired, "video")) {
+        throw new Error("camera-track-not-live");
+      }
       const videoTrack = acquired.getVideoTracks?.()[0];
       const facingMode = videoTrack?.getSettings?.().facingMode;
       this.frontCameraMirrored = facingMode !== "environment";
@@ -5703,7 +5996,12 @@ class AdaptiveSensorController {
         }
         await this.video.play();
       }
-      if (!this.active || !this.lifecycle.isCurrent(generation)) {
+      if (
+        !this.active ||
+        !this.lifecycle.isCurrent(generation) ||
+        this.cameraStream !== acquired ||
+        !streamHasLiveTrack(acquired, "video")
+      ) {
         this.releaseStream(acquired);
         if (this.video) {
           this.video.srcObject = null;
@@ -5789,6 +6087,12 @@ class AdaptiveSensorController {
         stopStream(acquired);
         return false;
       }
+      if (
+        !streamHasLiveTrack(acquired, "audio") ||
+        !streamHasLiveTrack(acquired, "video")
+      ) {
+        throw new Error("media-tracks-not-live");
+      }
 
       this.stream = acquired;
       this.streams.add(acquired);
@@ -5809,8 +6113,14 @@ class AdaptiveSensorController {
         }
         await this.video.play();
       }
-      if (!this.active || !this.lifecycle.isCurrent(generation)) {
-        stopStream(acquired);
+      if (
+        !this.active ||
+        !this.lifecycle.isCurrent(generation) ||
+        this.stream !== acquired ||
+        !streamHasLiveTrack(acquired, "audio") ||
+        !streamHasLiveTrack(acquired, "video")
+      ) {
+        this.releaseStream(acquired);
         if (this.video) {
           this.video.srcObject = null;
         }
@@ -5859,25 +6169,79 @@ class AdaptiveSensorController {
     }
   }
 
+  handleTrackEnded(stream, generation) {
+    if (
+      !this.active ||
+      !this.lifecycle.isCurrent(generation) ||
+      (!this.streams.has(stream) &&
+        this.microphoneStream !== stream &&
+        this.cameraStream !== stream)
+    ) {
+      return;
+    }
+    const microphoneEnded = this.microphoneStream === stream;
+    const cameraEnded = this.cameraStream === stream;
+    const at = this.clock();
+    if (cameraEnded) {
+      this.cancelFrameLoop();
+      this.invalidateContent(generation, at);
+      if (this.previousGray) {
+        this.previousGray.fill(0);
+        this.previousGray = null;
+      }
+      if (this.analysisContext && this.analysisCanvas) {
+        this.analysisContext.clearRect(
+          0,
+          0,
+          this.analysisCanvas.width,
+          this.analysisCanvas.height,
+        );
+      }
+      if (this.video?.srcObject === stream) {
+        try {
+          this.video.pause();
+        } catch {
+          // A detached preview may not be pausable.
+        }
+        this.video.srcObject = null;
+      }
+    }
+    if (microphoneEnded) {
+      clearTimeout(this.recognitionRetry);
+      this.recognitionRetry = null;
+      this.detachRecognition();
+    }
+    this.releaseStream(stream);
+    for (const sensor of [
+      ...(cameraEnded ? ["camera"] : []),
+      ...(microphoneEnded ? ["microphone"] : []),
+    ]) {
+      this.onAction({
+        type: "SENSOR_LOSS",
+        cause: `${sensor}-lost`,
+        sensor,
+        at,
+      });
+    }
+    this.onCaption(
+      "A media track ended. Capture was released; retry permission to reacquire it.",
+    );
+  }
+
   attachTrackSafety(stream, generation) {
     for (const track of stream.getTracks()) {
       const sensor = track.kind === "audio" ? "microphone" : "camera";
       track.addEventListener(
         "ended",
-        () => {
-          if (this.active && this.lifecycle.isCurrent(generation)) {
-            this.onAction({
-              type: "SENSOR_LOSS",
-              cause: `${sensor}-lost`,
-              sensor,
-              at: this.clock(),
-            });
-          }
-        },
+        () => this.handleTrackEnded(stream, generation),
         { once: true },
       );
       track.addEventListener("mute", () => {
-        if (this.active && this.lifecycle.isCurrent(generation)) {
+        if (
+          this.active &&
+          this.lifecycle.isCurrent(generation) &&
+          (this.microphoneStream === stream || this.cameraStream === stream)
+        ) {
           this.onAction({
             type: "SENSOR_LOSS",
             cause: `${sensor}-lost`,
@@ -5887,7 +6251,12 @@ class AdaptiveSensorController {
         }
       });
       track.addEventListener("unmute", () => {
-        if (this.active && this.lifecycle.isCurrent(generation)) {
+        if (
+          this.active &&
+          this.lifecycle.isCurrent(generation) &&
+          (this.microphoneStream === stream || this.cameraStream === stream) &&
+          streamHasLiveTrack(stream, track.kind)
+        ) {
           this.onAction({
             type: "SENSOR_STATUS",
             sensor,
@@ -5927,9 +6296,38 @@ class AdaptiveSensorController {
     });
   }
 
+  cancelFrameLoop() {
+    if (this.frameHandle === null) {
+      return;
+    }
+    if (
+      this.frameHandleKind === "video" &&
+      this.video &&
+      typeof this.video.cancelVideoFrameCallback === "function"
+    ) {
+      this.video.cancelVideoFrameCallback(this.frameHandle);
+    } else if (
+      this.frameHandleKind === "animation" &&
+      typeof globalThis.cancelAnimationFrame === "function"
+    ) {
+      globalThis.cancelAnimationFrame(this.frameHandle);
+    } else if (this.frameHandleKind === "timer") {
+      clearTimeout(this.frameHandle);
+    }
+    this.frameHandle = null;
+    this.frameHandleKind = null;
+  }
+
   startFrameLoop(generation) {
+    this.cancelFrameLoop();
     const schedule = () => {
-      if (!this.active || !this.lifecycle.isCurrent(generation)) {
+      if (
+        !this.active ||
+        !this.lifecycle.isCurrent(generation) ||
+        !streamHasLiveTrack(this.cameraStream, "video")
+      ) {
+        this.frameHandle = null;
+        this.frameHandleKind = null;
         return;
       }
       if (this.video && typeof this.video.requestVideoFrameCallback === "function") {
@@ -6691,7 +7089,7 @@ class AdaptiveSensorController {
         // Recognition may already be ending.
       }
     }
-    speechSynthesis.cancel();
+    cancelGlobalSpeech(globalThis);
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.05;
     const finish = () => {
@@ -6734,23 +7132,7 @@ class AdaptiveSensorController {
   }
 
   cleanupRuntime(reportOff) {
-    if (this.frameHandle !== null) {
-      if (
-        this.frameHandleKind === "video" &&
-        this.video &&
-        typeof this.video.cancelVideoFrameCallback === "function"
-      ) {
-        this.video.cancelVideoFrameCallback(this.frameHandle);
-      } else if (
-        this.frameHandleKind === "animation" &&
-        typeof globalThis.cancelAnimationFrame === "function"
-      ) {
-        globalThis.cancelAnimationFrame(this.frameHandle);
-      } else if (this.frameHandleKind === "timer") {
-        clearTimeout(this.frameHandle);
-      }
-    }
-    this.frameHandle = null;
+    this.cancelFrameLoop();
     clearInterval(this.watchdog);
     this.watchdog = null;
     clearTimeout(this.detectorTimeout);
@@ -6758,9 +7140,7 @@ class AdaptiveSensorController {
     clearTimeout(this.recognitionRetry);
     this.recognitionRetry = null;
     this.detachRecognition();
-    if (typeof speechSynthesis !== "undefined") {
-      speechSynthesis.cancel();
-    }
+    cancelGlobalSpeech(globalThis);
     const streams = new Set(this.streams);
     if (this.stream) {
       streams.add(this.stream);
@@ -6835,6 +7215,15 @@ class AdaptiveSensorController {
   }
 }
 
+function cancelGlobalSpeech(globalObject = globalThis) {
+  try {
+    globalObject?.speechSynthesis?.cancel?.();
+    return typeof globalObject?.speechSynthesis?.cancel === "function";
+  } catch {
+    return false;
+  }
+}
+
 function performSensorFreeTransition({
   machine,
   controller,
@@ -6842,7 +7231,9 @@ function performSensorFreeTransition({
   at,
   resume = false,
   render = () => {},
+  globalObject = globalThis,
 }) {
+  cancelGlobalSpeech(globalObject);
   if (controller) {
     controller.stop("sensor-free transition");
   }
@@ -7604,7 +7995,7 @@ function speakText(text) {
       "Speech synthesis is unavailable. The response remains visible.";
     return false;
   }
-  speechSynthesis.cancel();
+  cancelGlobalSpeech(window);
   const utterance = new SpeechSynthesisUtterance(concise);
   utterance.rate = 1;
   utterance.pitch = 1;
@@ -7717,10 +8108,19 @@ function dispatchAndRender(action) {
     };
   }
   if (["STOP", "CANCEL", "UNDO"].includes(action.type)) {
+    cancelGlobalSpeech(window);
     activeAIAbort?.abort();
     activeAIAbort = null;
   }
   const result = machine.dispatch(action);
+  if (
+    ["stop", "cancel", "undo"].includes(result.effect) &&
+    !["STOP", "CANCEL", "UNDO"].includes(action.type)
+  ) {
+    cancelGlobalSpeech(window);
+    activeAIAbort?.abort();
+    activeAIAbort = null;
+  }
   mobileMetrics.noteAction(action, result);
   if (result.effect === "access-request") {
     transitionToSensorFree(action.source || "access-option");
@@ -7882,11 +8282,9 @@ function renderConversation() {
 }
 
 function renderChoices() {
-  const optionIds = machine.state.options.map((candidate) => candidate.id);
   const compactViewport =
     window.innerWidth <= 600 ||
     (window.innerWidth > window.innerHeight && window.innerHeight <= 500);
-  const scope = `${machine.state.mode}:${optionIds.join("|")}`;
   let visibleOptions = machine.state.options;
   let choiceWindow = null;
   if (compactViewport && machine.state.options.length > 4) {
@@ -7910,11 +8308,11 @@ function renderChoices() {
   }
   visibleChoiceIds = visibleOptions.map((option) => option.id);
   const visibleSet = new Set(visibleChoiceIds);
-  const signature = `${scope}:${compactViewport}:${choiceWindow?.page || 0}`;
-  const optionSignature = `${machine.state.mode}:${machine.state.options
-    .map((candidate) => candidate.id)
-    .join("|")}`;
-  if (!lastChoiceSignature.startsWith(optionSignature)) {
+  const signature = exactChoiceSignature(
+    machine.state.mode,
+    machine.state.options,
+  );
+  if (lastChoiceSignature !== signature) {
     elements.choiceLayer.replaceChildren();
     for (const candidate of machine.state.options) {
       const button = document.createElement("button");
@@ -7922,35 +8320,36 @@ function renderChoices() {
       const detail = document.createElement("small");
       button.type = "button";
       button.className = "choice";
-      button.dataset.optionId = candidate.id;
-      button.disabled = replayLocked || machine.state.conversation.pending;
-      button.setAttribute(
-        "aria-label",
-        `${candidate.label}. ${candidate.detail}. Highlight only; separate confirmation required.`,
-      );
-      title.textContent = candidate.label;
-      detail.textContent = candidate.detail;
       button.append(title, detail);
       button.addEventListener("click", () => {
+        const optionId = button.dataset.optionId;
+        if (!optionId) {
+          return;
+        }
         dispatchAndRender({
           type: "HIGHLIGHT",
-          id: candidate.id,
+          id: optionId,
           source: "touch",
         });
       });
       elements.choiceLayer.append(button);
     }
   }
-  lastChoiceSignature = `${optionSignature}:${signature}`;
+  lastChoiceSignature = signature;
 
-  for (const button of elements.choiceLayer.querySelectorAll(".choice")) {
-    const highlighted = button.dataset.optionId === machine.state.highlight;
-    button.dataset.phoneHidden = String(!visibleSet.has(button.dataset.optionId));
-    button.disabled = replayLocked || machine.state.conversation.pending;
-    button.dataset.highlighted = String(highlighted);
-    button.dataset.armed = String(highlighted && machine.state.armed);
-    button.setAttribute("aria-pressed", String(highlighted));
-  }
+  [...elements.choiceLayer.querySelectorAll(".choice")].forEach(
+    (button, index) => {
+      applyChoicePresentation(
+        button,
+        choicePresentation(machine.state.options[index], index, {
+          highlightedId: machine.state.highlight,
+          armed: machine.state.armed,
+          disabled: replayLocked || machine.state.conversation.pending,
+          visibleIds: visibleSet,
+        }),
+      );
+    },
+  );
   requestAnimationFrame(layoutChoices);
 }
 
@@ -7967,8 +8366,27 @@ function layoutChoices() {
   if (!width || !buttons.length) {
     return;
   }
-  const radius =
-    width * (machine.state.mode === "tunnel" ? 0.335 : machine.state.mode === "orbit" ? 0.34 : 0.35);
+  const choiceRects = buttons.map((button) => button.getBoundingClientRect());
+  const centerRect = elements.centerOrb.getBoundingClientRect();
+  const geometry = radialChoiceGeometry({
+    stageDiameter: width,
+    choiceWidth: Math.max(
+      ...buttons.map((button, index) => button.offsetWidth || choiceRects[index].width),
+    ),
+    choiceHeight: Math.max(
+      ...buttons.map((button, index) => button.offsetHeight || choiceRects[index].height),
+    ),
+    centerDiameter: Math.max(centerRect.width, centerRect.height),
+    choiceCount: buttons.length,
+    radiusRatio:
+      machine.state.mode === "tunnel"
+        ? 0.335
+        : machine.state.mode === "orbit"
+          ? 0.34
+          : 0.35,
+  });
+  elements.orbStage.dataset.layoutSafe = String(geometry.safe);
+  const radius = geometry.radius;
   buttons.forEach((button, index) => {
     const angle = -Math.PI / 2 + (index / buttons.length) * Math.PI * 2;
     button.style.setProperty("--x", `${Math.cos(angle) * radius}px`);
@@ -8512,9 +8930,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     interruptionPending = true;
     mobileMetrics.beginInterruption();
-    if (typeof speechSynthesis !== "undefined") {
-      speechSynthesis.cancel();
-    }
+    cancelGlobalSpeech(window);
     if (sensorController) {
       transitionToSensorFree("background-interruption");
     } else {
@@ -8540,9 +8956,7 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("pagehide", () => {
   activeAIAbort?.abort();
   activeAIAbort = null;
-  if (typeof speechSynthesis !== "undefined") {
-    speechSynthesis.cancel();
-  }
+  cancelGlobalSpeech(window);
   if (machine.state.status !== "idle") {
     machine.dispatch({ type: "PAGEHIDE", source: "pagehide" });
   }

@@ -1,5 +1,14 @@
 import { commitSensorFreeAfterTeardown } from "./core.mjs";
 
+function cancelGlobalSpeech(globalObject = globalThis) {
+  try {
+    globalObject?.speechSynthesis?.cancel?.();
+    return typeof globalObject?.speechSynthesis?.cancel === "function";
+  } catch {
+    return false;
+  }
+}
+
 function performSensorFreeTransition({
   machine,
   controller,
@@ -7,7 +16,9 @@ function performSensorFreeTransition({
   at,
   resume = false,
   render = () => {},
+  globalObject = globalThis,
 }) {
+  cancelGlobalSpeech(globalObject);
   if (controller) {
     controller.stop("sensor-free transition");
   }
@@ -124,4 +135,8 @@ class RadialAimCoordinator {
   }
 }
 
-export { RadialAimCoordinator, performSensorFreeTransition };
+export {
+  RadialAimCoordinator,
+  cancelGlobalSpeech,
+  performSensorFreeTransition,
+};

@@ -19,6 +19,7 @@ const [
   sensors,
   session,
   mobile,
+  choices,
   core,
   packageText,
   build,
@@ -36,6 +37,7 @@ const [
     read("src/sensors.mjs"),
     read("src/session.mjs"),
     read("src/mobile.mjs"),
+    read("src/choices.mjs"),
     read("src/core.mjs"),
     read("package.json"),
     read("scripts/build.mjs"),
@@ -61,6 +63,24 @@ function check(name, body) {
   } catch (error) {
     checks.push({ name, pass: false, error: error.message });
   }
+}
+
+function cssBlock(source, marker) {
+  const markerAt = source.indexOf(marker);
+  assert.ok(markerAt >= 0, `missing ${marker}`);
+  const openAt = source.indexOf("{", markerAt);
+  let depth = 0;
+  for (let index = openAt; index < source.length; index += 1) {
+    if (source[index] === "{") {
+      depth += 1;
+    } else if (source[index] === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(markerAt, index + 1);
+      }
+    }
+  }
+  throw new Error(`unclosed ${marker}`);
 }
 
 check("generated artifact has no unresolved build markers", () => {
@@ -169,6 +189,7 @@ check("application CSP permits only same-origin companion networking", () => {
   assert.match(html, /connect-src 'self'/);
   assert.match(html, /worker-src 'self'/);
   assert.match(ai, /endpoint = "\/api\/chat"/);
+  assert.match(ai, /this\.fetchImpl\("\/api\/session"/);
   assert.match(ai, /credentials: "same-origin"/);
   assert.match(ai, /cache: "no-store"/);
   assert.match(ai, /redirect: "error"/);
@@ -209,6 +230,11 @@ check("one browser-native media lifecycle has race and cleanup guards", () => {
   assert.match(sensors, /this\.streams\.clear\(\)/);
   assert.match(sensors, /enableMicrophone/);
   assert.match(sensors, /enableCamera/);
+  assert.match(sensors, /function streamHasLiveTrack/);
+  assert.match(sensors, /handleTrackEnded/);
+  assert.match(sensors, /this\.releaseStream\(stream\)/);
+  assert.match(sensors, /this\.cameraStream !== acquired/);
+  assert.match(sensors, /streamHasLiveTrack\(acquired, "video"\)/);
   assert.match(app, /window\.addEventListener\("pagehide"/);
   assert.match(app, /event\.persisted/);
 });
@@ -231,10 +257,14 @@ check("fresh frame content and delayed detector results are independently guarde
 });
 
 check("sensor-free transitions tear down before accessible render", () => {
+  const cancelAt = session.indexOf("cancelGlobalSpeech(globalObject)");
   const stopAt = session.indexOf('controller.stop("sensor-free transition")');
   const commitAt = session.indexOf("const result = commitSensorFreeAfterTeardown");
   const renderAt = session.indexOf("render();");
-  assert.ok(stopAt >= 0 && commitAt > stopAt && renderAt > commitAt);
+  assert.ok(cancelAt >= 0 && stopAt > cancelAt && commitAt > stopAt && renderAt > commitAt);
+  assert.match(app, /\["STOP", "CANCEL", "UNDO"\]\.includes\(action\.type\)/);
+  assert.match(app, /cancelGlobalSpeech\(window\)/);
+  assert.match(sensors, /cancelGlobalSpeech\(globalThis\)/);
   assert.match(core, /access-request/);
   assert.match(core, /SENSOR_FREE_AUTHORITY/);
   assert.match(app, /sensorTransitioning/);
@@ -300,6 +330,10 @@ check("AI adapters provide offline default and strict same-origin failover", () 
   assert.match(ai, /preferCompanion = false/);
   assert.match(ai, /Companion unavailable/);
   assert.match(ai, /conversation_history/);
+  assert.match(ai, /CLIENT_REQUEST_BUDGET_BYTES = 60 \* 1024/);
+  assert.match(ai, /new TextEncoder\(\)/);
+  assert.match(ai, /conversation_history\.shift\(\)/);
+  assert.match(ai, /fitAIRequestToByteBudget/);
   assert.match(core, /conversation\.turns/);
   assert.match(core, /publicConversationSummary/);
   assert.match(core, /events: this\.state\.events\.map\(publicEvent\)/);
@@ -323,6 +357,16 @@ check("stdlib companion keeps credentials server-side and validates strictly", (
   assert.match(server, /set\(payload\) != ALLOWED_REQUEST_KEYS/);
   assert.match(server, /Cache-Control", "no-store"/);
   assert.match(server, /parsed_path = urlsplit\(self\.path\)/);
+  assert.match(server, /DEFAULT_ALLOWED_HOSTS/);
+  assert.match(server, /configured_allowed_hosts/);
+  assert.match(server, /_validate_request_context/);
+  assert.match(server, /require_origin=True/);
+  assert.match(server, /SESSION_COOKIE_NAME/);
+  assert.match(server, /parsed_path\.path == "\/api\/session"/);
+  assert.match(server, /secrets\.token_urlsafe\(32\)/);
+  assert.match(server, /secrets\.compare_digest/);
+  assert.match(server, /HttpOnly; SameSite=Strict/);
+  assert.doesNotMatch(server, /Access-Control-Allow-Origin/);
   assert.doesNotMatch(html, /server-only-secret|api[_-]?key/i);
 });
 
@@ -333,7 +377,7 @@ check("PWA manifest and service worker cache only local static allowlist", () =>
   assert.equal(manifest.scope, "./");
   assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512"));
-  assert.match(serviceWorker, /adaptive-orb-static-v3/);
+  assert.match(serviceWorker, /adaptive-orb-static-v4/);
   assert.match(serviceWorker, /STATIC_ASSETS/);
   assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.match(serviceWorker, /ACTIVATE_UPDATE/);
@@ -420,10 +464,29 @@ check("mobile-first contract is progressive, responsive, and eyes-up", () => {
   assert.match(styles, /env\(safe-area-inset-right\)/);
   assert.match(styles, /min-height: 44px/);
   assert.match(styles, /overflow-x: clip/);
+  const narrowBlock = cssBlock(styles, "@media (max-width: 520px)");
+  const portraitBlock = cssBlock(
+    styles,
+    "@media (orientation: portrait) and (max-width: 600px)",
+  );
+  const landscapeBlock = cssBlock(
+    styles,
+    "@media (orientation: landscape) and (max-height: 500px)",
+  );
+  assert.doesNotMatch(narrowBlock, /844 × 390|orientation: landscape/);
+  assert.match(portraitBlock, /width: clamp\(76px, 24vw, 96px\)/);
+  assert.match(portraitBlock, /height: 68px/);
+  assert.match(portraitBlock, /\.orb-stage[\s\S]*min-height: 0/);
+  assert.match(landscapeBlock, /width: 90px/);
+  assert.match(landscapeBlock, /height: 56px/);
+  assert.match(portraitBlock, /data-phone-hidden="true"[\s\S]*display: none/);
+  assert.match(landscapeBlock, /data-phone-hidden="true"[\s\S]*display: none/);
   assert.equal((styles.match(/:hover/g) || []).length, 4);
   assert.ok((styles.match(/:active/g) || []).length >= 4);
   assert.match(mobile, /maximumPrimaryChoices: 4/);
   assert.match(mobile, /centerOrbMinimumPx: 112/);
+  assert.match(mobile, /function radialChoiceGeometry/);
+  assert.match(app, /radialChoiceGeometry/);
   assert.match(app, /optionIds: \[\.\.\.visibleChoiceIds\]/);
   assert.match(app, /shortSpokenSummary/);
   assert.match(app, /ORIENTATION_CHANGE/);
@@ -459,6 +522,12 @@ check("the product is one adaptive orb with three shared grammars", () => {
   assert.match(core, /history/);
   assert.match(core, /gaze-never-confirms/);
   assert.match(core, /intentionalWrongBranches/);
+  assert.match(choices, /function exactChoiceSignature/);
+  assert.match(choices, /length: normalized\.length/);
+  assert.match(choices, /canonicalChoiceValue/);
+  assert.match(choices, /button\.dataset\.optionEffect/);
+  assert.match(app, /lastChoiceSignature !== signature/);
+  assert.doesNotMatch(app, /lastChoiceSignature\.startsWith/);
 });
 
 check("deterministic query and JSON export are wired", () => {
@@ -567,6 +636,12 @@ if (process.argv.includes("--check-evidence")) {
     assert.equal(mobileEvidence.layouts.landscape.height, 390);
     assert.equal(mobileEvidence.layouts.portrait.noHorizontalOverflow, true);
     assert.equal(mobileEvidence.layouts.landscape.noHorizontalOverflow, true);
+    assert.equal(mobileEvidence.radialSafety.portrait.safe, true);
+    assert.equal(mobileEvidence.radialSafety.portrait.centerOverlap, false);
+    assert.equal(mobileEvidence.radialSafety.portrait.overflow, false);
+    assert.equal(mobileEvidence.radialSafety.landscape.safe, true);
+    assert.equal(mobileEvidence.radialSafety.landscape.centerOverlap, false);
+    assert.equal(mobileEvidence.radialSafety.landscape.overflow, false);
     assert.equal(mobileEvidence.maximumPrimaryChoices, 4);
     assert.equal(mobileEvidence.noHoverDependency, true);
     assert.deepEqual(mobileEvidence.progressivePermissions, [

@@ -22,10 +22,11 @@ function mobileLayoutForViewport(
     viewportWidth > viewportHeight ? "landscape" : "portrait";
   const usableWidth = Math.max(0, viewportWidth - left - right);
   const usableHeight = Math.max(0, viewportHeight - top - bottom);
-  const orbDiameter =
+  const targetOrbDiameter =
     orientation === "portrait"
-      ? Math.min(390, Math.max(280, usableWidth - 16))
-      : Math.min(360, Math.max(248, usableHeight - 104));
+      ? Math.min(374, Math.max(280, usableWidth - 34))
+      : Math.min(350, Math.max(248, viewportHeight * 0.82));
+  const orbDiameter = Math.min(usableWidth, targetOrbDiameter);
   return Object.freeze({
     width: viewportWidth,
     height: viewportHeight,
@@ -56,6 +57,111 @@ function phoneChoiceWindow(options, highlightedId, limit = 4) {
     end: start + visible.length,
     total: normalized.length,
     refined: normalized.length > pageSize,
+  });
+}
+
+function radialChoiceGeometry({
+  stageDiameter,
+  choiceWidth,
+  choiceHeight,
+  centerDiameter,
+  choiceCount,
+  radiusRatio = 0.35,
+  choiceScale = 1.06,
+  edgeInset = 2,
+  centerGap = 1,
+}) {
+  const stage = Math.max(1, Number(stageDiameter) || 0);
+  const width = Math.max(1, Number(choiceWidth) || 0) * choiceScale;
+  const height = Math.max(1, Number(choiceHeight) || 0) * choiceScale;
+  const centerRadius = Math.max(0, Number(centerDiameter) || 0) / 2;
+  const count = Math.max(1, Math.min(8, Math.floor(Number(choiceCount) || 1)));
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
+  const stageRadius = stage / 2;
+  const angles = Array.from(
+    { length: count },
+    (_, index) => -Math.PI / 2 + (index / count) * Math.PI * 2,
+  );
+  const maximumRadius = Math.max(
+    0,
+    Math.min(
+      ...angles.map((angle) => {
+        const cosine = Math.abs(Math.cos(angle));
+        const sine = Math.abs(Math.sin(angle));
+        const horizontal =
+          cosine < 1e-9
+            ? Number.POSITIVE_INFINITY
+            : (stageRadius - edgeInset - halfWidth) / cosine;
+        const vertical =
+          sine < 1e-9
+            ? Number.POSITIVE_INFINITY
+            : (stageRadius - edgeInset - halfHeight) / sine;
+        return Math.max(0, Math.min(horizontal, vertical));
+      }),
+    ),
+  );
+  const clearsCenter = (radius) =>
+    angles.every((angle) => {
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      const dx = Math.max(Math.abs(x) - halfWidth, 0);
+      const dy = Math.max(Math.abs(y) - halfHeight, 0);
+      return Math.hypot(dx, dy) >= centerRadius + centerGap;
+    });
+  let minimumRadius = maximumRadius;
+  const feasible = clearsCenter(maximumRadius);
+  if (feasible) {
+    let low = 0;
+    let high = maximumRadius;
+    for (let attempt = 0; attempt < 32; attempt += 1) {
+      const midpoint = (low + high) / 2;
+      if (clearsCenter(midpoint)) {
+        high = midpoint;
+      } else {
+        low = midpoint;
+      }
+    }
+    minimumRadius = high;
+  }
+  const desiredRadius = stage * Math.max(0, Number(radiusRatio) || 0);
+  const radius = feasible
+    ? Math.min(maximumRadius, Math.max(minimumRadius, desiredRadius))
+    : maximumRadius;
+  const positions = angles.map((angle) => {
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    const dx = Math.max(Math.abs(x) - halfWidth, 0);
+    const dy = Math.max(Math.abs(y) - halfHeight, 0);
+    return Object.freeze({
+      x,
+      y,
+      left: stageRadius + x - halfWidth,
+      right: stageRadius + x + halfWidth,
+      top: stageRadius + y - halfHeight,
+      bottom: stageRadius + y + halfHeight,
+      centerClearance: Math.hypot(dx, dy) - centerRadius,
+    });
+  });
+  const overflow = positions.some(
+    (position) =>
+      position.left < -1e-6 ||
+      position.top < -1e-6 ||
+      position.right > stage + 1e-6 ||
+      position.bottom > stage + 1e-6,
+  );
+  const centerOverlap = positions.some(
+    (position) => position.centerClearance < -1e-6,
+  );
+  return Object.freeze({
+    radius,
+    minimumRadius,
+    maximumRadius,
+    feasible,
+    overflow,
+    centerOverlap,
+    safe: feasible && !overflow && !centerOverlap,
+    positions: Object.freeze(positions),
   });
 }
 
@@ -311,5 +417,6 @@ export {
   MobileMetricsTracker,
   mobileLayoutForViewport,
   phoneChoiceWindow,
+  radialChoiceGeometry,
   shortSpokenSummary,
 };

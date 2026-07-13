@@ -10,6 +10,7 @@ import {
   DetectorEpochGuard,
   EpochGuard,
   FreshnessGate,
+  streamHasLiveTrack,
   stopStream,
 } from "../src/sensors.mjs";
 
@@ -784,6 +785,118 @@ test("progressive microphone then front-camera grants share one guarded lifecycl
       );
     } else {
       delete globalThis.SpeechRecognition;
+    }
+  }
+});
+
+test("ended camera tracks are released and retry reacquires before recovery", async () => {
+  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const actions = [];
+  const streams = [];
+  let requests = 0;
+  function makeCameraStream() {
+    const listeners = new Map();
+    const track = {
+      kind: "video",
+      readyState: "live",
+      stopped: false,
+      addEventListener(type, listener) {
+        listeners.set(type, listener);
+      },
+      getSettings() {
+        return { facingMode: "user" };
+      },
+      stop() {
+        this.stopped = true;
+        this.readyState = "ended";
+      },
+      end() {
+        this.readyState = "ended";
+        stream.active = false;
+        listeners.get("ended")?.();
+      },
+    };
+    const stream = {
+      active: true,
+      getTracks: () => [track],
+      getVideoTracks: () => [track],
+    };
+    streams.push({ stream, track });
+    return stream;
+  }
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      mediaDevices: {
+        async getUserMedia() {
+          requests += 1;
+          return makeCameraStream();
+        },
+      },
+    },
+  });
+  const video = {
+    dataset: {},
+    srcObject: null,
+    async play() {},
+    pause() {},
+  };
+  const machine = new AdaptiveOrbMachine({ clock: () => 40 });
+  machine.dispatch({
+    type: "START",
+    kind: "accessible",
+    generation: 1,
+    at: 0,
+  });
+  const controller = new AdaptiveSensorController({
+    video,
+    clock: () => 40,
+    onAction: (action) => {
+      actions.push(action);
+      return machine.dispatch(action);
+    },
+  });
+  try {
+    assert.equal(await controller.enableCamera(), true);
+    assert.equal(requests, 1);
+    assert.equal(streamHasLiveTrack(controller.cameraStream, "video"), true);
+    streams[0].track.end();
+    assert.equal(streams[0].track.stopped, true);
+    assert.equal(controller.cameraStream, null);
+    assert.equal(controller.stream, null);
+    assert.equal(video.srcObject, null);
+    assert.equal(streamHasLiveTrack(streams[0].stream, "video"), false);
+    assert.ok(machine.state.freezeCauses.includes("camera-lost"));
+    assert.ok(machine.state.freezeCauses.includes("content-invalid"));
+    assert.ok(
+      actions.some(
+        (action) =>
+          action.type === "SENSOR_LOSS" && action.cause === "camera-lost",
+      ),
+    );
+    assert.equal(await controller.enableCamera(), true);
+    assert.equal(requests, 2);
+    assert.notEqual(controller.cameraStream, streams[0].stream);
+    assert.equal(streamHasLiveTrack(controller.cameraStream, "video"), true);
+    assert.equal(machine.state.freezeCauses.includes("camera-lost"), false);
+    assert.ok(machine.state.freezeCauses.includes("content-invalid"));
+    const lossAt = actions.findLastIndex(
+      (action) =>
+        action.type === "SENSOR_LOSS" && action.cause === "camera-lost",
+    );
+    const recoveryAt = actions.findLastIndex(
+      (action) =>
+        action.type === "SENSOR_STATUS" &&
+        action.sensor === "camera" &&
+        action.status === "active",
+    );
+    assert.ok(recoveryAt > lossAt);
+  } finally {
+    controller.stop("ended-track-test");
+    if (originalNavigator) {
+      Object.defineProperty(globalThis, "navigator", originalNavigator);
+    } else {
+      delete globalThis.navigator;
     }
   }
 });

@@ -13,6 +13,7 @@ import {
   MOBILE_LAYOUT_CONTRACT,
   MobileMetricsTracker,
   mobileLayoutForViewport,
+  radialChoiceGeometry,
 } from "../src/mobile.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -144,6 +145,22 @@ const mobileEvidence = {
       left: 47,
       right: 47,
       bottom: 21,
+    }),
+  },
+  radialSafety: {
+    portrait: radialChoiceGeometry({
+      stageDiameter: 356,
+      choiceWidth: 93.6,
+      choiceHeight: 68,
+      centerDiameter: 124.8,
+      choiceCount: 4,
+    }),
+    landscape: radialChoiceGeometry({
+      stageDiameter: 319.8,
+      choiceWidth: 90,
+      choiceHeight: 56,
+      centerDiameter: 104,
+      choiceCount: 4,
     }),
   },
   progressivePermissions: [

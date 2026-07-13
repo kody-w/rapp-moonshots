@@ -1091,8 +1091,44 @@ button:disabled {
     padding-inline: 8px;
   }
 
-  /* Primary hardware contract: 390 × 844 portrait. */
-  @media (max-width: 600px) {
+  .orb-card,
+  .context-card {
+    padding: 12px;
+  }
+
+  .orb-stage {
+    width: 100%;
+    min-height: min(94vw, 520px);
+  }
+
+  .choice {
+    width: clamp(100px, 29vw, 126px);
+    min-height: 64px;
+    padding: 5px;
+  }
+
+  .choice small,
+  .mode-meter {
+    display: none;
+  }
+
+  .response-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .response-heading button {
+    width: 100%;
+  }
+
+  .disclosure-grid,
+  .mode-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Primary hardware contract: 390 × 844 portrait. */
+@media (orientation: portrait) and (max-width: 600px) {
     .launch-screen {
       align-items: start;
       padding:
@@ -1183,7 +1219,7 @@ button:disabled {
 
     .orb-stage {
       width: min(100%, 374px);
-      min-height: min(96vw, 374px);
+      min-height: 0;
     }
 
     .center-orb {
@@ -1199,9 +1235,22 @@ button:disabled {
     }
 
     .choice {
-      width: clamp(98px, 29vw, 116px);
+      width: clamp(76px, 24vw, 96px);
+      height: 68px;
       min-height: 68px;
       padding: 7px 5px;
+      overflow: hidden;
+    }
+
+    .choice strong {
+      display: -webkit-box;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    .choice small {
+      display: none;
     }
 
     .choice[data-phone-hidden="true"] {
@@ -1242,8 +1291,8 @@ button:disabled {
     }
   }
 
-  /* Primary compact landscape contract: 844 × 390. */
-  @media (orientation: landscape) and (max-height: 500px) {
+/* Primary compact landscape contract: 844 × 390. */
+@media (orientation: landscape) and (max-height: 500px) {
     .app-shell {
       width: 100%;
       padding:
@@ -1313,9 +1362,18 @@ button:disabled {
     }
 
     .choice {
-      width: 104px;
+      width: 90px;
+      height: 56px;
       min-height: 56px;
       padding: 4px;
+      overflow: hidden;
+    }
+
+    .choice strong {
+      display: -webkit-box;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
     }
 
     .choice small {
@@ -1340,60 +1398,6 @@ button:disabled {
       overflow: hidden;
     }
   }
-
-  .orb-card,
-  .context-card {
-    padding: 12px;
-  }
-
-  .orb-stage {
-    width: 100%;
-    min-height: min(94vw, 520px);
-  }
-
-  .choice {
-    width: clamp(100px, 29vw, 126px);
-    min-height: 64px;
-    padding: 5px;
-  }
-
-  .choice small {
-    display: none;
-  }
-
-  .mode-meter {
-    display: none;
-  }
-
-  .response-heading {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .response-heading button {
-    width: 100%;
-  }
-
-  .disclosure-grid,
-  .mode-stats {
-    grid-template-columns: 1fr;
-  }
-
-  @media (orientation: landscape) and (max-height: 620px) {
-    .orb-stage {
-      width: min(72vh, 620px);
-    }
-
-    .response-focus {
-      padding: 10px;
-    }
-
-    .conversation-landmarks {
-      max-height: 48px;
-      overflow: hidden;
-    }
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   html {

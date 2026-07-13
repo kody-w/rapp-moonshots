@@ -17,8 +17,9 @@ permission to use the app while driving or controlling safety-critical work.
 |---|---|---|
 | Prompt or model output executes code/tools | Responses use strict JSON normalization and `textContent`; suggestions only enter reversible local branches | A plausible but wrong answer can still mislead |
 | Browser obtains an API secret | Browser code knows only `/api/chat`; secret and upstream URL are server env only; generated HTML is scanned | A compromised host process can read its environment |
-| Proxy becomes openly exposed | Server bind defaults to `127.0.0.1`; non-loopback bind is explicit | Operators can intentionally expose it without TLS/auth |
-| Oversized or malformed proxy input | Exact keys, JSON content type, Content-Length, 64 KiB cap, bounded turns/text/session ID | Slow-client denial of service is not comprehensively mitigated |
+| Proxy becomes openly exposed or DNS-rebound | Bind defaults to `127.0.0.1`; Host is limited to loopback plus explicit allowlist; static and API requests reject unapproved Host/Origin before routing | Operators can explicitly allow and expose a host without TLS |
+| Cross-site request reaches Brainstem | A no-store same-origin `/api/session` bootstrap issues an unguessable per-process `HttpOnly; SameSite=Strict` cookie; chat requires that cookie and exact same-origin Origin; static/cache responses carry no token and there is no wildcard CORS | A same-origin script compromise can use the current session |
+| Oversized or malformed proxy input | Client UTF-8-measures a 60 KiB body and removes oldest history first; server independently requires exact keys, JSON content type, Content-Length, a 64 KiB cap, and bounded turns/text/session ID | Slow-client denial of service is not comprehensively mitigated |
 | SSRF through browser input | Target URL comes only from server env, never request JSON; URL credentials/fragments are rejected | A malicious operator can configure a harmful target |
 | Secret appears in logs/errors | Safe logger emits method/path/status only; upstream failures return a generic code | Reverse proxies need equivalent redaction |
 | Brainstem hangs or returns malformed output | Bounded timeout/response size and strict normalized shape; app visibly falls back to demo | The failed request still disclosed explicit conversation text to the configured service |
@@ -31,10 +32,12 @@ permission to use the app while driving or controlling safety-critical work.
 | Center return completes a nod | Center resets aim, dwell, local arm, and gesture identity epoch | Coarse motion outside center may resemble a nod |
 | Choice changes while gesture is armed | Gesture epoch binds to highlighted choice identity and resets on change | Webcam motion remains approximate |
 | Invalid/occluded camera keeps prior aim | Invalid content immediately revokes local and machine aim/arm, freezes, and requires fresh content plus accepted processing | Conservative thresholds can interrupt a valid still user |
+| Ended media track remains truthy and skips permission retry | End handler revokes camera-derived state, stops/releases the owned stream, clears references/preview, and active short-circuit requires a live matching track; retry reacquires before active | Browser hardware indicators and permission prompts remain platform-controlled |
 | Delayed FaceDetector result revives old content | Lifecycle, content, detector identity, request ID, freshness, and accepted-sample checks all must match | Experimental browser APIs vary |
 | Detector copy remains in memory | Every derived detector buffer is registered and zeroed on result, loss, replacement, or shutdown | Privileged heap inspection is out of scope |
 | Permission/play resolves after shutdown | Lifecycle generation is rechecked after each await and late tracks are stopped | Hardware indicator timing is browser-controlled |
 | Sensor-free UI appears before media stops | One coordinator stops tracks, recognition, synthesis, timers, buffers, and pending detector work before accessible commit/render | OS indicators may extinguish asynchronously |
+| Speech continues after cancel/undo without a sensor controller | Stop, cancel, undo, sensor-free transition, teardown, background, and pagehide call one global synthesis cancellation path independently of controller presence | The speech engine may report cancellation asynchronously |
 | Speech recognizes synthesized AI response | Recognition is detached during synthesis and restarts only under the current generation | Vendor event ordering can race |
 | Recognition retries forever | Terminal errors stop; transient restart is bounded and generation-guarded | iOS/vendor outages require touch/switch parity |
 | Launch requests unnecessary sensors | Sensor-free AI is useful first; microphone and front camera are separate, explicit later permissions | Browser permission copy remains browser-controlled |
@@ -48,6 +51,8 @@ permission to use the app while driving or controlling safety-critical work.
 | Earcon is mistaken for confirmation | Captions state earcon meaning; confirmation still follows machine result | Audio can be inaudible in noisy environments |
 | Haptic surprises or implies consent | Haptics are capability-detected, hidden when absent, off by default, and optional | Vibration semantics vary by device/browser |
 | Mobile UI clips or requires hover | 390×844 and 844×390 contracts enforce safe areas, overflow clipping, 44 px targets, and active/touch equivalents | Automated CSS checks are not a full device/accessibility audit |
+| Landscape contract is trapped in a narrow portrait query | Portrait and 844×390 landscape media blocks are independent; radial geometry caps radius and tests edge/center clearance with hidden choices removed | Browser text scaling can still require additional scrolling |
+| Reused choice ID shows stale text or prompt | Full canonical choice signature includes length and every semantic/executable field; changed content rebuilds nodes and every render refreshes text, ARIA, and data while clicks resolve the current ID | Model wording can still be misleading |
 | Mode change loses context or safety | One machine owns conversation, task, undo snapshots, freezes, freshness, and metrics | Rendering defects could misstate state |
 | Replay is perturbed by user input | Replay authority rejects pointer, voice, keyboard, sensor, and external state actions; exact fingerprint precedes success | Rendering is not fingerprinted |
 | bfcache revives torn media/AI state | `pagehide` aborts AI, stops media, invalidates lifecycle; persisted `pageshow` reloads | Reload needs another permission gesture |
@@ -64,6 +69,10 @@ configured Brainstem. The app stores neither. Web Speech may independently use
 browser/OS vendor processing and is disclosed before permission.
 Terminal recognition denial stops the app-owned microphone track; it cannot
 cancel audio already sent to a browser/OS speech vendor.
+
+The companion authorization cookie contains only a random process token. It is
+HttpOnly, same-site, memory-invalidated on server restart, and is neither a user
+identity nor analytics identifier.
 
 Video is reduced to a transient 48×36 analysis canvas. Raw pixels are zeroed
 and the canvas is cleared each turn. One rolling grayscale comparison and at

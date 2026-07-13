@@ -1,3 +1,5 @@
+import { cancelGlobalSpeech } from "./session.mjs";
+
 class EpochGuard {
   constructor(initialGeneration = 0) {
     this.generation = Math.max(0, Number(initialGeneration) || 0);
@@ -190,6 +192,23 @@ function stopStream(stream) {
   }
 }
 
+function streamHasLiveTrack(stream, kind) {
+  if (
+    !stream ||
+    stream.active === false ||
+    typeof stream.getTracks !== "function"
+  ) {
+    return false;
+  }
+  return stream
+    .getTracks()
+    .some(
+      (track) =>
+        (!kind || track.kind === kind) &&
+        track.readyState !== "ended",
+    );
+}
+
 function clamp(value, minimum = 0, maximum = 1) {
   return Math.min(maximum, Math.max(minimum, value));
 }
@@ -347,8 +366,21 @@ class AdaptiveSensorController {
   }
 
   async enableMicrophone() {
-    if (this.microphoneStream) {
+    if (streamHasLiveTrack(this.microphoneStream, "audio")) {
       return true;
+    }
+    if (this.microphoneStream) {
+      if (
+        this.active &&
+        this.lifecycle.isCurrent(this.lifecycleGeneration)
+      ) {
+        this.handleTrackEnded(
+          this.microphoneStream,
+          this.lifecycleGeneration,
+        );
+      } else {
+        this.releaseStream(this.microphoneStream);
+      }
     }
     const generation = this.ensureProgressiveLifecycle();
     this.onAction({
@@ -373,6 +405,9 @@ class AdaptiveSensorController {
       if (!this.active || !this.lifecycle.isCurrent(generation)) {
         stopStream(acquired);
         return false;
+      }
+      if (!streamHasLiveTrack(acquired, "audio")) {
+        throw new Error("microphone-track-not-live");
       }
       this.microphoneStream = acquired;
       this.registerStream(acquired);
@@ -412,8 +447,18 @@ class AdaptiveSensorController {
   }
 
   async enableCamera() {
-    if (this.cameraStream) {
+    if (streamHasLiveTrack(this.cameraStream, "video")) {
       return true;
+    }
+    if (this.cameraStream) {
+      if (
+        this.active &&
+        this.lifecycle.isCurrent(this.lifecycleGeneration)
+      ) {
+        this.handleTrackEnded(this.cameraStream, this.lifecycleGeneration);
+      } else {
+        this.releaseStream(this.cameraStream);
+      }
     }
     const generation = this.ensureProgressiveLifecycle();
     this.onAction({
@@ -440,6 +485,9 @@ class AdaptiveSensorController {
         stopStream(acquired);
         return false;
       }
+      if (!streamHasLiveTrack(acquired, "video")) {
+        throw new Error("camera-track-not-live");
+      }
       const videoTrack = acquired.getVideoTracks?.()[0];
       const facingMode = videoTrack?.getSettings?.().facingMode;
       this.frontCameraMirrored = facingMode !== "environment";
@@ -457,7 +505,12 @@ class AdaptiveSensorController {
         }
         await this.video.play();
       }
-      if (!this.active || !this.lifecycle.isCurrent(generation)) {
+      if (
+        !this.active ||
+        !this.lifecycle.isCurrent(generation) ||
+        this.cameraStream !== acquired ||
+        !streamHasLiveTrack(acquired, "video")
+      ) {
         this.releaseStream(acquired);
         if (this.video) {
           this.video.srcObject = null;
@@ -543,6 +596,12 @@ class AdaptiveSensorController {
         stopStream(acquired);
         return false;
       }
+      if (
+        !streamHasLiveTrack(acquired, "audio") ||
+        !streamHasLiveTrack(acquired, "video")
+      ) {
+        throw new Error("media-tracks-not-live");
+      }
 
       this.stream = acquired;
       this.streams.add(acquired);
@@ -563,8 +622,14 @@ class AdaptiveSensorController {
         }
         await this.video.play();
       }
-      if (!this.active || !this.lifecycle.isCurrent(generation)) {
-        stopStream(acquired);
+      if (
+        !this.active ||
+        !this.lifecycle.isCurrent(generation) ||
+        this.stream !== acquired ||
+        !streamHasLiveTrack(acquired, "audio") ||
+        !streamHasLiveTrack(acquired, "video")
+      ) {
+        this.releaseStream(acquired);
         if (this.video) {
           this.video.srcObject = null;
         }
@@ -613,25 +678,79 @@ class AdaptiveSensorController {
     }
   }
 
+  handleTrackEnded(stream, generation) {
+    if (
+      !this.active ||
+      !this.lifecycle.isCurrent(generation) ||
+      (!this.streams.has(stream) &&
+        this.microphoneStream !== stream &&
+        this.cameraStream !== stream)
+    ) {
+      return;
+    }
+    const microphoneEnded = this.microphoneStream === stream;
+    const cameraEnded = this.cameraStream === stream;
+    const at = this.clock();
+    if (cameraEnded) {
+      this.cancelFrameLoop();
+      this.invalidateContent(generation, at);
+      if (this.previousGray) {
+        this.previousGray.fill(0);
+        this.previousGray = null;
+      }
+      if (this.analysisContext && this.analysisCanvas) {
+        this.analysisContext.clearRect(
+          0,
+          0,
+          this.analysisCanvas.width,
+          this.analysisCanvas.height,
+        );
+      }
+      if (this.video?.srcObject === stream) {
+        try {
+          this.video.pause();
+        } catch {
+          // A detached preview may not be pausable.
+        }
+        this.video.srcObject = null;
+      }
+    }
+    if (microphoneEnded) {
+      clearTimeout(this.recognitionRetry);
+      this.recognitionRetry = null;
+      this.detachRecognition();
+    }
+    this.releaseStream(stream);
+    for (const sensor of [
+      ...(cameraEnded ? ["camera"] : []),
+      ...(microphoneEnded ? ["microphone"] : []),
+    ]) {
+      this.onAction({
+        type: "SENSOR_LOSS",
+        cause: `${sensor}-lost`,
+        sensor,
+        at,
+      });
+    }
+    this.onCaption(
+      "A media track ended. Capture was released; retry permission to reacquire it.",
+    );
+  }
+
   attachTrackSafety(stream, generation) {
     for (const track of stream.getTracks()) {
       const sensor = track.kind === "audio" ? "microphone" : "camera";
       track.addEventListener(
         "ended",
-        () => {
-          if (this.active && this.lifecycle.isCurrent(generation)) {
-            this.onAction({
-              type: "SENSOR_LOSS",
-              cause: `${sensor}-lost`,
-              sensor,
-              at: this.clock(),
-            });
-          }
-        },
+        () => this.handleTrackEnded(stream, generation),
         { once: true },
       );
       track.addEventListener("mute", () => {
-        if (this.active && this.lifecycle.isCurrent(generation)) {
+        if (
+          this.active &&
+          this.lifecycle.isCurrent(generation) &&
+          (this.microphoneStream === stream || this.cameraStream === stream)
+        ) {
           this.onAction({
             type: "SENSOR_LOSS",
             cause: `${sensor}-lost`,
@@ -641,7 +760,12 @@ class AdaptiveSensorController {
         }
       });
       track.addEventListener("unmute", () => {
-        if (this.active && this.lifecycle.isCurrent(generation)) {
+        if (
+          this.active &&
+          this.lifecycle.isCurrent(generation) &&
+          (this.microphoneStream === stream || this.cameraStream === stream) &&
+          streamHasLiveTrack(stream, track.kind)
+        ) {
           this.onAction({
             type: "SENSOR_STATUS",
             sensor,
@@ -681,9 +805,38 @@ class AdaptiveSensorController {
     });
   }
 
+  cancelFrameLoop() {
+    if (this.frameHandle === null) {
+      return;
+    }
+    if (
+      this.frameHandleKind === "video" &&
+      this.video &&
+      typeof this.video.cancelVideoFrameCallback === "function"
+    ) {
+      this.video.cancelVideoFrameCallback(this.frameHandle);
+    } else if (
+      this.frameHandleKind === "animation" &&
+      typeof globalThis.cancelAnimationFrame === "function"
+    ) {
+      globalThis.cancelAnimationFrame(this.frameHandle);
+    } else if (this.frameHandleKind === "timer") {
+      clearTimeout(this.frameHandle);
+    }
+    this.frameHandle = null;
+    this.frameHandleKind = null;
+  }
+
   startFrameLoop(generation) {
+    this.cancelFrameLoop();
     const schedule = () => {
-      if (!this.active || !this.lifecycle.isCurrent(generation)) {
+      if (
+        !this.active ||
+        !this.lifecycle.isCurrent(generation) ||
+        !streamHasLiveTrack(this.cameraStream, "video")
+      ) {
+        this.frameHandle = null;
+        this.frameHandleKind = null;
         return;
       }
       if (this.video && typeof this.video.requestVideoFrameCallback === "function") {
@@ -1445,7 +1598,7 @@ class AdaptiveSensorController {
         // Recognition may already be ending.
       }
     }
-    speechSynthesis.cancel();
+    cancelGlobalSpeech(globalThis);
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.05;
     const finish = () => {
@@ -1488,23 +1641,7 @@ class AdaptiveSensorController {
   }
 
   cleanupRuntime(reportOff) {
-    if (this.frameHandle !== null) {
-      if (
-        this.frameHandleKind === "video" &&
-        this.video &&
-        typeof this.video.cancelVideoFrameCallback === "function"
-      ) {
-        this.video.cancelVideoFrameCallback(this.frameHandle);
-      } else if (
-        this.frameHandleKind === "animation" &&
-        typeof globalThis.cancelAnimationFrame === "function"
-      ) {
-        globalThis.cancelAnimationFrame(this.frameHandle);
-      } else if (this.frameHandleKind === "timer") {
-        clearTimeout(this.frameHandle);
-      }
-    }
-    this.frameHandle = null;
+    this.cancelFrameLoop();
     clearInterval(this.watchdog);
     this.watchdog = null;
     clearTimeout(this.detectorTimeout);
@@ -1512,9 +1649,7 @@ class AdaptiveSensorController {
     clearTimeout(this.recognitionRetry);
     this.recognitionRetry = null;
     this.detachRecognition();
-    if (typeof speechSynthesis !== "undefined") {
-      speechSynthesis.cancel();
-    }
+    cancelGlobalSpeech(globalThis);
     const streams = new Set(this.streams);
     if (this.stream) {
       streams.add(this.stream);
@@ -1596,5 +1731,6 @@ export {
   EpochGuard,
   FreshnessGate,
   clamp,
+  streamHasLiveTrack,
   stopStream,
 };

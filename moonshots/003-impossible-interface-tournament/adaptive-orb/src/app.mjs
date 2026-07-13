@@ -2,12 +2,22 @@ import { AI_SCENARIOS, AdaptiveAIAdapter, createEphemeralSessionId } from "./ai.
 import { buildBrowserLaunchUrl, describeRuntimeCapabilities, detectRuntimeCapabilities } from "./capabilities.mjs";
 import { AdaptiveOrbMachine, CONVERSATION_DETERMINISTIC_SCRIPT, DWELL_TARGET_MS, EXPECTED_CONVERSATION_FINGERPRINT, choiceShapeForState, conversationFingerprintFor, dispatchDeterministicStep, verifyConversationRecord } from "./core.mjs";
 import { AdaptiveSensorController } from "./sensors.mjs";
-import { RadialAimCoordinator, performSensorFreeTransition } from "./session.mjs";
+import {
+  RadialAimCoordinator,
+  cancelGlobalSpeech,
+  performSensorFreeTransition,
+} from "./session.mjs";
 import { renderTournamentComparison } from "./comparison.mjs";
+import {
+  applyChoicePresentation,
+  choicePresentation,
+  exactChoiceSignature,
+} from "./choices.mjs";
 import {
   MobileFeedback,
   MobileMetricsTracker,
   phoneChoiceWindow,
+  radialChoiceGeometry,
   shortSpokenSummary,
 } from "./mobile.mjs";
 
@@ -528,7 +538,7 @@ function speakText(text) {
       "Speech synthesis is unavailable. The response remains visible.";
     return false;
   }
-  speechSynthesis.cancel();
+  cancelGlobalSpeech(window);
   const utterance = new SpeechSynthesisUtterance(concise);
   utterance.rate = 1;
   utterance.pitch = 1;
@@ -641,10 +651,19 @@ function dispatchAndRender(action) {
     };
   }
   if (["STOP", "CANCEL", "UNDO"].includes(action.type)) {
+    cancelGlobalSpeech(window);
     activeAIAbort?.abort();
     activeAIAbort = null;
   }
   const result = machine.dispatch(action);
+  if (
+    ["stop", "cancel", "undo"].includes(result.effect) &&
+    !["STOP", "CANCEL", "UNDO"].includes(action.type)
+  ) {
+    cancelGlobalSpeech(window);
+    activeAIAbort?.abort();
+    activeAIAbort = null;
+  }
   mobileMetrics.noteAction(action, result);
   if (result.effect === "access-request") {
     transitionToSensorFree(action.source || "access-option");
@@ -806,11 +825,9 @@ function renderConversation() {
 }
 
 function renderChoices() {
-  const optionIds = machine.state.options.map((candidate) => candidate.id);
   const compactViewport =
     window.innerWidth <= 600 ||
     (window.innerWidth > window.innerHeight && window.innerHeight <= 500);
-  const scope = `${machine.state.mode}:${optionIds.join("|")}`;
   let visibleOptions = machine.state.options;
   let choiceWindow = null;
   if (compactViewport && machine.state.options.length > 4) {
@@ -834,11 +851,11 @@ function renderChoices() {
   }
   visibleChoiceIds = visibleOptions.map((option) => option.id);
   const visibleSet = new Set(visibleChoiceIds);
-  const signature = `${scope}:${compactViewport}:${choiceWindow?.page || 0}`;
-  const optionSignature = `${machine.state.mode}:${machine.state.options
-    .map((candidate) => candidate.id)
-    .join("|")}`;
-  if (!lastChoiceSignature.startsWith(optionSignature)) {
+  const signature = exactChoiceSignature(
+    machine.state.mode,
+    machine.state.options,
+  );
+  if (lastChoiceSignature !== signature) {
     elements.choiceLayer.replaceChildren();
     for (const candidate of machine.state.options) {
       const button = document.createElement("button");
@@ -846,35 +863,36 @@ function renderChoices() {
       const detail = document.createElement("small");
       button.type = "button";
       button.className = "choice";
-      button.dataset.optionId = candidate.id;
-      button.disabled = replayLocked || machine.state.conversation.pending;
-      button.setAttribute(
-        "aria-label",
-        `${candidate.label}. ${candidate.detail}. Highlight only; separate confirmation required.`,
-      );
-      title.textContent = candidate.label;
-      detail.textContent = candidate.detail;
       button.append(title, detail);
       button.addEventListener("click", () => {
+        const optionId = button.dataset.optionId;
+        if (!optionId) {
+          return;
+        }
         dispatchAndRender({
           type: "HIGHLIGHT",
-          id: candidate.id,
+          id: optionId,
           source: "touch",
         });
       });
       elements.choiceLayer.append(button);
     }
   }
-  lastChoiceSignature = `${optionSignature}:${signature}`;
+  lastChoiceSignature = signature;
 
-  for (const button of elements.choiceLayer.querySelectorAll(".choice")) {
-    const highlighted = button.dataset.optionId === machine.state.highlight;
-    button.dataset.phoneHidden = String(!visibleSet.has(button.dataset.optionId));
-    button.disabled = replayLocked || machine.state.conversation.pending;
-    button.dataset.highlighted = String(highlighted);
-    button.dataset.armed = String(highlighted && machine.state.armed);
-    button.setAttribute("aria-pressed", String(highlighted));
-  }
+  [...elements.choiceLayer.querySelectorAll(".choice")].forEach(
+    (button, index) => {
+      applyChoicePresentation(
+        button,
+        choicePresentation(machine.state.options[index], index, {
+          highlightedId: machine.state.highlight,
+          armed: machine.state.armed,
+          disabled: replayLocked || machine.state.conversation.pending,
+          visibleIds: visibleSet,
+        }),
+      );
+    },
+  );
   requestAnimationFrame(layoutChoices);
 }
 
@@ -891,8 +909,27 @@ function layoutChoices() {
   if (!width || !buttons.length) {
     return;
   }
-  const radius =
-    width * (machine.state.mode === "tunnel" ? 0.335 : machine.state.mode === "orbit" ? 0.34 : 0.35);
+  const choiceRects = buttons.map((button) => button.getBoundingClientRect());
+  const centerRect = elements.centerOrb.getBoundingClientRect();
+  const geometry = radialChoiceGeometry({
+    stageDiameter: width,
+    choiceWidth: Math.max(
+      ...buttons.map((button, index) => button.offsetWidth || choiceRects[index].width),
+    ),
+    choiceHeight: Math.max(
+      ...buttons.map((button, index) => button.offsetHeight || choiceRects[index].height),
+    ),
+    centerDiameter: Math.max(centerRect.width, centerRect.height),
+    choiceCount: buttons.length,
+    radiusRatio:
+      machine.state.mode === "tunnel"
+        ? 0.335
+        : machine.state.mode === "orbit"
+          ? 0.34
+          : 0.35,
+  });
+  elements.orbStage.dataset.layoutSafe = String(geometry.safe);
+  const radius = geometry.radius;
   buttons.forEach((button, index) => {
     const angle = -Math.PI / 2 + (index / buttons.length) * Math.PI * 2;
     button.style.setProperty("--x", `${Math.cos(angle) * radius}px`);
@@ -1436,9 +1473,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     interruptionPending = true;
     mobileMetrics.beginInterruption();
-    if (typeof speechSynthesis !== "undefined") {
-      speechSynthesis.cancel();
-    }
+    cancelGlobalSpeech(window);
     if (sensorController) {
       transitionToSensorFree("background-interruption");
     } else {
@@ -1464,9 +1499,7 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("pagehide", () => {
   activeAIAbort?.abort();
   activeAIAbort = null;
-  if (typeof speechSynthesis !== "undefined") {
-    speechSynthesis.cancel();
-  }
+  cancelGlobalSpeech(window);
   if (machine.state.status !== "idle") {
     machine.dispatch({ type: "PAGEHIDE", source: "pagehide" });
   }

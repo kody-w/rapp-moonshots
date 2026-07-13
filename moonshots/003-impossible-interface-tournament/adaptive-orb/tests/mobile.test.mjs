@@ -6,6 +6,7 @@ import {
   MobileMetricsTracker,
   mobileLayoutForViewport,
   phoneChoiceWindow,
+  radialChoiceGeometry,
   shortSpokenSummary,
 } from "../src/mobile.mjs";
 
@@ -35,9 +36,45 @@ test("390x844 portrait and 844x390 landscape honor the mobile contract", () => {
   assert.equal(landscape.orientation, "landscape");
   assert.equal(portrait.noHorizontalOverflow, true);
   assert.equal(landscape.noHorizontalOverflow, true);
+  assert.equal(portrait.orbDiameter, 356);
+  assert.ok(Math.abs(landscape.orbDiameter - 319.8) < 1e-9);
   assert.equal(portrait.minimumTargetPx, 44);
   assert.ok(portrait.orbDiameter >= MOBILE_LAYOUT_CONTRACT.centerOrbMinimumPx);
   assert.ok(landscape.orbDiameter >= MOBILE_LAYOUT_CONTRACT.centerOrbMinimumPx);
+});
+
+test("portrait and landscape radial geometry clears center and viewport bounds", () => {
+  const layouts = [
+    radialChoiceGeometry({
+      stageDiameter: 286,
+      choiceWidth: 76.8,
+      choiceHeight: 68,
+      centerDiameter: 112,
+      choiceCount: 4,
+      radiusRatio: 0.35,
+    }),
+    radialChoiceGeometry({
+      stageDiameter: 303,
+      choiceWidth: 90,
+      choiceHeight: 56,
+      centerDiameter: 104,
+      choiceCount: 4,
+      radiusRatio: 0.35,
+    }),
+  ];
+  for (const layout of layouts) {
+    assert.equal(layout.feasible, true);
+    assert.equal(layout.safe, true);
+    assert.equal(layout.overflow, false);
+    assert.equal(layout.centerOverlap, false);
+    for (const position of layout.positions) {
+      assert.ok(position.left >= 0);
+      assert.ok(position.top >= 0);
+      assert.ok(position.right <= (layout === layouts[0] ? 286 : 303));
+      assert.ok(position.bottom <= (layout === layouts[0] ? 286 : 303));
+      assert.ok(position.centerClearance >= 0);
+    }
+  }
 });
 
 test("phone choices are stable four-item pages around the highlighted choice", () => {

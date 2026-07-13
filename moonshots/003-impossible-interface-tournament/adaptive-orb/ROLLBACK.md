@@ -34,8 +34,8 @@ In browser DevTools → Application:
 3. Remove the Home Screen app if installed.
 4. Reload online.
 
-The current cache is `adaptive-orb-static-v3`; the prefix-based cleanup also
-removes older v1/v2 caches.
+The current cache is `adaptive-orb-static-v4`; the prefix-based cleanup also
+removes older v1/v2/v3 caches.
 
 For a controlled same-origin console:
 
@@ -85,8 +85,10 @@ available, keep public demo AI and use **Start sensor-free AI** or
 visible sensor-free offer and **Open in Safari for live sensors** guidance; do
 not claim that installation implies hardware access. Safari must repeat its own
 runtime and permission check and may also degrade. Never weaken capability
-preflight, no-gaze-commit, freshness, request identity, same-origin, no-store,
-or static-cache allowlist gates as a workaround.
+preflight, no-gaze-commit, freshness, request identity, Host/Origin allowlists,
+the process-session cookie, no-store, request-byte budget, or static-cache
+allowlist gates as a workaround. Restarting `server.py` intentionally
+invalidates every prior companion session cookie.
 
 ## Mobile sensor fallback
 

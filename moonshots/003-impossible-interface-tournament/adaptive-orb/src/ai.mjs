@@ -233,6 +233,7 @@ const DEMO_RESPONSES = Object.freeze({
 const MAX_USER_INPUT = 4000;
 const MAX_HISTORY_TURNS = 24;
 const MAX_RESPONSE_TEXT = 12000;
+const CLIENT_REQUEST_BUDGET_BYTES = 60 * 1024;
 
 function inferScenario(text, fallback = "create") {
   const normalized = String(text || "").toLowerCase();
@@ -314,6 +315,39 @@ function validateAIRequest(value) {
     conversation_history: validateConversationHistory(value.conversation_history),
     session_id: value.session_id,
   };
+}
+
+function aiRequestByteLength(value) {
+  const serialized = JSON.stringify(value);
+  if (typeof TextEncoder === "function") {
+    return new TextEncoder().encode(serialized).byteLength;
+  }
+  return new Blob([serialized]).size;
+}
+
+function fitAIRequestToByteBudget(
+  value,
+  budgetBytes = CLIENT_REQUEST_BUDGET_BYTES,
+) {
+  const normalized = validateAIRequest(value);
+  const budget = Math.min(
+    CLIENT_REQUEST_BUDGET_BYTES,
+    Math.max(1, Number(budgetBytes) || 0),
+  );
+  const fitted = {
+    ...normalized,
+    conversation_history: [...normalized.conversation_history],
+  };
+  while (
+    fitted.conversation_history.length > 0 &&
+    aiRequestByteLength(fitted) > budget
+  ) {
+    fitted.conversation_history.shift();
+  }
+  if (aiRequestByteLength(fitted) > budget) {
+    throw new TypeError("current AI input exceeds the client byte budget");
+  }
+  return fitted;
 }
 
 function normalizeSuggestion(value, index) {
@@ -490,7 +524,7 @@ class CompanionAIAdapter {
   }
 
   async respond(request, { scenarioHint, signal } = {}) {
-    const normalized = validateAIRequest(request);
+    const normalized = fitAIRequestToByteBudget(request);
     if (typeof this.fetchImpl !== "function") {
       throw new Error("companion-fetch-unavailable");
     }
@@ -503,6 +537,19 @@ class CompanionAIAdapter {
     }
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
+      const sessionResponse = await this.fetchImpl("/api/session", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        redirect: "error",
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
+      if (!sessionResponse?.ok) {
+        throw new Error(
+          `companion-session-${sessionResponse?.status || "failed"}`,
+        );
+      }
       const response = await this.fetchImpl(this.endpoint, {
         method: "POST",
         credentials: "same-origin",
@@ -595,7 +642,7 @@ function buildBrainstemRequest(conversation) {
       content: turn.text.slice(0, MAX_USER_INPUT),
     }))
     .slice(-MAX_HISTORY_TURNS);
-  return validateAIRequest({
+  return fitAIRequestToByteBudget({
     user_input: turns[lastUserIndex].text,
     conversation_history: history,
     session_id: conversation.sessionId,
@@ -641,6 +688,7 @@ function publicConversationSummary(conversation) {
 export {
   AI_SCENARIOS,
   AdaptiveAIAdapter,
+  CLIENT_REQUEST_BUDGET_BYTES,
   CompanionAIAdapter,
   DEMO_RESPONSES,
   DemoAIAdapter,
@@ -648,7 +696,9 @@ export {
   buildBrainstemRequest,
   createEphemeralSessionId,
   demoResponseFor,
+  fitAIRequestToByteBudget,
   inferScenario,
+  aiRequestByteLength,
   normalizeAIResponse,
   publicConversationSummary,
   validateAIRequest,

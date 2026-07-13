@@ -67,10 +67,14 @@ For each request, compare:
 3. unavailable, timed-out, malformed, oversized, or stale companion response.
 
 Acceptance requires exact Brainstem request keys, no browser credential field,
-bounded response options, visible demo fallback, current request identity, and
-unchanged prior turns/task/history. Companion output is text-rendered and may
-suggest reversible branches; it cannot execute HTML, scripts, tools, or
-external actions.
+a UTF-8 body at or below the 60 KiB client budget, deterministic oldest-history
+trimming, bounded response options, visible demo fallback, current request
+identity, and unchanged prior turns/task/history. Handler tests use the no-store
+`/api/session` bootstrap, accept exact loopback Origin/Host, verify static
+responses contain no token, and reject a matching attacker-controlled
+Origin/Host pair, missing authorization, and oversized bodies. Companion output
+is text-rendered and may suggest reversible branches; it cannot execute HTML,
+scripts, tools, or external actions.
 
 ## PWA/offline protocol
 
@@ -83,7 +87,7 @@ Verify a changed `CACHE_VERSION` produces a waiting worker, **Apply app update**
 sends `ACTIVATE_UPDATE`, old versioned static caches are deleted on activation,
 and the page reloads once on controller change.
 
-This release uses `adaptive-orb-static-v3`.
+This release uses `adaptive-orb-static-v4`.
 
 ## iOS standalone capability protocol
 
@@ -115,8 +119,9 @@ live APIs.
 Run the logic/layout tests at exactly 390×844 portrait and 844×390 landscape.
 Acceptance requires:
 
-1. safe-area padding on all four edges, no horizontal overflow, and every
-   fallback action at least 44 px;
+1. independent portrait/landscape media contracts, safe-area padding on all
+   four edges, no horizontal overflow, no hidden-choice overlap, radial
+   center/edge clearance, and every fallback action at least 44 px;
 2. a center rest orb at least 112 px and no more than four primary phone petals
    until `next`/`previous` refines the set;
 3. no action available only through hover;

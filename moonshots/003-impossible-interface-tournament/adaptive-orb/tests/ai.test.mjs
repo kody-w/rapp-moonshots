@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   AdaptiveAIAdapter,
+  CLIENT_REQUEST_BUDGET_BYTES,
   CompanionAIAdapter,
   DemoAIAdapter,
   buildBrainstemRequest,
@@ -76,17 +77,46 @@ test("companion uses only the exact same-origin Brainstem request contract", asy
   });
   const result = await companion.respond(request, { scenarioHint: "plan" });
   assert.equal(result.provider, "brainstem");
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, "/api/chat");
-  assert.deepEqual(JSON.parse(calls[0].options.body), request);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].url, "/api/session");
+  assert.equal(calls[0].options.method, "POST");
   assert.equal(calls[0].options.credentials, "same-origin");
   assert.equal(calls[0].options.cache, "no-store");
-  assert.deepEqual(Object.keys(JSON.parse(calls[0].options.body)).sort(), [
+  assert.equal("body" in calls[0].options, false);
+  assert.equal(calls[1].url, "/api/chat");
+  assert.deepEqual(JSON.parse(calls[1].options.body), request);
+  assert.equal(calls[1].options.credentials, "same-origin");
+  assert.deepEqual(Object.keys(JSON.parse(calls[1].options.body)).sort(), [
     "conversation_history",
     "session_id",
     "user_input",
   ]);
-  assert.equal("Authorization" in calls[0].options.headers, false);
+  assert.equal("Authorization" in calls[1].options.headers, false);
+
+  const maxHistory = Array.from({ length: 24 }, (_, index) => ({
+    role: index % 2 === 0 ? "user" : "assistant",
+    content: `${String(index).padStart(3, "0")}${"界".repeat(3997)}`,
+  }));
+  const maxResult = await companion.respond({
+    ...request,
+    user_input: "Preserve this current input.",
+    conversation_history: maxHistory,
+  });
+  assert.equal(calls[2].url, "/api/session");
+  assert.equal(calls[3].url, "/api/chat");
+  const boundedBody = calls[3].options.body;
+  const boundedRequest = JSON.parse(boundedBody);
+  const byteLength = new TextEncoder().encode(boundedBody).byteLength;
+  assert.equal(maxResult.provider, "brainstem");
+  assert.ok(byteLength <= CLIENT_REQUEST_BUDGET_BYTES);
+  assert.ok(byteLength < 64 * 1024);
+  assert.ok(boundedRequest.conversation_history.length > 0);
+  assert.ok(boundedRequest.conversation_history.length < maxHistory.length);
+  assert.equal(boundedRequest.user_input, "Preserve this current input.");
+  assert.deepEqual(
+    boundedRequest.conversation_history,
+    maxHistory.slice(-boundedRequest.conversation_history.length),
+  );
 });
 
 test("companion failure visibly degrades to deterministic demo AI", async () => {
