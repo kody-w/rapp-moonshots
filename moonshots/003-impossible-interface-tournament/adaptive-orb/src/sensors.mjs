@@ -265,6 +265,7 @@ class AdaptiveSensorController {
       0,
       Number(recognitionRetryBaseMs) || 0,
     );
+    this.announcementEpoch = 0;
     this.speaking = false;
     this.detector = null;
     this.detectorPending = false;
@@ -1735,6 +1736,7 @@ class AdaptiveSensorController {
   }
 
   announce(text) {
+    const utteranceEpoch = ++this.announcementEpoch;
     this.onCaption(text);
     if (
       !this.active ||
@@ -1742,7 +1744,10 @@ class AdaptiveSensorController {
       typeof speechSynthesis === "undefined" ||
       typeof SpeechSynthesisUtterance === "undefined"
     ) {
-      return;
+      cancelGlobalSpeech(globalThis);
+      this.speaking = false;
+      this.recognitionExpectedEnd = false;
+      return false;
     }
     const generation = this.lifecycle.generation;
     this.speaking = true;
@@ -1758,7 +1763,10 @@ class AdaptiveSensorController {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.05;
     const finish = () => {
-      if (!this.lifecycle.isCurrent(generation)) {
+      if (
+        !this.lifecycle.isCurrent(generation) ||
+        utteranceEpoch !== this.announcementEpoch
+      ) {
         return;
       }
       this.speaking = false;
@@ -1777,6 +1785,7 @@ class AdaptiveSensorController {
     utterance.onend = finish;
     utterance.onerror = finish;
     speechSynthesis.speak(utterance);
+    return true;
   }
 
   detachRecognition() {
@@ -1819,6 +1828,7 @@ class AdaptiveSensorController {
     this.detachRecognition();
     this.recognitionRetries = 0;
     this.recognitionTransientFailures = 0;
+    this.announcementEpoch += 1;
     this.speaking = false;
     cancelGlobalSpeech(globalThis);
     const streams = new Set(this.streams);

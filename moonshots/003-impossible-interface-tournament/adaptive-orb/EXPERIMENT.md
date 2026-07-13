@@ -87,7 +87,7 @@ Verify a changed `CACHE_VERSION` produces a waiting worker, **Apply app update**
 sends `ACTIVATE_UPDATE`, old versioned static caches are deleted on activation,
 and the page reloads once on controller change.
 
-This release uses `adaptive-orb-static-v6`.
+This release uses `adaptive-orb-static-v7`.
 
 ## iOS standalone capability protocol
 
@@ -109,7 +109,10 @@ hardware under these cases:
    restart exhaustion and explicit recovery; and
 10. more than six synthesis/announce abort cycles with zero transient failures,
     a live microphone, clean foreground restart, and a separately unexpected
-    `aborted` error classified as transient.
+    `aborted` error classified as transient; and
+11. announce A immediately replaced by B, followed by A's delayed error:
+    recognition must remain stopped and B must remain speaking until B alone
+    completes and triggers exactly one restart.
 
 Acceptance requires runtime detection on every launch, no pre-permission claim
 that hardware works, useful sensor-free AI before permission, a visible

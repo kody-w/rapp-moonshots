@@ -42,6 +42,7 @@ test("generated index is self-contained and has the required product hooks", asy
   assert.match(html, /deliverForegroundAIResponse/);
   assert.match(html, /paused on background/);
   assert.match(html, /recognitionSessionStarted/);
+  assert.match(html, /utteranceEpoch !== this\.announcementEpoch/);
   assert.match(html, /unexpected-aborted/);
   assert.match(html, /kind: "ordinary-end"/);
   assert.match(html, /reason: "restart-exhausted"/);

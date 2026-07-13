@@ -365,6 +365,8 @@ check("recognition restarts distinguish clean ends and exhaust visibly", () => {
   assert.match(sensors, /recognitionSessionStarted/);
   assert.match(sensors, /recognitionTransientFailures/);
   assert.match(sensors, /recognitionExpectedEnd/);
+  assert.match(sensors, /announcementEpoch/);
+  assert.match(sensors, /utteranceEpoch !== this\.announcementEpoch/);
   assert.match(sensors, /error === "aborted"/);
   assert.match(sensors, /this\.recognitionExpectedEnd \|\| this\.speaking/);
   assert.match(sensors, /reason: error === "aborted" \? "unexpected-aborted" : error/);
@@ -411,7 +413,7 @@ check("PWA manifest and service worker cache only local static allowlist", () =>
   assert.equal(manifest.scope, "./");
   assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512"));
-  assert.match(serviceWorker, /adaptive-orb-static-v6/);
+  assert.match(serviceWorker, /adaptive-orb-static-v7/);
   assert.match(serviceWorker, /STATIC_ASSETS/);
   assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.match(serviceWorker, /ACTIVATE_UPDATE/);

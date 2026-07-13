@@ -34,8 +34,8 @@ In browser DevTools → Application:
 3. Remove the Home Screen app if installed.
 4. Reload online.
 
-The current cache is `adaptive-orb-static-v6`; the prefix-based cleanup also
-removes older v1/v2/v3/v4/v5 caches.
+The current cache is `adaptive-orb-static-v7`; the prefix-based cleanup also
+removes older v1/v2/v3/v4/v5/v6 caches.
 
 For a controlled same-origin console:
 

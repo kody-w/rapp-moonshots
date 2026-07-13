@@ -144,9 +144,11 @@ same capture-release rule. Synthesis intentionally aborts recognition; an
 `aborted` error while that abort is expected or synthesis is speaking consumes
 no failure budget, and utterance completion restarts recognition only while
 the microphone is still live and the page is foreground. An unexpected
-`aborted` error remains a bounded transient failure. Any transition back to
-sensor-free stops camera, microphone, recognition, and synthesis before
-sensor-free status renders.
+`aborted` error remains a bounded transient failure. Every narration also owns
+an utterance epoch: callbacks from speech canceled by a newer announcement
+cannot clear the newer speaking state, alter expected-abort state, or restart
+recognition. Any transition back to sensor-free stops camera, microphone,
+recognition, and synthesis before sensor-free status renders.
 
 After optional grants, the intended flow is hands-free: speak broad intent,
 hold a coarse direction to highlight, and gesture or speak to confirm. Global
