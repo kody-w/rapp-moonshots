@@ -46,6 +46,8 @@ test("generated index is self-contained and has the required product hooks", asy
   assert.match(html, /unexpected-aborted/);
   assert.match(html, /kind: "ordinary-end"/);
   assert.match(html, /reason: "restart-exhausted"/);
+  assert.match(html, /unique after normalization/);
+  assert.match(html, /ai-canceled:/);
   assert.match(html, /pendingDetectorBuffers/);
   assert.match(html, /EXPECTED_DETERMINISTIC_FINGERPRINT = "c1b6e39f"/);
   assert.match(html, /EXPECTED_CONVERSATION_FINGERPRINT = "071ba015"/);
@@ -127,6 +129,7 @@ test("mobile-first UI has progressive permissions, exact layouts, and no hover-o
   assert.match(styles, /env\(safe-area-inset-right\)/);
   assert.match(styles, /min-height: 44px/);
   assert.match(styles, /overflow-x: clip/);
+  assert.match(styles, /container-type: inline-size/);
   assert.match(styles, /\.choice\[data-phone-hidden="true"\]/);
   assert.equal((styles.match(/:hover/g) || []).length, 4);
   assert.equal((styles.match(/:active/g) || []).length >= 4, true);
@@ -145,6 +148,11 @@ test("mobile-first UI has progressive permissions, exact layouts, and no hover-o
   assert.match(portraitBlock, /\.orb-stage[\s\S]*min-height: 0/);
   assert.match(landscapeBlock, /width: 90px/);
   assert.match(landscapeBlock, /height: 56px/);
+  assert.match(landscapeBlock, /grid-template-columns: 1fr/);
+  assert.match(landscapeBlock, /@container \(min-width: 620px\)/);
+  assert.match(landscapeBlock, /width: 76px/);
+  assert.match(landscapeBlock, /height: 52px/);
+  assert.match(landscapeBlock, /max-height: none/);
   assert.match(portraitBlock, /\.choice\[data-phone-hidden="true"\][\s\S]*display: none/);
   assert.match(landscapeBlock, /\.choice\[data-phone-hidden="true"\][\s\S]*display: none/);
   assert.ok(styles.indexOf(portraitBlock) > styles.indexOf(narrowBlock));
@@ -152,6 +160,7 @@ test("mobile-first UI has progressive permissions, exact layouts, and no hover-o
 
   assert.match(mobile, /maximumPrimaryChoices: 4/);
   assert.match(mobile, /centerOrbMinimumPx: 112/);
+  assert.match(mobile, /compactLandscapeMultiColumnMinWidth: 620/);
   assert.match(app, /shortSpokenSummary/);
   assert.match(app, /visibleChoiceIds/);
   assert.match(app, /optionIds: \[\.\.\.visibleChoiceIds\]/);

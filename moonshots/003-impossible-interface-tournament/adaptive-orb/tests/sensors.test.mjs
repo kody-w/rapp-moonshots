@@ -933,6 +933,128 @@ test("stale replaced utterance cannot restart recognition during current narrati
   }
 });
 
+test("microphone regrant cancels narration before recognition starts", async () => {
+  const originalRecognition = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "SpeechRecognition",
+  );
+  const originalSynthesis = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "speechSynthesis",
+  );
+  const originalUtterance = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "SpeechSynthesisUtterance",
+  );
+  const originalNavigator = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "navigator",
+  );
+  let recognitionStarts = 0;
+  let synthesisCancels = 0;
+  let resolvePermission;
+  const permission = new Promise((resolve) => {
+    resolvePermission = resolve;
+  });
+  class RecoveryRecognition {
+    start() {
+      recognitionStarts += 1;
+      this.onstart?.();
+    }
+
+    abort() {}
+  }
+  class RecoveryUtterance {
+    constructor(text) {
+      this.text = text;
+    }
+  }
+  const utterances = [];
+  Object.defineProperty(globalThis, "SpeechRecognition", {
+    configurable: true,
+    value: RecoveryRecognition,
+  });
+  Object.defineProperty(globalThis, "SpeechSynthesisUtterance", {
+    configurable: true,
+    value: RecoveryUtterance,
+  });
+  Object.defineProperty(globalThis, "speechSynthesis", {
+    configurable: true,
+    value: {
+      cancel() {
+        synthesisCancels += 1;
+      },
+      speak(utterance) {
+        utterances.push(utterance);
+      },
+    },
+  });
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      mediaDevices: {
+        getUserMedia: () => permission,
+      },
+    },
+  });
+  const track = {
+    kind: "audio",
+    readyState: "live",
+    stopped: false,
+    addEventListener() {},
+    stop() {
+      this.stopped = true;
+      this.readyState = "ended";
+    },
+  };
+  const stream = {
+    active: true,
+    getTracks: () => [track],
+  };
+  const controller = new AdaptiveSensorController({
+    video: null,
+    recognitionRetryBaseMs: 0,
+  });
+  try {
+    const enabling = controller.enableMicrophone();
+    controller.announce("Narration during permission regrant");
+    assert.equal(controller.speaking, true);
+    assert.equal(utterances.length, 1);
+    assert.equal(recognitionStarts, 0);
+    const narrationEpoch = controller.announcementEpoch;
+
+    resolvePermission(stream);
+    assert.equal(await enabling, true);
+    assert.equal(controller.speaking, false);
+    assert.ok(controller.announcementEpoch > narrationEpoch);
+    assert.ok(synthesisCancels >= 2);
+    assert.equal(recognitionStarts, 1);
+    assert.equal(controller.microphoneStream, stream);
+
+    utterances[0].onend();
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    assert.equal(recognitionStarts, 1);
+    assert.equal(controller.recognitionRetry, null);
+    assert.equal(controller.recognitionTerminal, false);
+    assert.equal(controller.microphoneStream, stream);
+    assert.equal(track.stopped, false);
+  } finally {
+    controller.stop("microphone-regrant-narration-test");
+    for (const [name, descriptor] of [
+      ["SpeechRecognition", originalRecognition],
+      ["speechSynthesis", originalSynthesis],
+      ["SpeechSynthesisUtterance", originalUtterance],
+      ["navigator", originalNavigator],
+    ]) {
+      if (descriptor) {
+        Object.defineProperty(globalThis, name, descriptor);
+      } else {
+        delete globalThis[name];
+      }
+    }
+  }
+});
+
 test("recognition exhaustion stops capture and explicit enable recovers", async () => {
   const originalRecognition = Object.getOwnPropertyDescriptor(
     globalThis,

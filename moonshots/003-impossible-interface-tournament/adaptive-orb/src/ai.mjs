@@ -380,7 +380,10 @@ function normalizeSuggestion(value, index) {
     typeof value.id === "string" && value.id
       ? value.id
       : `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${index + 1}`;
-  const id = rawId.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80);
+  const id = rawId
+    .replace(/[^a-zA-Z0-9_-]/g, "-")
+    .slice(0, 80)
+    .toLowerCase();
   return {
     id: id.startsWith("ai-") ? id : `ai-${id}`,
     label,
@@ -453,6 +456,16 @@ function normalizeAIResponse(value, { scenarioHint = "create", provider = "demo"
   if (rawSuggestions.length < 4 || rawSuggestions.length > 8) {
     throw new TypeError("AI response must contain four to eight suggestions");
   }
+  const suggestions = rawSuggestions.map(normalizeSuggestion);
+  const suggestionIds = new Set();
+  for (const suggestion of suggestions) {
+    if (suggestionIds.has(suggestion.id)) {
+      throw new TypeError(
+        "AI response suggestion IDs must be unique after normalization",
+      );
+    }
+    suggestionIds.add(suggestion.id);
+  }
   return {
     message,
     scenario,
@@ -460,7 +473,7 @@ function normalizeAIResponse(value, { scenarioHint = "create", provider = "demo"
       typeof value.summary === "string" && value.summary.trim()
         ? value.summary.trim().slice(0, 180)
         : fallback.summary,
-    suggestions: rawSuggestions.map(normalizeSuggestion),
+    suggestions,
     shape: normalizeShape(value.shape, scenario),
     provider: provider === "brainstem" ? "brainstem" : "demo",
     degraded: value.degraded === true,

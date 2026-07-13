@@ -314,6 +314,7 @@ button:disabled {
 }
 
 .app-shell {
+  container-type: inline-size;
   width: min(1500px, 100%);
   margin: 0 auto;
   padding:
@@ -1229,6 +1230,7 @@ button:disabled {
 
     .app-shell {
       width: 100%;
+      overflow-wrap: anywhere;
       padding:
         max(10px, env(safe-area-inset-top))
         max(8px, env(safe-area-inset-right))
@@ -1371,7 +1373,7 @@ button:disabled {
     }
   }
 
-/* Primary compact landscape contract: 844 × 390. */
+/* Primary compact landscape contract: 844 × 390; zoom-safe single-column by default. */
 @media (orientation: landscape) and (max-height: 500px) {
     .app-shell {
       width: 100%;
@@ -1383,8 +1385,8 @@ button:disabled {
     }
 
     .topbar {
-      align-items: center;
-      flex-direction: row;
+      align-items: flex-start;
+      flex-direction: column;
       padding: 2px 0 6px;
     }
 
@@ -1400,51 +1402,65 @@ button:disabled {
 
     .runtime-capability,
     .permission-steps {
-      grid-template-columns: minmax(0, 1fr) minmax(220px, 0.5fr);
+      grid-template-columns: 1fr;
       gap: 8px;
       padding: 8px 10px;
     }
 
     .permission-sequence {
-      flex-wrap: nowrap;
+      display: grid;
+      grid-template-columns: 1fr;
     }
 
     .permission-sequence li {
       min-width: 0;
     }
 
+    .permission-actions {
+      width: 100%;
+      min-width: 0;
+    }
+
     .task-ribbon {
-      grid-template-columns: minmax(180px, 0.65fr) minmax(0, 1.35fr);
+      grid-template-columns: 1fr;
       padding: 8px 10px;
     }
 
+    .task-values span,
+    .task-values strong {
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
+    }
+
     .experience-grid {
-      grid-template-columns: minmax(180px, 0.55fr) minmax(350px, 1fr);
+      grid-template-columns: 1fr;
       gap: 8px;
     }
 
     .experience-grid > .context-card:last-child {
-      grid-column: 1 / -1;
+      grid-column: auto;
     }
 
     .orb-card {
-      order: 0;
+      order: -1;
+      min-width: 0;
       padding: 8px;
     }
 
     .orb-stage {
-      width: min(82vh, 350px);
-      min-height: min(82vh, 350px);
+      width: min(100%, 284px);
+      min-height: 0;
     }
 
     .center-orb {
-      width: 104px;
+      width: 112px;
     }
 
     .choice {
-      width: 90px;
-      height: 56px;
-      min-height: 56px;
+      width: 76px;
+      height: 52px;
+      min-height: 52px;
       padding: 4px;
       overflow: hidden;
     }
@@ -1470,12 +1486,69 @@ button:disabled {
     }
 
     .context-card {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
       padding: 10px;
     }
 
     .conversation-landmarks {
-      max-height: 76px;
-      overflow: hidden;
+      max-height: none;
+      overflow: visible;
+    }
+
+    /* Multi-column only above the actual minimum app content width. */
+    @container (min-width: 620px) {
+      .topbar {
+        align-items: center;
+        flex-direction: row;
+      }
+
+      .runtime-capability,
+      .permission-steps {
+        grid-template-columns: minmax(0, 1fr) minmax(220px, 0.5fr);
+      }
+
+      .permission-sequence {
+        display: flex;
+        flex-wrap: nowrap;
+      }
+
+      .task-ribbon {
+        grid-template-columns: minmax(180px, 0.65fr) minmax(0, 1.35fr);
+      }
+
+      .experience-grid {
+        grid-template-columns: minmax(180px, 0.55fr) minmax(350px, 1fr);
+      }
+
+      .experience-grid > .context-card:last-child {
+        grid-column: 1 / -1;
+      }
+
+      .orb-card {
+        order: 0;
+      }
+
+      .orb-stage {
+        width: min(82vh, 350px);
+        min-height: min(82vh, 350px);
+      }
+
+      .center-orb {
+        width: 104px;
+      }
+
+      .choice {
+        width: 90px;
+        height: 56px;
+        min-height: 56px;
+      }
+
+      .conversation-landmarks {
+        max-height: 76px;
+        overflow-y: auto;
+      }
     }
   }
 
@@ -2285,7 +2358,10 @@ function normalizeSuggestion(value, index) {
     typeof value.id === "string" && value.id
       ? value.id
       : `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${index + 1}`;
-  const id = rawId.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80);
+  const id = rawId
+    .replace(/[^a-zA-Z0-9_-]/g, "-")
+    .slice(0, 80)
+    .toLowerCase();
   return {
     id: id.startsWith("ai-") ? id : `ai-${id}`,
     label,
@@ -2358,6 +2434,16 @@ function normalizeAIResponse(value, { scenarioHint = "create", provider = "demo"
   if (rawSuggestions.length < 4 || rawSuggestions.length > 8) {
     throw new TypeError("AI response must contain four to eight suggestions");
   }
+  const suggestions = rawSuggestions.map(normalizeSuggestion);
+  const suggestionIds = new Set();
+  for (const suggestion of suggestions) {
+    if (suggestionIds.has(suggestion.id)) {
+      throw new TypeError(
+        "AI response suggestion IDs must be unique after normalization",
+      );
+    }
+    suggestionIds.add(suggestion.id);
+  }
   return {
     message,
     scenario,
@@ -2365,7 +2451,7 @@ function normalizeAIResponse(value, { scenarioHint = "create", provider = "demo"
       typeof value.summary === "string" && value.summary.trim()
         ? value.summary.trim().slice(0, 180)
         : fallback.summary,
-    suggestions: rawSuggestions.map(normalizeSuggestion),
+    suggestions,
     shape: normalizeShape(value.shape, scenario),
     provider: provider === "brainstem" ? "brainstem" : "demo",
     degraded: value.degraded === true,
@@ -2739,6 +2825,7 @@ const MOBILE_LAYOUT_CONTRACT = Object.freeze({
   minimumTargetPx: 44,
   maximumPrimaryChoices: 4,
   centerOrbMinimumPx: 112,
+  compactLandscapeMultiColumnMinWidth: 620,
 });
 
 function mobileLayoutForViewport(
@@ -2752,26 +2839,47 @@ function mobileLayoutForViewport(
   } = {},
 ) {
   const viewportWidth = Math.max(320, Number(width) || 0);
-  const viewportHeight = Math.max(320, Number(height) || 0);
+  const viewportHeight = Math.max(1, Number(height) || 0);
   const orientation =
     viewportWidth > viewportHeight ? "landscape" : "portrait";
   const usableWidth = Math.max(0, viewportWidth - left - right);
   const usableHeight = Math.max(0, viewportHeight - top - bottom);
+  const compactLandscape =
+    orientation === "landscape" && viewportHeight <= 500;
+  const availableContentWidth = Math.max(
+    0,
+    usableWidth - (compactLandscape ? 20 : 0),
+  );
+  const usesMultiColumn =
+    compactLandscape &&
+    availableContentWidth >=
+      MOBILE_LAYOUT_CONTRACT.compactLandscapeMultiColumnMinWidth;
   const targetOrbDiameter =
     orientation === "portrait"
       ? Math.min(374, Math.max(280, usableWidth - 34))
-      : Math.min(350, Math.max(248, viewportHeight * 0.82));
-  const orbDiameter = Math.min(usableWidth, targetOrbDiameter);
+      : compactLandscape && !usesMultiColumn
+        ? Math.min(284, Math.max(1, availableContentWidth - 16))
+        : Math.min(350, Math.max(248, viewportHeight * 0.82));
+  const orbDiameter = Math.min(
+    compactLandscape ? availableContentWidth : usableWidth,
+    targetOrbDiameter,
+  );
   return Object.freeze({
     width: viewportWidth,
     height: viewportHeight,
     orientation,
     usableWidth,
     usableHeight,
+    availableContentWidth,
+    compactLandscape,
+    usesMultiColumn,
+    scrollSafeSingleColumn: compactLandscape && !usesMultiColumn,
     orbDiameter,
     minimumTargetPx: MOBILE_LAYOUT_CONTRACT.minimumTargetPx,
     maximumPrimaryChoices: MOBILE_LAYOUT_CONTRACT.maximumPrimaryChoices,
-    noHorizontalOverflow: orbDiameter <= usableWidth,
+    noHorizontalOverflow:
+      orbDiameter <=
+      (compactLandscape ? availableContentWidth : usableWidth),
   });
 }
 
@@ -3960,7 +4068,7 @@ class AdaptiveOrbMachine {
         }
         return this.enterAccessibleMode(action.source || "manual", now);
       case "PAGEHIDE":
-        this.cancelPendingAI("page-hidden");
+        this.cancelPendingAI("page-hidden", now);
         this.addFreezeCause("page-hidden", now, false);
         this.state.status = "stopped";
         this.clearAim();
@@ -4676,7 +4784,7 @@ class AdaptiveOrbMachine {
   }
 
   cancel(source, now) {
-    this.cancelPendingAI("canceled");
+    this.cancelPendingAI("canceled", now);
     const hadPending = Boolean(this.state.highlight || this.state.tunnelPath.length);
     this.clearAim();
     if (this.state.tunnelPath.length) {
@@ -4691,7 +4799,7 @@ class AdaptiveOrbMachine {
   }
 
   stop(source, now) {
-    this.cancelPendingAI("stopped");
+    this.cancelPendingAI("stopped", now);
     this.addFreezeCause("user-stop", now, false);
     this.state.status = "paused";
     this.clearAim();
@@ -5012,13 +5120,14 @@ class AdaptiveOrbMachine {
     this.state.dwellMs = 0;
   }
 
-  cancelPendingAI(reason) {
+  cancelPendingAI(reason, now = this.clock()) {
     if (!this.state.conversation.pending) {
       return false;
     }
     this.state.conversation.pending = false;
     this.state.conversation.requestId += 1;
     this.state.conversation.notice = `Pending AI response ${reason}.`;
+    this.refreshOptionsAndMode(`ai-canceled:${reason}`, now);
     return true;
   }
 
@@ -5940,6 +6049,7 @@ class AdaptiveSensorController {
         at: this.clock(),
       });
       this.startWatchdog(generation);
+      this.cancelNarrationForRecognitionRecovery();
       this.startRecognition(generation);
       if (this.recognitionTerminal || !this.recognition) {
         this.releaseMicrophoneCapture(
@@ -7131,6 +7241,7 @@ class AdaptiveSensorController {
   }
 
   resetRecognitionForExplicitRecovery() {
+    this.cancelNarrationForRecognitionRecovery();
     clearTimeout(this.recognitionRetry);
     this.recognitionRetry = null;
     this.detachRecognition();
@@ -7141,6 +7252,17 @@ class AdaptiveSensorController {
     this.recognitionSessionFailed = false;
     this.recognitionExpectedEnd = false;
     this.speaking = false;
+  }
+
+  cancelNarrationForRecognitionRecovery() {
+    if (!this.speaking) {
+      return false;
+    }
+    this.announcementEpoch += 1;
+    this.speaking = false;
+    this.recognitionExpectedEnd = false;
+    cancelGlobalSpeech(globalThis);
+    return true;
   }
 
   markRecognitionUnavailable(
@@ -8313,7 +8435,10 @@ async function requestAIResponse(result) {
   }
   const deliveryToken = foregroundDelivery.capture();
   if (!foregroundDelivery.canDeliver(deliveryToken)) {
-    machine.cancelPendingAI("paused until foreground interaction");
+    machine.cancelPendingAI(
+      "paused until foreground interaction",
+      sessionNow(),
+    );
     if (foregroundDelivery.canReveal(foregroundDelivery.capture())) {
       elements.assertiveStatus.textContent =
         "AI delivery paused. Interact in the foreground or choose Repeat before speech resumes.";
@@ -9260,7 +9385,7 @@ document.addEventListener("visibilitychange", () => {
     foregroundDelivery.background();
     activeAIAbort?.abort();
     activeAIAbort = null;
-    machine.cancelPendingAI("paused on background");
+    machine.cancelPendingAI("paused on background", sessionNow());
     cancelGlobalSpeech(window);
     if (
       replayLocked ||

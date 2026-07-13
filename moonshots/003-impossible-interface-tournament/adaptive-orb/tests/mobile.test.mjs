@@ -77,6 +77,35 @@ test("portrait and landscape radial geometry clears center and viewport bounds",
   }
 });
 
+test("320x256 zoom-equivalent landscape uses scroll-safe single-column geometry", () => {
+  const zoomed = mobileLayoutForViewport(320, 256);
+  assert.equal(zoomed.width, 320);
+  assert.equal(zoomed.height, 256);
+  assert.equal(zoomed.orientation, "landscape");
+  assert.equal(zoomed.compactLandscape, true);
+  assert.equal(zoomed.availableContentWidth, 300);
+  assert.equal(zoomed.usesMultiColumn, false);
+  assert.equal(zoomed.scrollSafeSingleColumn, true);
+  assert.equal(zoomed.orbDiameter, 284);
+  assert.equal(zoomed.noHorizontalOverflow, true);
+  assert.equal(
+    MOBILE_LAYOUT_CONTRACT.compactLandscapeMultiColumnMinWidth,
+    620,
+  );
+
+  const geometry = radialChoiceGeometry({
+    stageDiameter: 282,
+    choiceWidth: 76,
+    choiceHeight: 52,
+    centerDiameter: 112,
+    choiceCount: 4,
+    radiusRatio: 0.35,
+  });
+  assert.equal(geometry.safe, true);
+  assert.equal(geometry.overflow, false);
+  assert.equal(geometry.centerOverlap, false);
+});
+
 test("phone choices are stable four-item pages around the highlighted choice", () => {
   const options = Array.from({ length: 6 }, (_, index) => ({
     id: `choice-${index + 1}`,

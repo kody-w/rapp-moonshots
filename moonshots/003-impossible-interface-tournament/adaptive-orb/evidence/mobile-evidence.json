@@ -16,7 +16,8 @@
       },
       "minimumTargetPx": 44,
       "maximumPrimaryChoices": 4,
-      "centerOrbMinimumPx": 112
+      "centerOrbMinimumPx": 112,
+      "compactLandscapeMultiColumnMinWidth": 620
     },
     "portrait": {
       "width": 390,
@@ -24,6 +25,10 @@
       "orientation": "portrait",
       "usableWidth": 390,
       "usableHeight": 763,
+      "availableContentWidth": 390,
+      "compactLandscape": false,
+      "usesMultiColumn": false,
+      "scrollSafeSingleColumn": false,
       "orbDiameter": 356,
       "minimumTargetPx": 44,
       "maximumPrimaryChoices": 4,
@@ -35,7 +40,26 @@
       "orientation": "landscape",
       "usableWidth": 750,
       "usableHeight": 369,
+      "availableContentWidth": 730,
+      "compactLandscape": true,
+      "usesMultiColumn": true,
+      "scrollSafeSingleColumn": false,
       "orbDiameter": 319.79999999999995,
+      "minimumTargetPx": 44,
+      "maximumPrimaryChoices": 4,
+      "noHorizontalOverflow": true
+    },
+    "zoomEquivalent": {
+      "width": 320,
+      "height": 256,
+      "orientation": "landscape",
+      "usableWidth": 320,
+      "usableHeight": 256,
+      "availableContentWidth": 300,
+      "compactLandscape": true,
+      "usesMultiColumn": false,
+      "scrollSafeSingleColumn": true,
+      "orbDiameter": 284,
       "minimumTargetPx": 44,
       "maximumPrimaryChoices": 4,
       "noHorizontalOverflow": true
@@ -133,6 +157,53 @@
           "top": 130.22,
           "bottom": 189.58,
           "centerClearance": 10.5
+        }
+      ]
+    },
+    "zoomEquivalent": {
+      "radius": 98.69999999999999,
+      "minimumRadius": 97.28000002112239,
+      "maximumRadius": 98.72,
+      "feasible": true,
+      "overflow": false,
+      "centerOverlap": false,
+      "safe": true,
+      "positions": [
+        {
+          "x": 6.043631953792187e-15,
+          "y": -98.69999999999999,
+          "left": 100.72,
+          "right": 181.28,
+          "top": 14.740000000000009,
+          "bottom": 69.86000000000001,
+          "centerClearance": 15.139999999999986
+        },
+        {
+          "x": 98.69999999999999,
+          "y": 0,
+          "left": 199.42,
+          "right": 279.98,
+          "top": 113.44,
+          "bottom": 168.56,
+          "centerClearance": 2.4199999999999875
+        },
+        {
+          "x": 6.043631953792187e-15,
+          "y": 98.69999999999999,
+          "left": 100.72,
+          "right": 181.28,
+          "top": 212.14,
+          "bottom": 267.26,
+          "centerClearance": 15.139999999999986
+        },
+        {
+          "x": -98.69999999999999,
+          "y": 1.2087263907584375e-14,
+          "left": 2.0200000000000102,
+          "right": 82.58000000000001,
+          "top": 113.44,
+          "bottom": 168.56,
+          "centerClearance": 2.4199999999999875
         }
       ]
     }

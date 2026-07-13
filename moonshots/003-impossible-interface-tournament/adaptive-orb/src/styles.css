@@ -234,6 +234,7 @@ button:disabled {
 }
 
 .app-shell {
+  container-type: inline-size;
   width: min(1500px, 100%);
   margin: 0 auto;
   padding:
@@ -1149,6 +1150,7 @@ button:disabled {
 
     .app-shell {
       width: 100%;
+      overflow-wrap: anywhere;
       padding:
         max(10px, env(safe-area-inset-top))
         max(8px, env(safe-area-inset-right))
@@ -1291,7 +1293,7 @@ button:disabled {
     }
   }
 
-/* Primary compact landscape contract: 844 × 390. */
+/* Primary compact landscape contract: 844 × 390; zoom-safe single-column by default. */
 @media (orientation: landscape) and (max-height: 500px) {
     .app-shell {
       width: 100%;
@@ -1303,8 +1305,8 @@ button:disabled {
     }
 
     .topbar {
-      align-items: center;
-      flex-direction: row;
+      align-items: flex-start;
+      flex-direction: column;
       padding: 2px 0 6px;
     }
 
@@ -1320,51 +1322,65 @@ button:disabled {
 
     .runtime-capability,
     .permission-steps {
-      grid-template-columns: minmax(0, 1fr) minmax(220px, 0.5fr);
+      grid-template-columns: 1fr;
       gap: 8px;
       padding: 8px 10px;
     }
 
     .permission-sequence {
-      flex-wrap: nowrap;
+      display: grid;
+      grid-template-columns: 1fr;
     }
 
     .permission-sequence li {
       min-width: 0;
     }
 
+    .permission-actions {
+      width: 100%;
+      min-width: 0;
+    }
+
     .task-ribbon {
-      grid-template-columns: minmax(180px, 0.65fr) minmax(0, 1.35fr);
+      grid-template-columns: 1fr;
       padding: 8px 10px;
     }
 
+    .task-values span,
+    .task-values strong {
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
+    }
+
     .experience-grid {
-      grid-template-columns: minmax(180px, 0.55fr) minmax(350px, 1fr);
+      grid-template-columns: 1fr;
       gap: 8px;
     }
 
     .experience-grid > .context-card:last-child {
-      grid-column: 1 / -1;
+      grid-column: auto;
     }
 
     .orb-card {
-      order: 0;
+      order: -1;
+      min-width: 0;
       padding: 8px;
     }
 
     .orb-stage {
-      width: min(82vh, 350px);
-      min-height: min(82vh, 350px);
+      width: min(100%, 284px);
+      min-height: 0;
     }
 
     .center-orb {
-      width: 104px;
+      width: 112px;
     }
 
     .choice {
-      width: 90px;
-      height: 56px;
-      min-height: 56px;
+      width: 76px;
+      height: 52px;
+      min-height: 52px;
       padding: 4px;
       overflow: hidden;
     }
@@ -1390,12 +1406,69 @@ button:disabled {
     }
 
     .context-card {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
       padding: 10px;
     }
 
     .conversation-landmarks {
-      max-height: 76px;
-      overflow: hidden;
+      max-height: none;
+      overflow: visible;
+    }
+
+    /* Multi-column only above the actual minimum app content width. */
+    @container (min-width: 620px) {
+      .topbar {
+        align-items: center;
+        flex-direction: row;
+      }
+
+      .runtime-capability,
+      .permission-steps {
+        grid-template-columns: minmax(0, 1fr) minmax(220px, 0.5fr);
+      }
+
+      .permission-sequence {
+        display: flex;
+        flex-wrap: nowrap;
+      }
+
+      .task-ribbon {
+        grid-template-columns: minmax(180px, 0.65fr) minmax(0, 1.35fr);
+      }
+
+      .experience-grid {
+        grid-template-columns: minmax(180px, 0.55fr) minmax(350px, 1fr);
+      }
+
+      .experience-grid > .context-card:last-child {
+        grid-column: 1 / -1;
+      }
+
+      .orb-card {
+        order: 0;
+      }
+
+      .orb-stage {
+        width: min(82vh, 350px);
+        min-height: min(82vh, 350px);
+      }
+
+      .center-orb {
+        width: 104px;
+      }
+
+      .choice {
+        width: 90px;
+        height: 56px;
+        min-height: 56px;
+      }
+
+      .conversation-landmarks {
+        max-height: 76px;
+        overflow-y: auto;
+      }
     }
   }
 

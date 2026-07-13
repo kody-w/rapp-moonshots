@@ -732,7 +732,7 @@ class AdaptiveOrbMachine {
         }
         return this.enterAccessibleMode(action.source || "manual", now);
       case "PAGEHIDE":
-        this.cancelPendingAI("page-hidden");
+        this.cancelPendingAI("page-hidden", now);
         this.addFreezeCause("page-hidden", now, false);
         this.state.status = "stopped";
         this.clearAim();
@@ -1448,7 +1448,7 @@ class AdaptiveOrbMachine {
   }
 
   cancel(source, now) {
-    this.cancelPendingAI("canceled");
+    this.cancelPendingAI("canceled", now);
     const hadPending = Boolean(this.state.highlight || this.state.tunnelPath.length);
     this.clearAim();
     if (this.state.tunnelPath.length) {
@@ -1463,7 +1463,7 @@ class AdaptiveOrbMachine {
   }
 
   stop(source, now) {
-    this.cancelPendingAI("stopped");
+    this.cancelPendingAI("stopped", now);
     this.addFreezeCause("user-stop", now, false);
     this.state.status = "paused";
     this.clearAim();
@@ -1784,13 +1784,14 @@ class AdaptiveOrbMachine {
     this.state.dwellMs = 0;
   }
 
-  cancelPendingAI(reason) {
+  cancelPendingAI(reason, now = this.clock()) {
     if (!this.state.conversation.pending) {
       return false;
     }
     this.state.conversation.pending = false;
     this.state.conversation.requestId += 1;
     this.state.conversation.notice = `Pending AI response ${reason}.`;
+    this.refreshOptionsAndMode(`ai-canceled:${reason}`, now);
     return true;
   }
 

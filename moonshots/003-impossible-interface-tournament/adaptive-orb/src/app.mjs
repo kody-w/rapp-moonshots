@@ -596,7 +596,10 @@ async function requestAIResponse(result) {
   }
   const deliveryToken = foregroundDelivery.capture();
   if (!foregroundDelivery.canDeliver(deliveryToken)) {
-    machine.cancelPendingAI("paused until foreground interaction");
+    machine.cancelPendingAI(
+      "paused until foreground interaction",
+      sessionNow(),
+    );
     if (foregroundDelivery.canReveal(foregroundDelivery.capture())) {
       elements.assertiveStatus.textContent =
         "AI delivery paused. Interact in the foreground or choose Repeat before speech resumes.";
@@ -1543,7 +1546,7 @@ document.addEventListener("visibilitychange", () => {
     foregroundDelivery.background();
     activeAIAbort?.abort();
     activeAIAbort = null;
-    machine.cancelPendingAI("paused on background");
+    machine.cancelPendingAI("paused on background", sessionNow());
     cancelGlobalSpeech(window);
     if (
       replayLocked ||

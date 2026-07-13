@@ -90,7 +90,9 @@ bounded context. The stdlib proxy independently enforces an exact JSON shape,
 64 KiB cap, bounded history/text, upstream timeout and response cap, no CORS,
 no-store responses, safe logs, and normalized output. Unavailable or invalid
 Brainstem output visibly falls back to deterministic demo AI with the same
-conversation intact.
+conversation intact. Suggestion IDs are canonicalized before use, and any
+duplicate—including a collision created by sanitization or prefixing—rejects
+the response before choices are exposed.
 
 ## PWA and iOS
 
@@ -114,6 +116,9 @@ conversation intact.
 - The primary contracts are 390×844 portrait and 844×390 landscape. Safe-area
   insets, dynamic viewport units, 44 px fallback targets, a 112 px+ center orb,
   no horizontal overflow, and touch/active parity are explicit.
+- At 320×256/400%-zoom-equivalent landscape, the app defaults to a vertical,
+  scroll-safe layout. A 620 px actual content-width container gate—not
+  orientation alone—enables multiple columns.
 - Phones show at most four primary petals. Cycling or saying `next`/`previous`
   refines larger sets without changing shared state.
 - The versioned service worker caches only the static shell, manifest, and local
@@ -147,8 +152,11 @@ the microphone is still live and the page is foreground. An unexpected
 `aborted` error remains a bounded transient failure. Every narration also owns
 an utterance epoch: callbacks from speech canceled by a newer announcement
 cannot clear the newer speaking state, alter expected-abort state, or restart
-recognition. Any transition back to sensor-free stops camera, microphone,
-recognition, and synthesis before sensor-free status renders.
+recognition. An explicit microphone recovery that overlaps narration first
+invalidates and cancels that utterance; a response resolving during permission
+is canceled again before recognition starts, so stale callbacks cannot restart
+twice. Any transition back to sensor-free stops camera, microphone, recognition,
+and synthesis before sensor-free status renders.
 
 After optional grants, the intended flow is hands-free: speak broad intent,
 hold a coarse direction to highlight, and gesture or speak to confirm. Global
@@ -184,6 +192,8 @@ global synthesis even when no sensor controller exists. Stop also aborts
 pending AI work and tears down camera, microphone, recognition, derived frame
 buffers, and pending detector copies. Sensor-free transitions cancel synthesis
 and stop those resources before accessible status is committed or rendered.
+Canceling pending AI also recomputes choices and automatic mode from the shared
+conversation/task state, so parity cycling never lands on an empty option set.
 
 ## Memory and export
 

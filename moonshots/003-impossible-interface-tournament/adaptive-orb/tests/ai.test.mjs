@@ -192,6 +192,44 @@ test("AI contract and response validation reject ambiguous or oversized shapes",
   );
 });
 
+test("AI response rejects suggestion IDs that collide after normalization", () => {
+  const responseWithIds = (ids) => ({
+    message: "Choose one of four bounded options.",
+    suggestions: ids.map((id, index) => ({
+      id,
+      label: `Option ${index + 1}`,
+      prompt: `Continue option ${index + 1}`,
+    })),
+  });
+
+  assert.throws(
+    () =>
+      normalizeAIResponse(
+        responseWithIds(["same", "same", "third", "fourth"]),
+      ),
+    /unique after normalization/,
+  );
+  assert.throws(
+    () =>
+      normalizeAIResponse(
+        responseWithIds([
+          "North Gate",
+          "North/Gate",
+          "third",
+          "fourth",
+        ]),
+      ),
+    /unique after normalization/,
+  );
+  assert.throws(
+    () =>
+      normalizeAIResponse(
+        responseWithIds(["ai-choice", "CHOICE", "third", "fourth"]),
+      ),
+    /unique after normalization/,
+  );
+});
+
 test("conversation request preserves memory while public summary strips all text", () => {
   const conversation = {
     sessionId: "orb-test-session",

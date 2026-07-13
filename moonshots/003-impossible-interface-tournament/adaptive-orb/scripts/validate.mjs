@@ -334,6 +334,8 @@ check("AI adapters provide offline default and strict same-origin failover", () 
   assert.match(ai, /new TextEncoder\(\)/);
   assert.match(ai, /conversation_history\.shift\(\)/);
   assert.match(ai, /fitAIRequestToByteBudget/);
+  assert.match(ai, /suggestionIds = new Set/);
+  assert.match(ai, /unique after normalization/);
   assert.match(core, /conversation\.turns/);
   assert.match(core, /publicConversationSummary/);
   assert.match(core, /events: this\.state\.events\.map\(publicEvent\)/);
@@ -353,7 +355,10 @@ check("foreground epochs gate delayed AI reveal and speech", () => {
   assert.match(session, /guard\.canSpeak\(token\)/);
   assert.match(app, /foregroundDelivery\.background\(\)/);
   assert.match(app, /activeAIAbort\?\.abort\(\)/);
-  assert.match(app, /machine\.cancelPendingAI\("paused on background"\)/);
+  assert.match(
+    app,
+    /machine\.cancelPendingAI\("paused on background", sessionNow\(\)\)/,
+  );
   assert.match(app, /foregroundDelivery\.canReveal\(deliveryToken\)/);
   assert.match(app, /speakCurrentResponse\(\{ explicit: true \}\)/);
   assert.match(sensors, /function documentIsForeground/);
@@ -370,6 +375,8 @@ check("recognition restarts distinguish clean ends and exhaust visibly", () => {
   assert.match(sensors, /error === "aborted"/);
   assert.match(sensors, /this\.recognitionExpectedEnd \|\| this\.speaking/);
   assert.match(sensors, /reason: error === "aborted" \? "unexpected-aborted" : error/);
+  assert.match(sensors, /cancelNarrationForRecognitionRecovery/);
+  assert.match(sensors, /this\.announcementEpoch \+= 1/);
   assert.match(sensors, /kind: "ordinary-end"/);
   assert.match(sensors, /kind: "transient-failure"/);
   assert.match(sensors, /markRecognitionUnavailable/);
@@ -413,7 +420,7 @@ check("PWA manifest and service worker cache only local static allowlist", () =>
   assert.equal(manifest.scope, "./");
   assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192"));
   assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512"));
-  assert.match(serviceWorker, /adaptive-orb-static-v7/);
+  assert.match(serviceWorker, /adaptive-orb-static-v8/);
   assert.match(serviceWorker, /STATIC_ASSETS/);
   assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.match(serviceWorker, /ACTIVATE_UPDATE/);
@@ -496,6 +503,7 @@ check("mobile-first contract is progressive, responsive, and eyes-up", () => {
   }
   assert.match(styles, /390 × 844 portrait/);
   assert.match(styles, /844 × 390/);
+  assert.match(styles, /container-type: inline-size/);
   assert.match(styles, /env\(safe-area-inset-left\)/);
   assert.match(styles, /env\(safe-area-inset-right\)/);
   assert.match(styles, /min-height: 44px/);
@@ -515,12 +523,18 @@ check("mobile-first contract is progressive, responsive, and eyes-up", () => {
   assert.match(portraitBlock, /\.orb-stage[\s\S]*min-height: 0/);
   assert.match(landscapeBlock, /width: 90px/);
   assert.match(landscapeBlock, /height: 56px/);
+  assert.match(landscapeBlock, /grid-template-columns: 1fr/);
+  assert.match(landscapeBlock, /@container \(min-width: 620px\)/);
+  assert.match(landscapeBlock, /width: 76px/);
+  assert.match(landscapeBlock, /height: 52px/);
+  assert.match(landscapeBlock, /max-height: none/);
   assert.match(portraitBlock, /data-phone-hidden="true"[\s\S]*display: none/);
   assert.match(landscapeBlock, /data-phone-hidden="true"[\s\S]*display: none/);
   assert.equal((styles.match(/:hover/g) || []).length, 4);
   assert.ok((styles.match(/:active/g) || []).length >= 4);
   assert.match(mobile, /maximumPrimaryChoices: 4/);
   assert.match(mobile, /centerOrbMinimumPx: 112/);
+  assert.match(mobile, /compactLandscapeMultiColumnMinWidth: 620/);
   assert.match(mobile, /function radialChoiceGeometry/);
   assert.match(app, /radialChoiceGeometry/);
   assert.match(app, /optionIds: \[\.\.\.visibleChoiceIds\]/);
@@ -604,6 +618,7 @@ check("fallback parity and safety controls remain available", () => {
   assert.match(core, /hasWord\(text, "stop"\)/);
   assert.match(core, /hasWord\(text, "cancel"\)/);
   assert.match(core, /hasWord\(text, "undo"\)/);
+  assert.match(core, /refreshOptionsAndMode\(`ai-canceled:\$\{reason\}`/);
 });
 
 check("package is dependency-free", () => {
@@ -672,12 +687,21 @@ if (process.argv.includes("--check-evidence")) {
     assert.equal(mobileEvidence.layouts.landscape.height, 390);
     assert.equal(mobileEvidence.layouts.portrait.noHorizontalOverflow, true);
     assert.equal(mobileEvidence.layouts.landscape.noHorizontalOverflow, true);
+    assert.equal(mobileEvidence.layouts.zoomEquivalent.width, 320);
+    assert.equal(mobileEvidence.layouts.zoomEquivalent.height, 256);
+    assert.equal(mobileEvidence.layouts.zoomEquivalent.usesMultiColumn, false);
+    assert.equal(
+      mobileEvidence.layouts.zoomEquivalent.scrollSafeSingleColumn,
+      true,
+    );
     assert.equal(mobileEvidence.radialSafety.portrait.safe, true);
     assert.equal(mobileEvidence.radialSafety.portrait.centerOverlap, false);
     assert.equal(mobileEvidence.radialSafety.portrait.overflow, false);
     assert.equal(mobileEvidence.radialSafety.landscape.safe, true);
     assert.equal(mobileEvidence.radialSafety.landscape.centerOverlap, false);
     assert.equal(mobileEvidence.radialSafety.landscape.overflow, false);
+    assert.equal(mobileEvidence.radialSafety.zoomEquivalent.safe, true);
+    assert.equal(mobileEvidence.radialSafety.zoomEquivalent.overflow, false);
     assert.equal(mobileEvidence.maximumPrimaryChoices, 4);
     assert.equal(mobileEvidence.noHoverDependency, true);
     assert.deepEqual(mobileEvidence.progressivePermissions, [

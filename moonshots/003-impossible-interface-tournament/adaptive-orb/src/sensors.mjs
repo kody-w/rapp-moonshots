@@ -449,6 +449,7 @@ class AdaptiveSensorController {
         at: this.clock(),
       });
       this.startWatchdog(generation);
+      this.cancelNarrationForRecognitionRecovery();
       this.startRecognition(generation);
       if (this.recognitionTerminal || !this.recognition) {
         this.releaseMicrophoneCapture(
@@ -1640,6 +1641,7 @@ class AdaptiveSensorController {
   }
 
   resetRecognitionForExplicitRecovery() {
+    this.cancelNarrationForRecognitionRecovery();
     clearTimeout(this.recognitionRetry);
     this.recognitionRetry = null;
     this.detachRecognition();
@@ -1650,6 +1652,17 @@ class AdaptiveSensorController {
     this.recognitionSessionFailed = false;
     this.recognitionExpectedEnd = false;
     this.speaking = false;
+  }
+
+  cancelNarrationForRecognitionRecovery() {
+    if (!this.speaking) {
+      return false;
+    }
+    this.announcementEpoch += 1;
+    this.speaking = false;
+    this.recognitionExpectedEnd = false;
+    cancelGlobalSpeech(globalThis);
+    return true;
   }
 
   markRecognitionUnavailable(

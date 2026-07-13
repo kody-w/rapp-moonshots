@@ -4,6 +4,7 @@ const MOBILE_LAYOUT_CONTRACT = Object.freeze({
   minimumTargetPx: 44,
   maximumPrimaryChoices: 4,
   centerOrbMinimumPx: 112,
+  compactLandscapeMultiColumnMinWidth: 620,
 });
 
 function mobileLayoutForViewport(
@@ -17,26 +18,47 @@ function mobileLayoutForViewport(
   } = {},
 ) {
   const viewportWidth = Math.max(320, Number(width) || 0);
-  const viewportHeight = Math.max(320, Number(height) || 0);
+  const viewportHeight = Math.max(1, Number(height) || 0);
   const orientation =
     viewportWidth > viewportHeight ? "landscape" : "portrait";
   const usableWidth = Math.max(0, viewportWidth - left - right);
   const usableHeight = Math.max(0, viewportHeight - top - bottom);
+  const compactLandscape =
+    orientation === "landscape" && viewportHeight <= 500;
+  const availableContentWidth = Math.max(
+    0,
+    usableWidth - (compactLandscape ? 20 : 0),
+  );
+  const usesMultiColumn =
+    compactLandscape &&
+    availableContentWidth >=
+      MOBILE_LAYOUT_CONTRACT.compactLandscapeMultiColumnMinWidth;
   const targetOrbDiameter =
     orientation === "portrait"
       ? Math.min(374, Math.max(280, usableWidth - 34))
-      : Math.min(350, Math.max(248, viewportHeight * 0.82));
-  const orbDiameter = Math.min(usableWidth, targetOrbDiameter);
+      : compactLandscape && !usesMultiColumn
+        ? Math.min(284, Math.max(1, availableContentWidth - 16))
+        : Math.min(350, Math.max(248, viewportHeight * 0.82));
+  const orbDiameter = Math.min(
+    compactLandscape ? availableContentWidth : usableWidth,
+    targetOrbDiameter,
+  );
   return Object.freeze({
     width: viewportWidth,
     height: viewportHeight,
     orientation,
     usableWidth,
     usableHeight,
+    availableContentWidth,
+    compactLandscape,
+    usesMultiColumn,
+    scrollSafeSingleColumn: compactLandscape && !usesMultiColumn,
     orbDiameter,
     minimumTargetPx: MOBILE_LAYOUT_CONTRACT.minimumTargetPx,
     maximumPrimaryChoices: MOBILE_LAYOUT_CONTRACT.maximumPrimaryChoices,
-    noHorizontalOverflow: orbDiameter <= usableWidth,
+    noHorizontalOverflow:
+      orbDiameter <=
+      (compactLandscape ? availableContentWidth : usableWidth),
   });
 }
 

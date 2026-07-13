@@ -87,7 +87,7 @@ Verify a changed `CACHE_VERSION` produces a waiting worker, **Apply app update**
 sends `ACTIVATE_UPDATE`, old versioned static caches are deleted on activation,
 and the page reloads once on controller change.
 
-This release uses `adaptive-orb-static-v7`.
+This release uses `adaptive-orb-static-v8`.
 
 ## iOS standalone capability protocol
 
@@ -112,7 +112,15 @@ hardware under these cases:
     `aborted` error classified as transient; and
 11. announce A immediately replaced by B, followed by A's delayed error:
     recognition must remain stopped and B must remain speaking until B alone
-    completes and triggers exactly one restart.
+    completes and triggers exactly one restart;
+12. microphone permission resolving during narration: synthesis must be
+    canceled/epoch-invalidated before recognition starts and stale completion
+    must not restart again;
+13. cancel, stop/resume, and background AI cancellation followed by
+    cycle/select with a nonempty recomputed option set;
+14. exact, sanitized, case, and `ai-` prefix suggestion-ID collisions; and
+15. 320×256/400%-zoom-equivalent landscape with safe radial geometry and
+    single-column vertical reachability.
 
 Acceptance requires runtime detection on every launch, no pre-permission claim
 that hardware works, useful sensor-free AI before permission, a visible
@@ -125,7 +133,8 @@ live APIs.
 
 ## Mobile-first protocol
 
-Run the logic/layout tests at exactly 390×844 portrait and 844×390 landscape.
+Run the logic/layout tests at exactly 390×844 portrait, 844×390 landscape, and
+320×256 as the 400%-zoom-equivalent narrow landscape.
 Acceptance requires:
 
 1. independent portrait/landscape media contracts, safe-area padding on all
@@ -145,7 +154,10 @@ Acceptance requires:
 8. short spoken summaries, captioned earcons, and haptics only after supported
    opt-in;
 9. global repeat/stop/undo/what-changed parity without a text box; and
-10. explicit non-driving/non-safety-critical positioning.
+10. explicit non-driving/non-safety-critical positioning; and
+11. multi-column landscape only at 620 px or more of actual app content width,
+    otherwise a one-column, vertically scrollable layout with the orb and core
+    controls first.
 
 `evidence/mobile-evidence.json` is deterministic synthetic timing evidence, not
 a human usability result. It records both viewport contracts, four-choice

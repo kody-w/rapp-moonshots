@@ -531,6 +531,52 @@ test("conversation branches are reversible and stale AI responses cannot revive 
   assert.equal(machine.state.conversation.turns.length, turnCount);
 });
 
+test("cancel stop and background AI cancellation restore selectable options", () => {
+  for (const cancellation of ["cancel", "stop", "background"]) {
+    const { machine } = begin("accessible");
+    const pending = machine.dispatch({
+      type: "CONVERSATION_INPUT",
+      text: "Create an eyes-up field note.",
+      source: "keyboard",
+      at: 100,
+    });
+    assert.equal(pending.effect, "ai-request", cancellation);
+    assert.equal(machine.state.conversation.pending, true, cancellation);
+    assert.deepEqual(machine.state.options, [], cancellation);
+
+    if (cancellation === "cancel") {
+      machine.dispatch({ type: "CANCEL", source: "keyboard", at: 150 });
+    } else if (cancellation === "stop") {
+      machine.dispatch({ type: "STOP", source: "keyboard", at: 150 });
+      machine.dispatch({ type: "RESUME", source: "keyboard", at: 160 });
+    } else {
+      assert.equal(
+        machine.cancelPendingAI("paused on background", 150),
+        true,
+      );
+    }
+
+    assert.equal(machine.state.conversation.pending, false, cancellation);
+    assert.ok(machine.state.options.length >= 4, cancellation);
+    const optionIds = machine.state.options.map((option) => option.id);
+    const cycled = machine.dispatch({
+      type: "CYCLE",
+      delta: 1,
+      source: "keyboard",
+      at: 170,
+    });
+    assert.equal(cycled.ok, true, cancellation);
+    assert.ok(optionIds.includes(machine.state.highlight), cancellation);
+    const selected = machine.dispatch({
+      type: "CONFIRM",
+      source: "keyboard",
+      at: 180,
+    });
+    assert.equal(selected.ok, true, cancellation);
+    assert.equal(selected.effect, "ai-request", cancellation);
+  }
+});
+
 test("an AI detour returns to the exact in-progress task checkpoint", () => {
   const { machine } = begin("accessible");
   captureBroad(machine);

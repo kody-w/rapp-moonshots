@@ -146,6 +146,7 @@ const mobileEvidence = {
       right: 47,
       bottom: 21,
     }),
+    zoomEquivalent: mobileLayoutForViewport(320, 256),
   },
   radialSafety: {
     portrait: radialChoiceGeometry({
@@ -160,6 +161,13 @@ const mobileEvidence = {
       choiceWidth: 90,
       choiceHeight: 56,
       centerDiameter: 104,
+      choiceCount: 4,
+    }),
+    zoomEquivalent: radialChoiceGeometry({
+      stageDiameter: 282,
+      choiceWidth: 76,
+      choiceHeight: 52,
+      centerDiameter: 112,
       choiceCount: 4,
     }),
   },
