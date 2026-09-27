@@ -1,5 +1,9 @@
 # RAPP Moonshots
 
+<!-- rapp1:network-header:start -->
+[![RAPP/1](https://kody-w.github.io/rapp-hive-public/portfolio/badges/rapp-moonshots.svg)](https://github.com/kody-w/rapp-hive-public/blob/main/portfolio/repos/rapp-moonshots.md) · **New to RAPP?** [Start here: get your Brainstem →](https://github.com/kody-w/rapp-installer#start-here)
+<!-- rapp1:network-header:end -->
+
 Ambitious, working experiments built by fleets of RAPP agents and machines.
 
 A moonshot is not an idea document. It must finish with:
